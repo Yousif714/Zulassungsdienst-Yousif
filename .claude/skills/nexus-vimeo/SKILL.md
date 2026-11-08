@@ -63,6 +63,32 @@ komplett geladen werden. Für Reels danach auf 9:16 bringen (crop/pad) und mit d
 6. **QA:** Ton synchron, keine abgeschnittenen Wörter, Lesezeit der Untertitel,
    keine privaten Inhalte von Mitgliedern ohne Freigabe.
 
+## Was in den Aufnahmen zu sehen ist (geprüft 08.11.2026)
+
+- Fast alle Calls sind **Zoom-Bildschirmfreigaben**: großflächig Yousifs Folien
+  (dunkles Design, oft starke Bilder: Kreuz im Feld, Ikonen, Mann auf dem Berg),
+  Yousif nur als kleine Kachel oben rechts (ca. x 1716, y 0, 204×115 px bei 1080p).
+- Yousifs Zoom-Name ist mal „Yousif Sakmany“, mal „NEXUS - Yousif Sakmany“, mal
+  **„Kodex“**. Bei „Kodex“ trotzdem kurz Standbild prüfen.
+- Manche Calls zeigen die Galerie mit **Mitglieder-Gesichtern** → für Werbung nur
+  den Ton nutzen oder Yousifs Kachel ausschneiden (runder Ausschnitt schneidet
+  auch das Namensschild weg).
+- Gute Reel-Bausteine: Ton aus dem Call + Folienmotiv als Ken-Burns-Hintergrund
+  + Kachel als „LIVE-CALL“-Bubble + Wort-für-Wort-Untertitel.
+- Schnittpunkte: VTT-Zeiten direkt aus der Texttrack-URL holen (mit Endzeiten),
+  dann `silencedetect=noise=-32dB:d=0.18` auf dem Ausschnitt; erst in Pausen schneiden.
+
+## Portal-Ansicht ohne Login
+
+portal.nexusnetzwerk.de ist ein eigenes Supabase-Portal (E-Mail + Passwort,
+kein API-Key-Zugang). Für Werbung wird die echte Seite lokal nachgestellt:
+öffentliche HTML/CSS/Fonts laden, `supabase.min.js` per Playwright-Route durch
+ein Mock ersetzen, das echte Vimeo-Titel und -Vorschaubilder als Kurse liefert,
+und `localStorage['nexus-auth']` mit einem Dummy-JWT setzen (sonst Redirect auf
+/login). Bilder vor der Aufnahme `loading='eager'` setzen; schwarze
+Vimeo-Thumbnails durch `vimeo.py still` aus der Video-Mitte ersetzen.
+Kurseinteilung und Fortschritt sind dann Demo-Daten → so benennen.
+
 ## Inhalts-Hinweise
 
 - Calls mit Mitgliedern (Onboarding, Legion-Besprechungen, „GMT…Recording“)
