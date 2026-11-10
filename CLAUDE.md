@@ -2,14 +2,16 @@
 
 Dieses Repo ist nur für den Zulassungsdienst. NEXUS-Arbeit gehört ins NEXUS-Repo, nicht hierher.
 
-Sprache: Deutsch, Du-Ansprache, kurze Antworten.
+Mit Yousif: Deutsch, Du, kurze Antworten. Kunden in Videos und Texten werden gesiezt (wie auf der Website).
+
+Fakten über das Unternehmen stehen in `fakten.md` (Quelle: Website). Nichts anderes verwenden, nichts erfinden.
 
 ## Marke
 - Schwarz, Apple-Oberfläche, Gelb `#ffd21f`, WhatsApp-Grün `#25d366`.
 - Kennzeichen „E ZB 2014“ in FE-Schrift (GL-Nummernschild, frei).
 - Telefon 0176 633 65 309 und zulassungbundesweit.de immer sichtbar (Kapsel oben), nicht erst am Ende.
-- Keine Preise. Fakten nur von der Website.
-- Den Satz „Privater Zulassungsdienst, keine Zulassungsbehörde.“ nie einbauen: nicht in Videos, Beschreibungen oder Titelbildern (Wunsch vom 04.11.2026).
+- Keine Preise in Videos und Beschreibungen (auf der Website stehen sie, das ist in Ordnung).
+- Den Satz „Privater Zulassungsdienst, keine Zulassungsbehörde.“ nie einbauen: nicht in Videos, Beschreibungen oder Titelbildern (Wunsch vom 04.11.2026). Im Footer der Website bleibt er stehen.
 
 ## Gestaltung
 - Alles mittig zentriert wie bei Apple: Überschriften, Unterzeilen, Untertitel, Knöpfe, Schlusskarte.
