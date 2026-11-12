@@ -17,8 +17,11 @@
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.1.0",
     "@supabase/supabase-js": "^2.119.0",
     "date-fns": "^4.4.0",
+    "jose": "^6.2.17",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
