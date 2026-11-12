@@ -120,7 +120,7 @@ export function deriveProposals(s: AppState): ContractProposal[] {
   const rest: Draft[] = [];
   const free = [...stripe];
   const same = (a: Draft, b: Draft) =>
-    (a.email !== null && b.email !== null && a.email.toLowerCase() === b.email.toLowerCase()) || normalizeName(a.name) === normalizeName(b.name);
+    (a.email !== null && b.email !== null && a.email.toLowerCase() === b.email.toLowerCase()) || (normalizeName(a.name) !== '' && normalizeName(a.name) === normalizeName(b.name));
   for (const l of lex) {
     const hit = free.find((x) => same(x, l));
     if (!hit) { rest.push(l); continue; }
@@ -132,8 +132,9 @@ export function deriveProposals(s: AppState): ContractProposal[] {
       steps: [...hit.steps, `Zusätzlich gefunden: Lexware-Kontakt ${l.name} (${l.references.join(', ') || 'ohne Rechnung'}), Werte stammen aus Stripe.`],
     });
   }
-  const unmatchedStripe = free;
-  const unmatchedLex = rest;
+  const dismissed = new Set(s.dismissedProposals);
+  const unmatchedStripe = free.filter((p) => !dismissed.has(p.id));
+  const unmatchedLex = rest.filter((p) => !dismissed.has(p.id));
   for (const a of unmatchedStripe) {
     const b = unmatchedLex.find((l) => nameMatches(a.name, l.name) || nameMatches(l.name, a.name));
     if (b) a.possibleMatch = { id: b.id, name: b.name };
@@ -143,7 +144,6 @@ export function deriveProposals(s: AppState): ContractProposal[] {
     if (a) b.possibleMatch = { id: a.id, name: a.name };
   }
 
-  const dismissed = new Set(s.dismissedProposals);
   return [...mergedStripe.values(), ...unmatchedStripe, ...unmatchedLex]
     .filter((p) => !dismissed.has(p.id))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'));
@@ -160,7 +160,7 @@ export function findContactFor(p: ContractProposal, contacts: Contact[]): { matc
     if (byEmail) return hit('email', byEmail);
   }
   const n = normalizeName(p.name);
-  const byName = contacts.find((c) => c.company === 'nexus' && normalizeName(c.name) === n);
+  const byName = n === '' ? undefined : contacts.find((c) => c.company === 'nexus' && normalizeName(c.name) === n);
   if (byName) return hit('name', byName);
   return { match: 'none', contactId: null, name: null };
 }

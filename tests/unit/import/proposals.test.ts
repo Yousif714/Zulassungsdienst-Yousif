@@ -119,3 +119,16 @@ test('normalizeName: türkische Buchstaben, NFD, Titel', () => {
   expect(normalizeName('Müller')).toBe('mueller');
   expect(nameMatches('Hakan Çelik', 'H. Celik')).toBe(true);
 });
+
+test('leere Namen werden nie zusammengeführt', () => {
+  const s0 = patchSub(stripeState, 'sub_A', { customerName: '', customerEmail: null });
+  const s = mergedWithLexContact(s0, { id: 'c-93', name: '', email: null });
+  expect(deriveProposals(s).filter((p) => p.sources.length > 1)).toEqual([]);
+  expect(P(s, 'lexware_nexus:c-93')!.possibleMatch).toBeNull();
+  expect(findContactFor(P(s, 'stripe_nexus:sub_A')!, [mk('z', '')]).match).toBe('none');
+});
+test('Hinweis zeigt nicht auf verworfenen Vorschlag', () => {
+  const s = { ...mergedWithLexContact(stripeState, { id: 'c-91', name: 'A. Öztürk', email: null }), dismissedProposals: ['lexware_nexus:c-91'] };
+  expect(P(s, 'lexware_nexus:c-91')).toBeUndefined();
+  expect(P(s, 'stripe_nexus:sub_A')!.possibleMatch).toBeNull();
+});
