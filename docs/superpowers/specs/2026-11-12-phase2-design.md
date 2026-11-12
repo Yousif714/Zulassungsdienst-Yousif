@@ -97,6 +97,17 @@
 
 **Umgebungsvariablen (2a):** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `OWNER_SETUP_TOKEN`, `CRON_SECRET`, `APP_ORIGIN` (für WebAuthn rpID/origin). Keine davon mit `NEXT_PUBLIC_`.
 
+**Entscheidungen beim Bau von 2a (verbindlich):**
+- Client-Modus: `demo` | `real` | `offline`. Angemeldet, aber Server nicht erreichbar → `offline` mit Hinweis „Server nicht erreichbar – Daten nicht aktuell“, nie stilles Umschalten auf Demo-Daten.
+- Zeilenreihenfolge: jede Tabellenzeile trägt `ord` (Array-Index), geladen wird nach `ord` sortiert.
+- Laden liest zuerst `meta.revision`, danach die Tabellen (kein Lost Update). Wiederherstellungscodes werden atomar über `replace_recovery_codes` ersetzt.
+- Doppelausführung: Der Server führt eine Aktion nur aus, wenn sein eigenes gespeichertes `actionStarted` sie von `approved` auf `executing` gebracht hat (`EventSink.claimStart`).
+- `/api/events` prüft Payloads streng: `createAction` nur als Entwurf mit `isDemo: false`, `approveAction` nur `via: 'app'`, Settings nur bekannte Schlüssel mit Typprüfung.
+- Client-Events werden auf `refresh(gespeicherter Stand)` angewandt.
+- `handleInbound(…, { channel: 'whatsapp' | 'app', isDemo })`: nur der angemeldete App-Kanal überspringt die Inhaber-Nummernprüfung.
+- `jobRuns` gehört nicht zum `AppState`; nur der Cron liest die Läufe der letzten 8 Tage (`recentJobRuns`).
+- Route Handler greifen vor `readEnv()` auf den Request zu (`await connection()`), damit `next build` ohne Umgebungsvariablen läuft.
+
 ## 3. Verbindungen (2b–2c) – Festlegungen
 - **Qonto:** API-Schlüssel (Login + Secret Key). Transaktionen werden mit `external_id` = Qonto-Transaktions-ID importiert.
 - **Sparkasse:** Upload CAMT.053 (bevorzugt) oder CSV in „Verbindungen“. Der Import geht über `mergeImported` mit `external_id` aus der Bank-Referenz (bzw. einem Hash aus Datum, Betrag, IBAN und Verwendungszweck). finAPI erst, wenn der Upload lästig wird.

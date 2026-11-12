@@ -51,12 +51,12 @@ Kernziele:
 - Aktionen: Freigabe an Version gebunden. WhatsApp-Knopf max. 24 Std. Timeout → „Ausgang unklar“ statt Neusenden.
 
 ## Befehle
-`npm test` (Vitest, ~224) · `npx tsc --noEmit` · `npm run lint` · `npm run contrast` · `npm run e2e` (Playwright, vorher `fuser -k 3100/tcp`) · Screenshots: `SCREENSHOTS=1 npm run e2e -- tests/e2e/screenshots.spec.ts`
+`npm test` (Vitest, ~406) · `npm run test:integration` (Supabase-Testprojekt) · `npx tsc --noEmit` · `npm run lint` · `npm run contrast` · `npm run e2e` (Playwright, vorher `fuser -k 3100/tcp`) · Screenshots: `SCREENSHOTS=1 npm run e2e -- tests/e2e/screenshots.spec.ts`
 
 ## Stand & nächste Schritte
 - Phase 1 + Design-Feinschliff live (PR #1, #2 gemergt).
-- **Phase 2 geplant:** Spec `docs/superpowers/specs/2026-11-12-phase2-design.md`, Pakete 2a–2f.
-- **Als Nächstes: Paket 2a (Fundament) bauen** nach `docs/superpowers/plans/2026-11-12-phase2a-fundament.md` (14 Tasks), mit `superpowers:subagent-driven-development`. Danach ein PR, dann richtet der Inhaber Supabase und Vercel nach `docs/setup-phase2a.md` ein.
-- Zugänge des Inhabers: alles vorhanden außer einer zweiten WhatsApp-Nummer (erst 2e). Banken: Qonto (NEXUS, API) und Sparkasse Essen (Zulassung, CAMT-Upload). info@ liegt beim Team des Inhabers, IMAP-Daten auf Anfrage. Kalender: Google und iCloud.
-- Inhaber bereitet vor: Vercel Pro und ein Supabase-Projekt in Frankfurt.
+- **Paket 2a (Fundament) fertig** auf `claude/cool-hopper-hcnb9d`: 14 Tasks, Abschlussreview mit Fixes, 406 Unit-Tests + E2E grün, `next build` ohne Env grün. Entscheidungen in Spec Abschnitt 2, offene Punkte in `docs/phase2-backlog.md` („Offen aus Paket 2a“).
+- **Als Nächstes (Inhaber):** PR prüfen und mergen; Vercel-Team auf Pro (5-Min-Cron, sonst scheitert das Deployment); nur ein Vercel-Projekt am Repo lassen (aktuell 4); dann Supabase + Vercel nach `docs/setup-phase2a.md`.
+- **Danach (Entwickler):** `npm run test:integration` gegen Testprojekt „nexus-test“; dann Paket 2b (Verbindungen) nach Spec, Backlog-Punkte „Vor 2b/2f“ zuerst.
+- Zugänge des Inhabers: alles vorhanden außer einer zweiten WhatsApp-Nummer (erst 2e). Banken: Qonto (NEXUS, API) und Sparkasse Essen (Zulassung, CAMT-Upload). info@ beim Team, IMAP-Daten auf Anfrage. Kalender: Google und iCloud.
 - Offen: Codex-Zweitmeinung; Gefühl der Wischgesten am iPhone.
