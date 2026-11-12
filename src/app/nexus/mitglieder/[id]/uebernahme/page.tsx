@@ -13,6 +13,7 @@ import { Segmented } from '@/components/Segmented';
 import { useAppStore } from '@/data/store';
 import { stripePlanAction, stripePlanActionId } from '@/domain/action-factory';
 import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
+import { contractSources, notConnected } from '@/domain/connections';
 import { memberView } from '@/domain/detectors';
 import { planTakeover } from '@/domain/ledger/takeover';
 import { formatEuro } from '@/domain/money';
@@ -58,6 +59,8 @@ export default function TakeoverPage() {
     })
     .sort((x, y) => x.p.bookedOn.localeCompare(y.p.bookedOn));
 
+  const missing = notConnected(contractSources(contract), state.connections);
+
   const prepare = () => {
     const action = stripePlanAction({ contract, name, mode, rates: plan.rates, at, isDemo: appMode === 'demo' });
     dispatch({ type: 'createAction', action });
@@ -65,8 +68,9 @@ export default function TakeoverPage() {
 
   return (
     <>
-      <PageHeader title="Übernahme" subtitle={`${name} · von Überweisung zu Stripe`} badge={<DemoBadge />} trailing={back} />
+      <PageHeader title="Übernahme" subtitle={`${name} · von Überweisung zu Stripe`} badge={appMode === 'demo' ? <DemoBadge /> : undefined} trailing={back} />
 
+      {missing && <p className="note-card" data-testid="bank-missing">Bank nicht verbunden: Der Stand dieses Vertrags ist unbekannt.</p>}
       {contract.billing === 'stripe' && <p className="note-card">{name} zahlt bereits über Stripe.</p>}
 
       <ListGroup title="Bisherige Zahlungen" testId="previous-payments">

@@ -118,3 +118,10 @@ test('Wiederholte Knöpfe nennen im Namen, worum es geht', async ({ page }) => {
   await page.goto('/zulassung/auftraege/j-mueller-1');
   await expect(page.getByRole('button', { name: 'Rechnung RE-Z-2026-311 zuordnen', exact: true })).toBeVisible();
 });
+
+test('Demo: keine Vorschlagskarte, Übernahme zeigt Demo-Etikett', async ({ page }) => {
+  await page.goto('/nexus?reset=1');
+  await expect(page.getByTestId('proposals-card')).toHaveCount(0);
+  await page.goto('/nexus/mitglieder/mc-schulz/uebernahme');
+  await expect(page.getByTestId('demo-badge').first()).toBeVisible();
+});

@@ -62,7 +62,7 @@ export default function JobPage() {
 
   return (
     <>
-      <PageHeader title={job.service} subtitle={<>{name}{vehicle && <> · {vehicle.plate}</>}</>} badge={<DemoBadge />} trailing={back} />
+      <PageHeader title={job.service} subtitle={<>{name}{vehicle && <> · {vehicle.plate}</>}</>} badge={mode === 'demo' ? <DemoBadge /> : undefined} trailing={back} />
 
       <ListGroup title="Auftrag" testId="job-details">
         <ListRow key="vehicle" title="Fahrzeug" value={vehicle ? `${vehicle.model} · ${vehicle.plate}` : '–'} />

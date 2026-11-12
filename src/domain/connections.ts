@@ -15,9 +15,9 @@ export const CONNECTION_CATALOG: readonly { id: ConnectionId; company: Company |
 
 /** Kurzanleitung für die echte Anbindung in Phase 2. */
 export const HOW_TO: Record<ConnectionId, string> = {
-  lexware_nexus: 'API-Schlüssel im Lexware-Konto erstellen und hier eintragen.',
-  lexware_zulassung: 'API-Schlüssel im Lexware-Konto erstellen und hier eintragen.',
-  stripe_nexus: 'In Stripe einen eingeschränkten Lese-Schlüssel anlegen.',
+  lexware_nexus: 'Schlüssel als Vercel-Variable LEXWARE_NEXUS_API_KEY hinterlegen (nur lesen: Kontakte, Rechnungen, Zahlungen).',
+  lexware_zulassung: 'Schlüssel als Vercel-Variable LEXWARE_ZULASSUNG_API_KEY hinterlegen (nur lesen: Kontakte, Rechnungen, Zahlungen).',
+  stripe_nexus: 'Schlüssel als Vercel-Variable STRIPE_RESTRICTED_KEY hinterlegen (nur lesen: Kunden, Abos, Rechnungen, Zahlungen).',
   bank: 'CSV- oder CAMT-Export seit 1. August hochladen, später PSD2-Freigabe bei der Bank.',
   gmail: 'Mit dem Google-Login freigeben.',
   icloud: 'App-spezifisches Passwort in der Apple-ID erstellen.',
