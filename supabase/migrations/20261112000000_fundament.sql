@@ -355,11 +355,29 @@ begin
 end;
 $$;
 
+-- Ersetzt alle Wiederherstellungscodes atomar (Tabellensperre: parallele Aufrufe laufen nacheinander,
+-- danach gilt genau ein vollständiger Satz).
+create or replace function replace_recovery_codes(p_hashes text[])
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  lock table recovery_codes in exclusive mode;
+  delete from recovery_codes where true; -- where: verträgt pg-safeupdate
+  insert into recovery_codes (hash)
+  select distinct h from unnest(p_hashes) as h where h is not null;
+end;
+$$;
+
 revoke execute on function apply_changes(int, jsonb) from public, anon, authenticated;
 revoke execute on function claim_job_run(text, timestamptz) from public, anon, authenticated;
 revoke execute on function add_first_passkey(text, jsonb) from public, anon, authenticated;
 revoke execute on function consume_recovery_code(text, timestamptz) from public, anon, authenticated;
+revoke execute on function replace_recovery_codes(text[]) from public, anon, authenticated;
 grant execute on function apply_changes(int, jsonb) to service_role;
 grant execute on function claim_job_run(text, timestamptz) to service_role;
 grant execute on function add_first_passkey(text, jsonb) to service_role;
 grant execute on function consume_recovery_code(text, timestamptz) to service_role;
+grant execute on function replace_recovery_codes(text[]) to service_role;

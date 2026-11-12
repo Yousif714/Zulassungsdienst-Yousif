@@ -1,5 +1,6 @@
 import 'server-only';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { realNow } from '@/domain/clock';
 import type { AuthRepository, Repos, StateRepository, StoredPasskey } from './repository';
 import { fromRows, TABLES, type ChangeSet, type Row, type TableName } from './tables';
 
@@ -17,40 +18,52 @@ function fail(what: string, error: { message: string }): never {
   throw new Error(`Supabase ${what}: ${error.message}`);
 }
 
-/** Liest alle Zeilen seitenweise in stabiler Reihenfolge. */
+/**
+ * Liest alle Zeilen seitenweise in stabiler Reihenfolge. Weiter bis eine leere Seite kommt: Ist max-rows im Projekt
+ * kleiner als PAGE, liefert der Server weniger Zeilen, ohne dass die Tabelle zu Ende ist.
+ */
 async function selectAll<T>(what: string, page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
   const out: T[] = [];
-  for (let from = 0; ; from += PAGE) {
+  for (;;) {
+    const from = out.length;
     const { data, error } = await page(from, from + PAGE - 1);
     if (error) fail(what, error);
-    out.push(...(data ?? []));
-    if (!data || data.length < PAGE) return out;
+    if (!data || data.length === 0) return out;
+    out.push(...data);
   }
 }
 
 /** Server-Repository auf Supabase. Nur mit Service-Role-Key und nur serverseitig verwenden. */
 export function createSupabaseRepos(url: string, serviceRoleKey: string): Repos {
-  const db: SupabaseClient = createClient(url, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createSupabaseReposFromClient(createClient(url, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } }));
+}
+
+/** Kern mit injiziertem Client (Testnaht). */
+export function createSupabaseReposFromClient(db: SupabaseClient): Repos {
 
   const state: StateRepository = {
     async load() {
-      const [tables, jobRuns, meta] = await Promise.all([
+      // Reihenfolge ist Invariante: ERST die Revision vollständig lesen, DANN die Tabellen. Landet während des
+      // Tabellenlesens ein Save, ist die gelesene Revision älter als der Stand, und der nächste Save scheitert mit
+      // conflict (und lädt neu). Parallel gelesen könnte alter Inhalt mit neuer Revision zusammenkommen → Lost Update.
+      const meta = await db.from('meta').select('value').eq('key', 'revision').single();
+      if (meta.error) fail('load meta', meta.error);
+      const revision = Number((meta.data as { value: unknown }).value);
+      const [tables, jobRuns] = await Promise.all([
         Promise.all(
           TABLE_NAMES.map(async (t) => {
             const rows = await selectAll<Row>(`load ${t}`, (from, to) =>
-              db.from(t).select(columns(t)).order('ord').order('id').range(from, to).returns<Row[]>(),
+              db.from(t).select(columns(t)).order('ord').order('id').range(from, to).overrideTypes<Row[], { merge: false }>(),
             );
             return [t, rows] as const;
           }),
         ),
         selectAll<{ key: string }>('load job_runs', (from, to) =>
-          db.from('job_runs').select('key').order('ran_at').order('key').range(from, to).returns<{ key: string }[]>(),
+          db.from('job_runs').select('key').order('ran_at').order('key').range(from, to).overrideTypes<{ key: string }[], { merge: false }>(),
         ),
-        db.from('meta').select('value').eq('key', 'revision').single(),
       ]);
-      if (meta.error) fail('load meta', meta.error);
       const rows = Object.fromEntries(tables) as Record<TableName, Row[]>;
-      return { state: fromRows(rows, jobRuns.map((x) => x.key)), revision: Number(meta.data.value) };
+      return { state: fromRows(rows, jobRuns.map((x) => x.key)), revision };
     },
 
     async save(changes: ChangeSet, expectedRevision: number) {
@@ -78,7 +91,7 @@ export function createSupabaseRepos(url: string, serviceRoleKey: string): Repos 
     },
     async listPasskeys() {
       const rows = await selectAll<{ data: StoredPasskey }>('listPasskeys', (from, to) =>
-        db.from('passkeys').select('data').order('id').range(from, to).returns<{ data: StoredPasskey }[]>(),
+        db.from('passkeys').select('data').order('id').range(from, to).overrideTypes<{ data: StoredPasskey }[], { merge: false }>(),
       );
       return rows.map((r) => r.data).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
     },
@@ -95,19 +108,13 @@ export function createSupabaseRepos(url: string, serviceRoleKey: string): Repos 
       const { data, error } = await db.from('passkeys').select('data').eq('id', id).maybeSingle<{ data: StoredPasskey }>();
       if (error) fail('updateCounter', error);
       if (!data) return;
-      const res = await db.from('passkeys').update({ data: { ...data.data, counter }, updated_at: new Date().toISOString() }).eq('id', id);
+      const res = await db.from('passkeys').update({ data: { ...data.data, counter }, updated_at: realNow().toISOString() }).eq('id', id);
       if (res.error) fail('updateCounter', res.error);
     },
     async replaceRecoveryCodes(hashes) {
-      // Erst die neuen anlegen, dann alle anderen löschen: bricht der zweite Schritt ab, bleibt man nicht ohne Codes.
-      if (hashes.length > 0) {
-        const ins = await db.from('recovery_codes').upsert(hashes.map((hash) => ({ hash, used_at: null })), { onConflict: 'hash' });
-        if (ins.error) fail('replaceRecoveryCodes', ins.error);
-      }
-      const del = hashes.length > 0
-        ? await db.from('recovery_codes').delete().not('hash', 'in', `(${hashes.map((h) => `"${h}"`).join(',')})`)
-        : await db.from('recovery_codes').delete().neq('hash', '');
-      if (del.error) fail('replaceRecoveryCodes', del.error);
+      // Ein RPC mit Tabellensperre: parallele Aufrufe können sich nicht gegenseitig die neuen Codes löschen.
+      const { error } = await db.rpc('replace_recovery_codes', { p_hashes: hashes });
+      if (error) fail('replaceRecoveryCodes', error);
     },
     async consumeRecoveryCode(hash, at) {
       const { data, error } = await db.rpc('consume_recovery_code', { p_hash: hash, p_at: at.toISOString() });

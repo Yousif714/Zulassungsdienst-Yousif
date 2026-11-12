@@ -5,7 +5,7 @@ import { TABLES } from '@/server/db/tables';
 const FILE = 'supabase/migrations/20261112000000_fundament.sql';
 const sql = existsSync(FILE) ? readFileSync(FILE, 'utf8').toLowerCase().replace(/\s+/g, ' ') : '';
 const ALL = [...new Set<string>(Object.values(TABLES)), 'passkeys', 'recovery_codes', 'job_runs', 'meta'];
-const FUNCS = ['apply_changes', 'claim_job_run', 'add_first_passkey', 'consume_recovery_code'];
+const FUNCS = ['apply_changes', 'claim_job_run', 'add_first_passkey', 'consume_recovery_code', 'replace_recovery_codes'];
 
 describe('Migration Fundament', () => {
   it('Datei existiert', () => {
@@ -40,6 +40,14 @@ describe('Migration Fundament', () => {
     expect(sql).toContain("format('");
     expect(sql).toContain('%i');
     for (const t of new Set(Object.values(TABLES))) expect(sql).toContain(`'${t}'`);
+  });
+
+  it('replace_recovery_codes sperrt die Tabelle und ersetzt alle Codes', () => {
+    const body = sql.slice(sql.indexOf('function replace_recovery_codes('));
+    const fn = body.slice(0, body.indexOf('$$;'));
+    expect(fn).toContain('lock table recovery_codes in exclusive mode');
+    expect(fn).toContain('delete from recovery_codes');
+    expect(fn).toContain('unnest(p_hashes)');
   });
 
   it('Unique-Indizes laut Spec', () => {
