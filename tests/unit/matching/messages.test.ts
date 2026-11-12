@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { extractPlates, extractVins, matchMessage, normalizePhone, openReplies } from '@/domain/matching/messages';
+import { extractPlates, extractVins, matchMessage, normalizePhone, openReplies, plateInText } from '@/domain/matching/messages';
 import { NOW_0930, contacts, jobs, msg, vehicles } from '../helpers';
 
 test('Telefon', () => {
@@ -35,4 +35,12 @@ describe('Antwortpflicht', () => {
   test('Antwort davor schließt nicht', () => expect(openReplies([inMsg, msg({ id: 'b', direction: 'out', sentAt: '2026-11-12T05:00:00Z' })], NOW_0930, 2)).toHaveLength(1));
   test('unter Schwelle', () => expect(openReplies([inMsg], new Date('2026-11-12T06:30:00Z'), 2)).toEqual([]));
   test('manuell erledigt', () => expect(openReplies([{ ...inMsg, doneManually: true }], NOW_0930, 2)).toEqual([]));
+});
+
+test('plateInText: Trenner optional, mit Wortgrenzen', () => {
+  expect(plateInText('BOT-MK 456', 'UMSCHREIBUNG BOT-MK 456')).toBe(true);
+  expect(plateInText('BOT-MK 456', 'KENNZEICHEN BOT MK456 ZUSATZ')).toBe(true);
+  expect(plateInText('BOT-MK 45', 'UMSCHREIBUNG BOT-MK 456')).toBe(false);
+  expect(plateInText('E-XY 1', 'ABMELDUNG E-XY 12')).toBe(false);
+  expect(plateInText('E-XY 1', 'ABMELDUNG XE-XY 1')).toBe(false);
 });

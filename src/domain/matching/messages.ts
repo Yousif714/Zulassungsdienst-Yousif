@@ -19,8 +19,8 @@ export function extractVins(text: string): string[] {
     .filter((v) => /\d/.test(v));
 }
 
-/** Bekanntes Kennzeichen im (großgeschriebenen) Text, Trenner optional, mit Wortgrenzen. */
-function plateInText(plate: string, upperText: string): boolean {
+/** Bekanntes Kennzeichen im (großgeschriebenen) Text, Trenner optional, mit Wortgrenzen: „BOT-MK 45“ trifft nicht „BOT-MK 456“. */
+export function plateInText(plate: string, upperText: string): boolean {
   const m = /^([A-ZÄÖÜ]{1,3})[- ]?([A-Z]{1,2}) ?(\d{1,4}[EH]?)$/.exec(plate.toUpperCase().trim());
   if (!m) return false;
   return new RegExp(`(?<![A-ZÄÖÜ0-9])${m[1]}[- ]?${m[2]}[- ]?${m[3]}(?![A-Z0-9])`).test(upperText);

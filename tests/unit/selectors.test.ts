@@ -55,10 +55,15 @@ describe('Zulassungsdienst-Selektoren', () => {
         mk('i-foreign', { contactId: 'd-schmidt' }),
         mk('i-nexus', { company: 'nexus' as const }),
         mk('i-plate', { text: 'Kennzeichen bot mk456 Zusatz', totalCents: 1000 }),
+        mk('i-near', { text: 'Umschreibung BOT-MK 4567', totalCents: 1500, issuedOn: '2026-11-11' }),
       ],
     };
-    expect(invoiceCandidates(s2, 'j-mueller-1').map((i) => i.id)).toEqual(['i-z-311', 'i-plate', 'i-other']);
+    // „BOT-MK 4567“ ist nicht das Kennzeichen „BOT-MK 456“ (Wortgrenze): kein Vorrang, nur nach Datum vor i-other.
+    expect(invoiceCandidates(s2, 'j-mueller-1').map((i) => i.id)).toEqual(['i-z-311', 'i-plate', 'i-near', 'i-other']);
     const linked = reducer(s, { type: 'linkInvoiceToJob', jobId: 'j-mueller-1', invoiceId: 'i-z-311' });
     expect(invoiceCandidates(linked, 'j-mueller-1')).toEqual([]);
+    // Hält ein ANDERER Auftrag die Rechnung, ist sie kein Kandidat.
+    const other = { ...s, jobs: [...s.jobs, { ...s.jobs.find((j) => j.id === 'j-mueller-1')!, id: 'j-mueller-x', invoiceIds: ['i-z-311'] }] };
+    expect(invoiceCandidates(other, 'j-mueller-1').map((i) => i.id)).not.toContain('i-z-311');
   });
 });

@@ -3,6 +3,7 @@ import { MONEY_SOURCES } from '@/domain/briefing';
 import { todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
 import { areaStale } from '@/domain/freshness';
+import { plateInText } from '@/domain/matching/messages';
 import { monthForecast } from '@/domain/ledger/forecast';
 import type { AppState, Invoice, IsoDate, MemberContract, Payment, StoredInsight } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
@@ -87,17 +88,15 @@ export function zulassungKpis(s: AppState, at: Date): { doneToday: number; open:
   };
 }
 
-const normalizePlate = (t: string) => t.toUpperCase().replace(/[^A-Z0-9ÄÖÜ]/g, '');
-
 /** Rechnungen, die zum Rest eines Auftrags passen: gleicher Kontakt, Zulassungsdienst, nicht storniert, keinem Auftrag zugeordnet,
- *  Betrag ≤ Rest. Rechnungen mit dem Kennzeichen im Text zuerst, sonst neueste zuerst. */
+ *  Betrag ≤ Rest. Rechnungen mit dem Kennzeichen im Text (mit Wortgrenzen) zuerst, sonst neueste zuerst. */
 export function invoiceCandidates(s: AppState, jobId: string): Invoice[] {
   const job = s.jobs.find((j) => j.id === jobId);
   if (!job) return [];
   const rest = jobBilling(s, job).restCents;
-  const plate = normalizePlate(s.vehicles.find((v) => v.id === job.vehicleId)?.plate ?? '');
+  const plate = s.vehicles.find((v) => v.id === job.vehicleId)?.plate;
   const linked = new Set(s.jobs.flatMap((j) => j.invoiceIds));
-  const hasPlate = (i: Invoice) => (plate && normalizePlate(i.text ?? '').includes(plate) ? 1 : 0);
+  const hasPlate = (i: Invoice) => (plate && plateInText(plate, (i.text ?? '').toUpperCase()) ? 1 : 0);
   return s.invoices
     .filter((i) => i.contactId === job.contactId && i.company === 'zulassung' && i.status !== 'void' && !linked.has(i.id) && i.totalCents <= rest)
     .sort((a, b) => hasPlate(b) - hasPlate(a) || b.issuedOn.localeCompare(a.issuedOn));
