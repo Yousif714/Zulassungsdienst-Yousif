@@ -107,6 +107,7 @@ export function mapStripe(raw: StripeRaw): ImportBatch {
       customerName: s.customer?.name ?? '',
       customerEmail: s.customer?.email ?? null,
       productName,
+      invoiceLineText: (latest?.lines?.data?.[0]?.description as string | undefined) ?? null,
       amountCents: latest ? latest.amount_paid : null,
       priceCents: price.unit_amount ?? null,
       currency: s.currency ?? price.currency ?? 'eur',

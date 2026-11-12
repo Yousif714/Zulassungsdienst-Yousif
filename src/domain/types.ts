@@ -37,7 +37,8 @@ export interface AssistantMessage { id: string; direction: 'to_owner'|'from_owne
 export interface Subscription {
   id: string; connectionId: 'stripe_nexus'; externalId: string; // sub_…
   stripeCustomerId: string; customerName: string; customerEmail: string | null;
-  productName: string; amountCents: number | null; // amount_paid der jüngsten bezahlten Abo-Rechnung
+  productName: string; invoiceLineText?: string | null; // erste Zeile der jüngsten Abo-Rechnung (Mitgliedschafts-Erkennung)
+  amountCents: number | null; // amount_paid der jüngsten bezahlten Abo-Rechnung
   priceCents: number | null; currency: string; interval: 'month' | 'other';
   startDate: IsoDate; anchorDay: number; cancelAt: IsoDate | null; endDate: IsoDate | null; // endDate = cancelAt ?? Schedule-Ende
   installments: number | null;

@@ -5,19 +5,32 @@ export function classifyBankTx(t: { payerName?: string; reference?: string }): '
   return 'incoming';
 }
 
+const TITLES = new Set(['dr', 'prof', 'dipl', 'ing', 'med', 'mag']);
+
+/** Vergleichsform eines Namens: klein, Umlaute/ß/türkische Buchstaben aufgelöst, Akzente und Titel (Dr., Prof.) entfernt. */
 export function normalizeName(s: string): string {
-  return s
+  const words = s
+    .normalize('NFC')
     .toLowerCase()
     .replace(/ä/g, 'ae')
     .replace(/ö/g, 'oe')
     .replace(/ü/g, 'ue')
     .replace(/ß/g, 'ss')
+    .replace(/ı/g, 'i')
+    .replace(/ş/g, 's')
+    .replace(/ç/g, 'c')
+    .replace(/ğ/g, 'g')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .split(' ');
+  const rest = words.filter((w) => !TITLES.has(w));
+  return (rest.length >= 2 ? rest : words).join(' ');
 }
 
-function nameMatches(contactName: string, payerName: string): boolean {
+export function nameMatches(contactName: string, payerName: string): boolean {
   const parts = normalizeName(contactName).split(' ').filter(Boolean);
   if (parts.length < 2) return false;
   const last = parts[parts.length - 1];
