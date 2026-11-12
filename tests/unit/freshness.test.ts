@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { areaStale, sourceFreshness } from '@/domain/freshness';
+import { ageMinutes, areaStale, sourceFreshness } from '@/domain/freshness';
 import { NOW_0930, conn } from './helpers';
 
 describe('Datenstand', () => {
@@ -15,5 +15,10 @@ describe('Datenstand', () => {
   test('areaStale liefert die veralteten Quellen', () => {
     const cs = [conn({ id: 'bank' }), conn({ id: 'gmail', status: 'error' }), conn({ id: 'calendar', lastSuccessAt: '2026-11-12T01:00:00Z' })];
     expect(areaStale(['bank', 'gmail', 'calendar'], cs, NOW_0930)).toEqual(['gmail', 'calendar']);
+  });
+  test('ageMinutes: ganze Minuten seit dem letzten Abruf, null ohne Abruf', () => {
+    expect(ageMinutes(conn({ lastSuccessAt: '2026-11-12T08:20:00Z' }), NOW_0930)).toBe(10);
+    expect(ageMinutes(conn({ lastSuccessAt: '2026-11-12T08:29:30Z' }), NOW_0930)).toBe(0);
+    expect(ageMinutes(conn({ lastSuccessAt: null }), NOW_0930)).toBeNull();
   });
 });

@@ -494,6 +494,15 @@ button.list-row:active {
   white-space: nowrap;
 }
 
+/* Untertitel, der umbrechen darf (z. B. Verbindungsstand neben einem Knopf). */
+.list-row-subtitle .wrap-text {
+  white-space: normal;
+}
+
+.list-row-title .wrap-text {
+  white-space: normal;
+}
+
 .list-row-value {
   flex: none;
   color: var(--label-2);
@@ -1148,6 +1157,10 @@ a.task-body:active {
 @media (min-width: 560px) {
   .figures {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .figures[data-columns="4"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

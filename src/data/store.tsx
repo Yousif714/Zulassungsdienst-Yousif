@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { approve, editDraft, finishExecution, startExecution } from '@/domain/actions/machine';
+import { jobBilling } from '@/domain/billing';
 import { berlinParts, now, todayBerlin } from '@/domain/clock';
 import { runCoach } from '@/domain/coach';
 import { reconcileInsights, runDetectors } from '@/domain/detectors';
@@ -125,9 +126,8 @@ function linkInvoiceToJob(s: AppState, jobId: string, invoiceId: string): Mutati
   const inv = s.invoices.find((i) => i.id === invoiceId);
   const jobs = s.jobs.map((j) => {
     if (j.id !== jobId || j.invoiceIds.includes(invoiceId)) return j;
-    const invoiceIds = [...j.invoiceIds, invoiceId];
-    const billed = invoiceIds.reduce((n, id) => n + (s.invoices.find((i) => i.id === id && i.status !== 'void')?.totalCents ?? 0), 0);
-    return { ...j, invoiceIds, status: j.status === 'done' && billed >= j.priceCents ? ('invoiced' as const) : j.status };
+    const linked = { ...j, invoiceIds: [...j.invoiceIds, invoiceId] };
+    return { ...linked, status: j.status === 'done' && jobBilling(s, linked).restCents <= 0 ? ('invoiced' as const) : j.status };
   });
   const job = s.jobs.find((j) => j.id === jobId);
   return { state: { ...s, jobs }, text: `Rechnung ${inv?.number ?? invoiceId} dem Auftrag ${contactName(s, job?.contactId)} · ${job?.service ?? jobId} zugeordnet` };

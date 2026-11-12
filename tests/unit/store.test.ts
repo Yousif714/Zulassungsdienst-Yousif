@@ -33,6 +33,14 @@ describe('Store-Abläufe aus dem Brief', () => {
     expect(isOpen(r, 'stripe-lex:i-lex-118')).toBe(false);
     expect(r.invoices.find((i) => i.id === 'i-lex-118')).toMatchObject({ status: 'paid', openCents: 0, settledByPaymentId: 'p-stripe-118' });
   });
+  test('Wieder verbinden setzt den Stand auf jetzt (frisch)', () => {
+    const old = { ...s, connections: s.connections.map((c) => (c.id === 'lexware_zulassung' ? { ...c, lastSuccessAt: '2026-11-12T06:00:00.000Z' } : c)) };
+    const err = reducer(old, { type: 'setConnectionStatus', id: 'lexware_zulassung', status: 'error' });
+    const back = reducer(err, { type: 'setConnectionStatus', id: 'lexware_zulassung', status: 'connected' });
+    const c = back.connections.find((x) => x.id === 'lexware_zulassung')!;
+    expect(c).toMatchObject({ status: 'connected', lastSuccessAt: NOW.toISOString() });
+    expect(c.lastError).toBeUndefined();
+  });
   test('Störung unterdrückt Hinweis (stale, nicht erledigt)', () => {
     const r = reducer(s, { type: 'setConnectionStatus', id: 'lexware_zulassung', status: 'error' });
     expect(isOpen(r, 'job-inv:j-mueller-1')).toBe(false);

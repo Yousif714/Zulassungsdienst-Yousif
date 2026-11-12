@@ -10,6 +10,12 @@ export function sourceFreshness(c: Connection, now: Date): 'fresh' | 'stale' | '
   return ageMin > STALE_AFTER_MINUTES ? 'stale' : 'fresh';
 }
 
+/** Ganze Minuten seit dem letzten erfolgreichen Abruf (`null`, wenn nie abgerufen). */
+export function ageMinutes(c: Connection, now: Date): number | null {
+  if (!c.lastSuccessAt) return null;
+  return Math.floor((now.getTime() - Date.parse(c.lastSuccessAt)) / 60_000);
+}
+
 /** Liefert die Quellen, deren Datenstand nicht frisch ist (veraltet, Fehler oder nicht verbunden). Unbekannte IDs werden ignoriert. */
 export function areaStale(sources: ConnectionId[], connections: Connection[], now: Date): ConnectionId[] {
   return sources.filter((id) => {
