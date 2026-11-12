@@ -22,8 +22,10 @@ export function approve(
 ): { ok: true; action: Action } | { ok: false; reason: 'stale_version' | 'not_draft' | 'already_approved' | 'expired' } {
   if (a.status === 'approved' || a.status === 'executing' || a.status === 'executed') return { ok: false, reason: 'already_approved' };
   if (a.status !== 'draft') return { ok: false, reason: 'not_draft' };
-  if (req.via === 'whatsapp' && req.buttonIssuedAt && now.getTime() - Date.parse(req.buttonIssuedAt) > BUTTON_TTL_MS) {
-    return { ok: false, reason: 'expired' };
+  if (req.via === 'whatsapp') {
+    const issued = req.buttonIssuedAt ? Date.parse(req.buttonIssuedAt) : NaN;
+    const age = now.getTime() - issued;
+    if (!Number.isFinite(age) || age < 0 || age > BUTTON_TTL_MS) return { ok: false, reason: 'expired' };
   }
   if (req.version !== a.version) return { ok: false, reason: 'stale_version' };
   return { ok: true, action: { ...a, status: 'approved', approvedVia: req.via, approvedAt: now.toISOString() } };

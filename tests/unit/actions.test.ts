@@ -60,4 +60,31 @@ describe('Aktionen-Zustandsmaschine', () => {
     await p.execute(a, 'k');
     expect(p.executedCount('k')).toBe(1);
   });
+
+  describe('Schutzregeln', () => {
+    const wa = (issued?: string) => ({ version: 1, via: 'whatsapp' as const, buttonIssuedAt: issued });
+    test.each([
+      ['fehlend', undefined],
+      ['Müll', 'garbage'],
+      ['Zukunft', '2026-11-12T09:00:00Z'],
+    ])('WhatsApp-Knopf mit Zeitstempel %s → expired', (_n, ts) => {
+      expect(approve(draft(), wa(ts), NOW)).toEqual({ ok: false, reason: 'expired' });
+    });
+    test('gültiger Knopf', () => expect(approve(draft(), wa('2026-11-12T08:00:00Z'), NOW).ok).toBe(true));
+    test.each(['approved', 'executing', 'executed'] as const)('approve bei %s → already_approved', (st) => {
+      expect(approve({ ...draft(), status: st }, { version: 1, via: 'app' }, NOW)).toEqual({ ok: false, reason: 'already_approved' });
+    });
+    test('Vorrang already_approved vor expired', () => {
+      expect(approve({ ...draft(), status: 'executed' }, wa('2026-11-01T00:00:00Z'), NOW)).toEqual({ ok: false, reason: 'already_approved' });
+    });
+    test('Vorrang expired vor stale_version', () => {
+      expect(approve({ ...draft(), version: 3 }, wa('2026-11-01T00:00:00Z'), NOW)).toEqual({ ok: false, reason: 'expired' });
+    });
+    const all = ['draft', 'approved', 'executing', 'executed', 'failed', 'uncertain', 'cancelled'] as const;
+    const without = (ok: string) => all.filter((x) => x !== ok);
+    test.each(without('approved'))('startExecution aus %s wirft', (st) => expect(() => startExecution({ ...draft(), status: st })).toThrow('Ungültiger Übergang'));
+    test.each(without('executing'))('finishExecution aus %s wirft', (st) => expect(() => finishExecution({ ...draft(), status: st }, 'ok', NOW)).toThrow('Ungültiger Übergang'));
+    test.each(without('failed'))('retry aus %s wirft', (st) => expect(() => retry({ ...draft(), status: st })).toThrow('Ungültiger Übergang'));
+    test.each(without('uncertain'))('reconcileUncertain aus %s wirft', (st) => expect(() => reconcileUncertain({ ...draft(), status: st }, true, NOW)).toThrow('Ungültiger Übergang'));
+  });
 });
