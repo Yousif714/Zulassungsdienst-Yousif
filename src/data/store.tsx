@@ -2,47 +2,25 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { approve, editDraft, finishExecution, startExecution } from '@/domain/actions/machine';
+import { REJECT_REASON_DE, approve, editDraft, finishExecution, startExecution } from '@/domain/actions/machine';
+import { handleButton } from '@/domain/assistant';
 import { jobBilling } from '@/domain/billing';
 import { berlinParts, now, todayBerlin } from '@/domain/clock';
 import { runCoach } from '@/domain/coach';
 import { reconcileInsights, runDetectors } from '@/domain/detectors';
 import { expectedAmounts } from '@/domain/detectors/payments';
+import type { StoreEvent } from '@/domain/events';
 import { areaStale } from '@/domain/freshness';
-import { normalizePhone } from '@/domain/matching/messages';
+import { normalizePhone, validPhone } from '@/domain/matching/messages';
 import { classifyBankTx, matchBankPayment } from '@/domain/matching/payments';
 import { formatEuro } from '@/domain/money';
-import type { Action, AppState, AssistantMessage, AuditEntry, Call, Connection, ConnectionId, Job, Message, Settings } from '@/domain/types';
+import type { Action, AppState, AssistantMessage, AuditEntry, Connection, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
 export const STORE_KEY = 'nexus-demo-v1';
 
-export type StoreEvent =
-  | { type: 'confirmPaymentMatch'; paymentId: string; contractId: string }
-  | { type: 'simulateTransfer'; iban: string; payerName: string; amountCents: number }
-  | { type: 'settleInvoice'; invoiceId: string; paymentId: string }
-  | { type: 'linkInvoiceToJob'; jobId: string; invoiceId: string }
-  | { type: 'setJobStatus'; jobId: string; status: Job['status'] }
-  | { type: 'createAction'; action: Action }
-  | { type: 'editAction'; id: string; payload: Record<string, unknown> }
-  | { type: 'approveAction'; id: string; version: number; via: 'app' | 'whatsapp'; buttonIssuedAt?: string }
-  | { type: 'actionExecuted'; id: string; result: 'ok' | 'error' | 'timeout'; error?: string }
-  | { type: 'dismissInsight'; key: string }
-  | { type: 'snoozeInsight'; key: string }
-  | { type: 'suppressCoach'; key: string }
-  | { type: 'setSlides'; callId: string; slides: Call['slides']; status: Call['slidesStatus'] }
-  | { type: 'setConnectionStatus'; id: ConnectionId; status: Connection['status'] }
-  | { type: 'assistantInbound'; from: string; text: string }
-  | { type: 'assistantOutbound'; text: string; buttons?: AssistantMessage['buttons'] }
-  | { type: 'updateSettings'; patch: Partial<Settings> }
-  | { type: 'resetDemo' };
-
-export const REJECT_REASON_DE = {
-  stale_version: 'Der Entwurf wurde inzwischen geändert.',
-  not_draft: 'Die Aktion ist kein Entwurf mehr.',
-  already_approved: 'Die Aktion wurde bereits freigegeben.',
-  expired: 'Der Knopf ist abgelaufen.',
-} as const;
+export type { StoreEvent };
+export { REJECT_REASON_DE };
 
 // ---------- refresh ----------
 
@@ -266,7 +244,8 @@ function mutate(s: AppState, e: StoreEvent, at: Date): { state: AppState; audit?
       return owner({ state: { ...s, connections }, text: `Verbindung ${conn?.label ?? e.id}: ${what}` });
     }
     case 'assistantInbound': {
-      const fromOwner = normalizePhone(e.from) === normalizePhone(s.settings.ownerPhone);
+      const owner = validPhone(s.settings.ownerPhone);
+      const fromOwner = owner !== null && normalizePhone(e.from) === owner;
       const text = fromOwner ? e.text : `Nachricht von fremder Nummer ignoriert: „${e.text}“`;
       const msg: AssistantMessage = { id: `am-${s.assistantChat.length + 1}`, direction: fromOwner ? 'from_owner' : 'ignored', from: e.from, text, at: at.toISOString() };
       const st = { ...s, assistantChat: [...s.assistantChat, msg] };
@@ -285,9 +264,19 @@ function mutate(s: AppState, e: StoreEvent, at: Date): { state: AppState; audit?
       const LABEL: Record<keyof Settings, string> = {
         replyThresholdHours: 'Antwortzeit-Schwelle', briefingsEnabled: 'Briefings', ownerPhone: 'Inhaber-Nummer', suppressedCoachKeys: 'Coach-Tipps',
       };
-      const keys = Object.keys(e.patch) as (keyof Settings)[];
-      return owner({ state: { ...s, settings: { ...s.settings, ...e.patch } }, text: `Einstellungen geändert: ${keys.map((k) => LABEL[k]).join(', ')}` });
+      const patch = { ...e.patch };
+      // Ohne gültige Inhaber-Nummer könnte ein leerer Absender als Inhaber gelten: alte Nummer behalten.
+      const badPhone = patch.ownerPhone !== undefined && validPhone(patch.ownerPhone) === null;
+      if (badPhone) delete patch.ownerPhone;
+      const keys = Object.keys(patch) as (keyof Settings)[];
+      const parts = [
+        ...(keys.length ? [`Einstellungen geändert: ${keys.map((k) => LABEL[k]).join(', ')}`] : []),
+        ...(badPhone ? [`Inhaber-Nummer ungültig, nicht übernommen: „${e.patch.ownerPhone}“`] : []),
+      ];
+      return owner({ state: { ...s, settings: { ...s.settings, ...patch } }, text: parts.join(' · ') });
     }
+    case 'assistantButton':
+      return { state: s }; // wird im reducer aufgelöst
     case 'resetDemo':
       return { state: createDemoState() };
   }
@@ -295,6 +284,8 @@ function mutate(s: AppState, e: StoreEvent, at: Date): { state: AppState; audit?
 
 export function reducer(s: AppState, e: StoreEvent): AppState {
   const at = now();
+  // Knopf aus dem WhatsApp-Verlauf: mit dem frischesten Stand auswerten, damit ein zweiter Klick nie ein zweites „Gesendet“ ergibt.
+  if (e.type === 'assistantButton') return handleButton(s, e.button, at).events.reduce(reducer, s);
   const { state, audit } = mutate(s, e, at);
   const withAudit = audit ? { ...state, audit: [...state.audit, { at: at.toISOString(), isDemo: true, ...audit }] } : state;
   return refresh(withAudit, at);

@@ -7,6 +7,7 @@ import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
 import { useAppStore } from '@/data/store';
+import { validPhone } from '@/domain/matching/messages';
 
 export default function EinstellungenPage() {
   const { state, dispatch } = useAppStore();
@@ -21,7 +22,7 @@ export default function EinstellungenPage() {
   };
   const commitPhone = (raw: string, el: HTMLInputElement) => {
     const v = raw.trim();
-    if (/^\+?[\d\s/()-]{6,}$/.test(v)) {
+    if (validPhone(v)) {
       if (v !== settings.ownerPhone) dispatch({ type: 'updateSettings', patch: { ownerPhone: v } });
     } else el.value = settings.ownerPhone;
   };

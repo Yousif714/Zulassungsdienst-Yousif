@@ -115,3 +115,37 @@ describe('Store: Einstellungen', () => {
     expect(r.audit.at(-1)!.text).toContain('Einstellungen');
   });
 });
+
+describe('Fix-Runde 1', () => {
+  test('Doppelklick auf Senden: der Store wertet den Knopf mit dem frischesten Stand aus', async () => {
+    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI);
+    const st = apply(s, r.events);
+    const btn = r.reply!.buttons![0];
+    // Beide Klicks entstehen aus demselben (veralteten) Seitenstand.
+    const after = apply(st, [{ type: 'assistantButton', button: btn }, { type: 'assistantButton', button: btn }]);
+    const replies = after.assistantChat.filter((m) => m.direction === 'to_owner').map((m) => m.text);
+    expect(replies.filter((t) => t.startsWith('Gesendet (Demo)'))).toHaveLength(1);
+    expect(replies.at(-1)).toBe('Dieser Knopf ist nicht mehr gültig (Die Aktion wurde bereits freigegeben). Ich habe nichts gesendet.');
+    expect(after.messages.filter((m) => m.id.startsWith(`m-out-${btn.actionId}`))).toHaveLength(1);
+    expect(after.assistantChat.filter((m) => m.direction === 'from_owner')).toHaveLength(1);
+  });
+
+  test('updateSettings: leere oder ungültige Inhaber-Nummer wird nicht übernommen', () => {
+    for (const bad of ['', '   ', 'abc']) {
+      const r = reducer(s, { type: 'updateSettings', patch: { ownerPhone: bad, replyThresholdHours: 3 } });
+      expect(r.settings.ownerPhone).toBe(s.settings.ownerPhone);
+      expect(r.settings.replyThresholdHours).toBe(3);
+      expect(r.audit.at(-1)!.text).toContain('Inhaber-Nummer ungültig');
+    }
+    expect(reducer(s, { type: 'updateSettings', patch: { ownerPhone: '0151 2222222' } }).settings.ownerPhone).toBe('0151 2222222');
+  });
+
+  test('ohne Inhaber-Nummer wird jede Nachricht ignoriert, auch ein leerer Absender', async () => {
+    const noOwner = { ...s, settings: { ...s.settings, ownerPhone: '' } };
+    for (const from of ['', OWNER]) {
+      const r = await handleInbound(noOwner, from, 'Wer ist überfällig?', NOW, demoAI);
+      expect(r.reply).toBeNull();
+      expect(apply(noOwner, r.events).assistantChat.at(-1)!.direction).toBe('ignored');
+    }
+  });
+});

@@ -1,10 +1,10 @@
 import { demoPaymentLink } from '@/ai/demo-ai';
 import type { AIProvider } from '@/ai/provider';
-import { REJECT_REASON_DE, type StoreEvent } from '@/data/store';
-import { approve } from './actions/machine';
+import { REJECT_REASON_DE, approve } from './actions/machine';
 import { todayBerlin } from './clock';
 import { memberView } from './detectors';
-import { normalizePhone } from './matching/messages';
+import type { StoreEvent } from './events';
+import { normalizePhone, validPhone } from './matching/messages';
 import type { Action, AppState, AssistantMessage, Contact, MemberContract } from './types';
 
 type Button = NonNullable<AssistantMessage['buttons']>[number];
@@ -40,8 +40,9 @@ export async function handleInbound(
   s: AppState, from: string, text: string, now: Date, ai: AIProvider,
 ): Promise<{ events: StoreEvent[]; reply: AssistantMessage | null }> {
   const inbound: StoreEvent = { type: 'assistantInbound', from, text };
-  // Der Store legt fremde Absender als `ignored` ab und protokolliert sie.
-  if (normalizePhone(from) !== normalizePhone(s.settings.ownerPhone)) return { events: [inbound], reply: null };
+  // Der Store legt fremde Absender als `ignored` ab und protokolliert sie. Ohne gültige Inhaber-Nummer gilt niemand als Inhaber.
+  const owner = validPhone(s.settings.ownerPhone);
+  if (owner === null || normalizePhone(from) !== owner) return { events: [inbound], reply: null };
 
   const member = isReminderCommand(text) ? findMember(s, text) : null;
   if (member) {

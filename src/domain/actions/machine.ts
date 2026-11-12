@@ -15,6 +15,14 @@ export function editDraft(a: Action, payload: Record<string, unknown>): Action {
   return { ...a, payload, version: a.version + 1 };
 }
 
+/** Ablehnungsgründe von `approve` auf Deutsch (für App und WhatsApp-Antworten). */
+export const REJECT_REASON_DE = {
+  stale_version: 'Der Entwurf wurde inzwischen geändert.',
+  not_draft: 'Die Aktion ist kein Entwurf mehr.',
+  already_approved: 'Die Aktion wurde bereits freigegeben.',
+  expired: 'Der Knopf ist abgelaufen.',
+} as const;
+
 export function approve(
   a: Action,
   req: { version: number; via: 'app' | 'whatsapp'; buttonIssuedAt?: string },

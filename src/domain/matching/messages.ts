@@ -7,6 +7,12 @@ export function normalizePhone(s: string): string {
   return t;
 }
 
+/** Normalisierte Nummer, wenn sie wie eine Telefonnummer aussieht (+ und 6–15 Ziffern), sonst `null`. */
+export function validPhone(s: string): string | null {
+  const t = normalizePhone(s.trim());
+  return /^\+\d{6,15}$/.test(t) ? t : null;
+}
+
 const PLATE_RE = /(?<![A-Za-zÄÖÜ0-9])([A-ZÄÖÜ]{1,3})[- ]([A-Z]{1,2}) ?(\d{1,4}[EH]?)(?![A-Za-z0-9])/g;
 
 export function extractPlates(text: string): string[] {

@@ -7,7 +7,7 @@ import { demoAI } from '@/ai/demo-ai';
 import { DemoBadge } from '@/components/DemoBadge';
 import { PageHeader } from '@/components/PageHeader';
 import { useAppStore } from '@/data/store';
-import { handleButton, handleInbound } from '@/domain/assistant';
+import { handleInbound } from '@/domain/assistant';
 import { buildBriefing, renderBriefingText } from '@/domain/briefing';
 import { formatBerlin, now } from '@/domain/clock';
 import { chooseDelivery } from '@/domain/scheduler';
@@ -110,7 +110,7 @@ export default function AssistentPage() {
         ) : (
           <ol className="wa-list" aria-live="polite">
             {chat.map((m) => (
-              <Bubble key={m.id} m={m} onButton={(b) => handleButton(state, b, now()).events.forEach(dispatch)} />
+              <Bubble key={m.id} m={m} onButton={(button) => dispatch({ type: 'assistantButton', button })} />
             ))}
           </ol>
         )}

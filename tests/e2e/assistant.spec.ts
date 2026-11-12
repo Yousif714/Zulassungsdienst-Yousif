@@ -69,6 +69,18 @@ test('Abnahme 10: WhatsApp-Assistent', async ({ page }) => {
   await expect(page.getByText('Freigegeben (WhatsApp): Erinnerung an Mehmet Kaya')).toBeVisible();
 });
 
+test('WhatsApp-Assistent: Doppelklick auf Senden sendet nur einmal', async ({ page }) => {
+  await page.goto('/assistent?reset=1');
+  await page.getByTestId('wa-input').fill('Schick Kaya die Erinnerung'); await page.getByTestId('wa-send').click();
+  // Zwei Klicks im selben Takt, bevor React neu zeichnet: beide sehen denselben (veralteten) Seitenstand.
+  await page.getByTestId('wa-msg').last().getByRole('button', { name: 'Senden' }).evaluate((el: HTMLElement) => { el.click(); el.click(); });
+  await expect(page.getByTestId('wa-msg').last()).toContainText('nicht mehr gültig');
+  await expect(page.getByTestId('wa-msg').filter({ hasText: 'Gesendet (Demo)' })).toHaveCount(1);
+  await page.getByTestId('wa-msg').nth(-3).getByRole('button', { name: 'Senden' }).click();
+  await expect(page.getByTestId('wa-msg').last()).toContainText('Ich habe nichts gesendet.');
+  await expect(page.getByTestId('wa-msg').filter({ hasText: 'Gesendet (Demo)' })).toHaveCount(1);
+});
+
 test('Verbindungen: Anleitung für Phase 2 je Verbindung', async ({ page }) => {
   await page.goto('/verbindungen?reset=1');
   const bank = page.getByTestId('conn-bank');
