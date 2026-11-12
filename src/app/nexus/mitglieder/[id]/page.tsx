@@ -39,24 +39,25 @@ export default function MemberPage() {
 
   const [open, setOpen] = useState(false);
   const [tone, setTone] = useState<Tone>('freundlich');
-  const [draft, setDraft] = useState<{ tone: Tone; text: string } | null>(null);
+  const [draft, setDraft] = useState<{ forId: string; tone: Tone; text: string } | null>(null);
 
   const view = exists ? memberView(state, id, today) : null;
-  const actionId = `reminder-${id}`;
+  // Eine Erinnerung je Rückstandsstand: kommt eine neue überfällige Rate dazu, gibt es eine neue Aktion.
+  const actionId = `reminder-${id}-${view?.status.oldestUnpaidDue ?? 'none'}`;
   const stored = state.actions.find((a) => a.id === actionId);
 
   useEffect(() => {
-    if (!open || !view?.contact || stored || draft?.tone === tone) return;
+    if (!open || !view?.contact || stored || (draft?.forId === actionId && draft.tone === tone)) return;
     let cancelled = false;
     void demoAI.draftReminder(view.contact, view.status, tone, demoPaymentLink(id)).then((text) => {
-      if (!cancelled) setDraft({ tone, text });
+      if (!cancelled) setDraft({ forId: actionId, tone, text });
     });
     return () => {
       cancelled = true;
     };
     // Nur neu entwerfen, wenn das Blatt geöffnet oder der Ton gewechselt wird.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, tone, stored]);
+  }, [open, tone, stored, actionId]);
 
   if (!view) {
     return (
@@ -78,7 +79,7 @@ export default function MemberPage() {
     .sort((x, y) => y.p.bookedOn.localeCompare(x.p.bookedOn));
 
   let action: Action | null = stored ?? null;
-  if (!action && contact && draft?.tone === tone) {
+  if (!action && contact && draft?.forId === actionId && draft.tone === tone) {
     action = {
       id: actionId,
       type: 'send_reminder',

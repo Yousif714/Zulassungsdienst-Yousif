@@ -1072,7 +1072,7 @@ a.task-body:active {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 12px;
   border-radius: 8px;
   font-size: 15px;

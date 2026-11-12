@@ -69,3 +69,43 @@ test('NEXUS-Übersicht: Filter überfällig, Zuordnen-Einstieg, Content-Board', 
   await page.goto('/nexus/content');
   await expect(page.getByTestId('content-stage')).toHaveCount(5);
 });
+
+const storedActions = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => (JSON.parse(localStorage.getItem('nexus-demo-v1') ?? '{}').actions ?? []) as { id: string; type: string; payload: Record<string, unknown> }[]);
+
+test('Folie bearbeiten: Fokus bleibt beim Wechsel vom Titel zum Text', async ({ page }) => {
+  await page.goto('/nexus/calls/call-seele?reset=1');
+  await page.getByRole('button', { name: 'Folientexte vorbereiten' }).click();
+  const title = page.getByLabel('Titel Folie 1', { exact: true });
+  const body = page.getByLabel('Text Folie 1', { exact: true });
+  await title.click(); await page.keyboard.press('End'); await page.keyboard.type(' neu');
+  await page.keyboard.press('Tab');
+  await expect(body).toBeFocused();
+  await page.keyboard.type('X');
+  await expect(body).toBeFocused();
+  await expect(body).toHaveValue(/X/);
+  await expect(title).toHaveValue(/ neu$/);
+});
+
+test('Übernahme: nur ein Stripe-Plan pro Vertrag, auch nach Moduswechsel', async ({ page }) => {
+  await page.goto(`/nexus/mitglieder/${KAYA}/uebernahme?reset=1`);
+  const prepare = page.getByRole('button', { name: 'Stripe-Plan vorbereiten (Demo)' });
+  await prepare.click();
+  const status = page.getByTestId('plan-status');
+  await expect(status).toContainText('Entwurf angelegt');
+  await page.getByRole('radio', { name: /verteilen/i }).check();
+  await expect(prepare).toBeDisabled();
+  await expect(status).toContainText('Mit erster Rate nachzahlen');
+  await expect(status).toContainText([formatEuro(45000), formatEuro(30000)].join(' · '));
+  const plans = (await storedActions(page)).filter((a) => a.type === 'create_invoice_draft');
+  expect(plans.map((a) => a.id)).toEqual([`stripe-plan-${KAYA}`]);
+});
+
+test('Erinnerung: eigene Aktion je Rückstandsstand', async ({ page }) => {
+  await page.goto(`/nexus/mitglieder/${KAYA}?reset=1`);
+  await page.getByRole('button', { name: 'Erinnerung vorbereiten' }).click();
+  await page.getByRole('button', { name: 'Senden' }).click();
+  await expect(page.getByTestId('action-status')).toContainText('Gesendet (Demo)');
+  const ids = (await storedActions(page)).filter((a) => a.type === 'send_reminder').map((a) => a.id);
+  expect(ids).toEqual([`reminder-${KAYA}-2026-11-01`]);
+});

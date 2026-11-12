@@ -15,7 +15,7 @@ import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
 import { planTakeover } from '@/domain/ledger/takeover';
 import { formatEuro } from '@/domain/money';
-import type { Action, MemberContract } from '@/domain/types';
+import type { Action, Installment, MemberContract } from '@/domain/types';
 
 type Mode = MemberContract['catchUpMode'];
 
@@ -45,8 +45,10 @@ export default function TakeoverPage() {
   const { contact, states } = memberView(state, id, today);
   const name = contact?.name ?? 'Unbekannt';
   const plan = planTakeover(states, today, mode);
-  const actionId = `stripe-plan-${id}-${mode}`;
+  // Ein Stripe-Plan pro Vertrag: ein vorhandener Entwurf bleibt maßgeblich, egal welcher Modus gerade gewählt ist.
+  const actionId = `stripe-plan-${id}`;
   const prepared = state.actions.find((a) => a.id === actionId);
+  const preparedPlan = prepared?.payload as { mode: Mode; rates: Installment[] } | undefined;
   const history = state.allocations
     .filter((a) => a.contractId === id)
     .flatMap((a) => {
@@ -115,11 +117,19 @@ export default function TakeoverPage() {
         </span>
       </p>
 
-      {contract.billing === 'legacy' && plan.rates.length > 0 && (
+      {contract.billing === 'legacy' && (prepared || plan.rates.length > 0) && (
         <div className="member-actions">
           <button type="button" className="btn btn-primary" onClick={prepare} disabled={!!prepared}>Stripe-Plan vorbereiten (Demo)</button>
-          <div role="status" className="confirm-line">
-            {prepared && <>Entwurf angelegt: {prepared.title}, {plan.rates.length} Raten <DemoBadge /></>}
+          <div role="status" className="confirm-line" data-testid="plan-status">
+            {prepared && preparedPlan && (
+              <>
+                Entwurf angelegt: {prepared.title} · {MODE_OPTIONS.find((o) => o.value === preparedPlan.mode)?.label} ·{' '}
+                {preparedPlan.rates.map((r, i) => (
+                  <Fragment key={r.no}>{i > 0 && ' · '}<span className="amount">{formatEuro(r.amountCents)}</span></Fragment>
+                ))}{' '}
+                <DemoBadge />
+              </>
+            )}
           </div>
         </div>
       )}

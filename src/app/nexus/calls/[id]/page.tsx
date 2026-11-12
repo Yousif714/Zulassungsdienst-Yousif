@@ -18,6 +18,13 @@ const STATUS_LABEL: Record<Call['slidesStatus'], string> = { todo: 'Noch keine F
 function SlideEditor({ slide, onSave }: { slide: Slide; onSave: (s: Slide) => void }) {
   const [title, setTitle] = useState(slideHeading(slide));
   const [body, setBody] = useState(slide.body);
+  // Gespeicherte Änderungen übernehmen, ohne die Zeile neu einzuhängen (Fokus und Cursor bleiben erhalten).
+  const [saved, setSaved] = useState(slide);
+  if (saved.title !== slide.title || saved.body !== slide.body) {
+    setSaved(slide);
+    setTitle(slideHeading(slide));
+    setBody(slide.body);
+  }
   const commit = () => {
     const next = { ...slide, title: `Folie ${slide.position}: ${title.trim()}`, body };
     if (next.title !== slide.title || next.body !== slide.body) onSave(next);
@@ -106,7 +113,7 @@ export default function CallPage() {
         <section className="list-group" aria-labelledby="slides-title">
           <h2 id="slides-title" className="list-group-title">Folien</h2>
           <ol className="slides">
-            {call.slides.map((s) => <SlideEditor key={`${s.position}-${s.title}-${s.body}`} slide={s} onSave={save} />)}
+            {call.slides.map((s) => <SlideEditor key={s.position} slide={s} onSave={save} />)}
           </ol>
         </section>
       )}
