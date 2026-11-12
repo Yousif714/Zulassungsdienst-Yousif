@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Fragment, useEffect, useState } from 'react';
 
-import { demoAI } from '@/ai/demo-ai';
 import { ActionSheet } from '@/components/ActionSheet';
 import { IconChevron } from '@/components/Icons';
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { Bubble, RichText, TimeStamp, placeMessages } from '@/components/Messages';
 import { PageHeader } from '@/components/PageHeader';
+import { useAI } from '@/data/ai-client';
 import { useAppStore } from '@/data/store';
 import { replyAction, replyActionId } from '@/domain/action-factory';
 import { formatBerlin, now, todayBerlin } from '@/domain/clock';
@@ -35,7 +35,8 @@ function BackLink() {
 
 export default function ThreadPage() {
   const { threadId } = useParams<{ threadId: string }>();
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode } = useAppStore();
+  const ai = useAI();
   const at = now();
   const today = todayBerlin(at);
 
@@ -58,9 +59,9 @@ export default function ThreadPage() {
   useEffect(() => {
     if (!needsDraft || !lastIn || draft?.forId === lastIn.id) return;
     let cancelled = false;
-    void demoAI.draftReply({ thread: messages, contact }).then((text) => {
+    ai.draftReply(threadId).then((text) => {
       if (!cancelled) setDraft({ forId: lastIn.id, text });
-    });
+    }, () => {});
     return () => {
       cancelled = true;
     };
@@ -82,7 +83,7 @@ export default function ThreadPage() {
 
   let action: Action | null = stored ?? null;
   if (!action && lastIn && actionId && draft?.forId === lastIn.id) {
-    action = replyAction({ lastIn, contact, threadId, text: draft.text, at, isDemo: true });
+    action = replyAction({ lastIn, contact, threadId, text: draft.text, at, isDemo: mode === 'demo' });
   }
 
   // Die Aktion wird erst beim ersten Ändern oder Senden gespeichert.

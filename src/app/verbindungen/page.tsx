@@ -27,7 +27,7 @@ const HOW_TO: Record<ConnectionId, string> = {
 };
 
 export default function ConnectionsPage() {
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode } = useAppStore();
   const at = now();
 
   return (
@@ -40,7 +40,7 @@ export default function ConnectionsPage() {
           return (
             <div key={c.id}>
               <ListRow testId={`conn-${c.id}`} title={<span className="wrap-text">{c.label}</span>} subtitle={<span className="wrap-text">{subtitle}</span>}
-                accessory={c.status === 'connected'
+                accessory={mode !== 'demo' ? undefined : c.status === 'connected'
                   ? <button type="button" className="btn btn-secondary btn-small" onClick={() => dispatch({ type: 'setConnectionStatus', id: c.id, status: 'error' })}>Störung simulieren</button>
                   : <button type="button" className="btn btn-secondary btn-small" onClick={() => dispatch({ type: 'setConnectionStatus', id: c.id, status: 'connected' })}>Wieder verbinden</button>} />
               <details className="conn-help" data-testid={`conn-help-${c.id}`}>

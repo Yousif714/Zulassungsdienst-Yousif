@@ -121,7 +121,7 @@ function SimulateTransfer() {
 }
 
 export default function MatchPage() {
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode } = useAppStore();
   const at = now();
   const expected = expectedAmounts(state, at);
   const payments = unallocatedBankPayments(state).sort((a, b) => b.bookedOn.localeCompare(a.bookedOn));
@@ -174,7 +174,7 @@ export default function MatchPage() {
           )}
       </section>
 
-      <SimulateTransfer />
+      {mode === 'demo' && <SimulateTransfer />}
     </>
   );
 }

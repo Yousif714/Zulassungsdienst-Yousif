@@ -10,6 +10,9 @@ import { newId } from '@/domain/ids';
 import type { AppState } from '@/domain/types';
 import { applyEvent, refresh, type EngineContext } from './engine';
 import { checkAction, executeApproved, sweepStaleExecutions, type EventSink } from './executor';
+import { createEmptyState } from './empty-state';
+import { OFFLINE_NOTICE, reloadTo, useMode, type AppMode } from './mode';
+import { UnauthorizedError, createRealClient } from './real-client';
 import { createDemoState } from './seed';
 
 export const STORE_KEY = 'nexus-demo-v1';
@@ -29,8 +32,13 @@ export function reducer(s: AppState, e: StoreEvent): AppState {
 
 // ---------- React ----------
 
-type Store = { state: AppState; dispatch: (e: StoreEvent) => Promise<{ created: string[] }> };
+type Dispatch = (e: StoreEvent) => Promise<{ created: string[] }>;
+type Store = { state: AppState; dispatch: Dispatch; mode: AppMode };
 const StoreContext = createContext<Store | null>(null);
+/** Nur für den KI-Client: übernimmt einen vom Server gelieferten Zustand (Echtmodus). */
+const AdoptContext = createContext<(s: AppState) => void>(() => {});
+
+export const SAVE_FAILED = 'Konnte nicht gespeichert werden';
 
 /** Startzustand aus dem Speicher (sonst Demo-Daten), neu abgeglichen. Bei `reset=1` wird die frische Demo sofort gespeichert,
  *  damit ein zweiter Lauf (React StrictMode) ohne Parameter denselben Zustand lädt. */
@@ -54,13 +62,13 @@ export function loadInitial(
   return { state: refresh(s, at), stripReset: false };
 }
 
-export function AppStoreProvider({ children }: { children: ReactNode }) {
+function DemoStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState | null>(null);
   const loaded = useRef(false);
   // Aktueller Stand synchron: schnell aufeinanderfolgende Dispatches (createAction + approveAction) sehen den neuen Stand sofort.
   const ref = useRef<AppState | null>(null);
   // Der Ausführer schreibt über denselben Weg wie `dispatch` in den Zustand.
-  const sink = useRef<EventSink>({
+  const [sink] = useState<EventSink>(() => ({
     current: () => ref.current as AppState,
     async apply(e) {
       const r = applyEvent(ref.current as AppState, e, demoContext());
@@ -68,7 +76,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setState(r.state);
       return r.state;
     },
-  }).current;
+  }));
 
   useEffect(() => {
     // Erst nach der Hydrierung laden: localStorage und URL gibt es nur im Browser. Der Ref verhindert doppeltes Laden (StrictMode).
@@ -102,7 +110,68 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [sink]);
 
   if (!state) return null;
-  return <StoreContext.Provider value={{ state, dispatch }}>{children}</StoreContext.Provider>;
+  return <StoreContext.Provider value={{ state, dispatch, mode: 'demo' }}>{children}</StoreContext.Provider>;
+}
+
+/**
+ * Echtmodus: Zustand vom Server (`/api/state`), Ereignisse an `/api/events`, Antwortzustand wird übernommen.
+ * Nichts landet im Browser-Speicher. Offline: leerer Zustand mit Hinweis, keine Demo-Daten.
+ */
+function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; children: ReactNode }) {
+  const [client] = useState(() => createRealClient());
+  const [state, setState] = useState<AppState | null>(() => (mode === 'offline' ? createEmptyState() : null));
+  const [notice, setNotice] = useState(mode === 'offline' ? OFFLINE_NOTICE : '');
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    if (mode === 'offline' || loaded.current) return;
+    loaded.current = true;
+    client.load().then(setState, (err: unknown) => {
+      if (err instanceof UnauthorizedError) return reloadTo('/anmelden');
+      setState(createEmptyState());
+      setNotice(OFFLINE_NOTICE);
+    });
+  }, [client, mode]);
+
+  const dispatch = useCallback<Dispatch>(async (e) => {
+    try {
+      const r = await client.dispatch(e);
+      setState(r.state);
+      setNotice('');
+      return { created: r.created };
+    } catch (err) {
+      if (err instanceof UnauthorizedError) reloadTo('/anmelden');
+      else setNotice(SAVE_FAILED);
+      return { created: [] };
+    }
+  }, [client]);
+
+  const adopt = useCallback((s: AppState) => {
+    setState(s);
+    setNotice('');
+  }, []);
+
+  if (!state) return null;
+  return (
+    <StoreContext.Provider value={{ state, dispatch, mode }}>
+      <AdoptContext.Provider value={adopt}>
+        <p role="status" className="store-notice">{notice}</p>
+        {children}
+      </AdoptContext.Provider>
+    </StoreContext.Provider>
+  );
+}
+
+/** Wählt nach dem Modus den lokalen Demo-Speicher oder den Server. Ein Moduswechsel hängt alles neu ein. */
+export function AppStoreProvider({ children }: { children: ReactNode }) {
+  const { mode } = useMode();
+  return mode === 'demo'
+    ? <DemoStoreProvider>{children}</DemoStoreProvider>
+    : <RealStoreProvider key={mode} mode={mode}>{children}</RealStoreProvider>;
+}
+
+export function useAdoptState(): (s: AppState) => void {
+  return useContext(AdoptContext);
 }
 
 export function useAppStore(): Store {

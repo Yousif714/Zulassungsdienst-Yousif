@@ -2,12 +2,10 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
-import { demoAI } from '@/ai/demo-ai';
-import { createStateTools } from '@/ai/tools';
 import type { ChatAnswer } from '@/ai/provider';
 import { Bubble, LinkCards, RichText, TimeStamp, TypingBubble } from '@/components/Messages';
 import { PageHeader } from '@/components/PageHeader';
-import { useAppStore } from '@/data/store';
+import { useAI } from '@/data/ai-client';
 import { formatBerlin, now } from '@/domain/clock';
 
 const QUESTIONS = [
@@ -25,7 +23,7 @@ const TYPING_MS = 750;
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export default function ChatPage() {
-  const { state } = useAppStore();
+  const ai = useAI();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const nextId = useRef(1);
@@ -40,7 +38,7 @@ export default function ChatPage() {
     if (!q) return;
     const id = nextId.current++;
     setTurns((t) => [...t, { id, question: q, answer: null }]);
-    const [answer] = await Promise.all([demoAI.answer(q, { now: now(), tools: createStateTools(state, now()) }), pause(TYPING_MS)]);
+    const [answer] = await Promise.all([ai.answer(q).catch((): ChatAnswer => ({ text: 'Der Assistent ist gerade nicht erreichbar.', links: [] })), pause(TYPING_MS)]);
     setTurns((t) => t.map((x) => (x.id === id ? { ...x, answer } : x)));
   };
 

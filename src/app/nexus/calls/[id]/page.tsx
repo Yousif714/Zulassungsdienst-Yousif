@@ -3,9 +3,9 @@
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 
-import { demoAI } from '@/ai/demo-ai';
 import { BackLink } from '@/components/BackLink';
 import { PageHeader } from '@/components/PageHeader';
+import { useAI } from '@/data/ai-client';
 import { useAppStore } from '@/data/store';
 import { formatBerlin } from '@/domain/clock';
 import { gammaText, slideHeading } from '@/domain/slides';
@@ -43,9 +43,10 @@ function SlideEditor({ slide, onSave }: { slide: Slide; onSave: (s: Slide) => vo
 export default function CallPage() {
   const { id } = useParams<{ id: string }>();
   const { state, dispatch } = useAppStore();
+  const ai = useAI();
   const call = state.calls.find((c) => c.id === id);
   const [busy, setBusy] = useState(false);
-  const [copyError, setCopyError] = useState('');
+  const [error, setError] = useState('');
   const back = <BackLink href="/nexus" label="NEXUS" />;
 
   if (!call) {
@@ -62,7 +63,9 @@ export default function CallPage() {
   const prepare = async () => {
     setBusy(true);
     try {
-      setSlides(await demoAI.slidesFor(call), 'draft');
+      setSlides(await ai.slidesFor(call.id), 'draft');
+    } catch {
+      setError('Folientexte konnten nicht erstellt werden.');
     } finally {
       setBusy(false);
     }
@@ -71,12 +74,12 @@ export default function CallPage() {
   const save = (next: Slide) => setSlides(call.slides.map((s) => (s.position === next.position ? next : s)), 'draft');
 
   const copy = async () => {
-    setCopyError('');
+    setError('');
     try {
       await navigator.clipboard.writeText(gammaText(call.slides));
       setSlides(call.slides, 'copied');
     } catch {
-      setCopyError('Kopieren nicht möglich: Die Zwischenablage ist nicht freigegeben.');
+      setError('Kopieren nicht möglich: Die Zwischenablage ist nicht freigegeben.');
     }
   };
 
@@ -105,7 +108,7 @@ export default function CallPage() {
               <button type="button" className="btn btn-primary" onClick={copy}>Für Gamma kopieren</button>
             )}
           </div>
-          {copyError && <p className="form-error" role="alert">{copyError}</p>}
+          {error && <p className="form-error" role="alert">{error}</p>}
         </div>
       </section>
 

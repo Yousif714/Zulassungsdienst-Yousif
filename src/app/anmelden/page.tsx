@@ -7,6 +7,7 @@ import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
+import { reloadTo } from '@/data/mode';
 
 async function post(url: string, body?: unknown): Promise<{ ok: boolean; data: Record<string, unknown> }> {
   const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
@@ -65,13 +66,13 @@ export default function AnmeldenPage() {
     const response = await startAuthentication({ optionsJSON: opts.data as never });
     const done = await post('/api/auth/login/verify', { response });
     if (!done.ok) return setError(errorText(done.data, 'Anmeldung fehlgeschlagen'));
-    router.replace('/');
+    reloadTo('/');
   }, 'Anmeldung fehlgeschlagen');
 
   const recover = () => run(async () => {
     const done = await post('/api/auth/recover', { code });
     if (!done.ok) return setError(errorText(done.data, 'Code ungültig'));
-    router.replace('/');
+    reloadTo('/');
   }, 'Anmeldung fehlgeschlagen');
 
   if (recoveryCodes) {
@@ -81,7 +82,7 @@ export default function AnmeldenPage() {
         <ListGroup>
           {recoveryCodes.map((c) => <ListRow key={c} title={<code>{c}</code>} />)}
         </ListGroup>
-        <button type="button" className="btn btn-primary btn-block" onClick={() => router.replace('/')}>Weiter</button>
+        <button type="button" className="btn btn-primary btn-block" onClick={() => reloadTo('/')}>Weiter</button>
       </>
     );
   }

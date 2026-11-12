@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { demoAI } from '@/ai/demo-ai';
 import { ActionSheet } from '@/components/ActionSheet';
 import { BackLink } from '@/components/BackLink';
 import { Figure, Figures } from '@/components/Figures';
@@ -13,12 +12,12 @@ import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
 import { Segmented } from '@/components/Segmented';
 import { TRAFFIC_LABEL, TrafficDot } from '@/components/TrafficDot';
+import { useAI } from '@/data/ai-client';
 import { useAppStore } from '@/data/store';
 import { reminderAction, reminderActionId } from '@/domain/action-factory';
 import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
 import { formatEuro } from '@/domain/money';
-import { paymentLinkFor } from '@/domain/payment-link';
 import type { Action, InstallmentState, IsoDate } from '@/domain/types';
 
 type Tone = 'freundlich' | 'bestimmt';
@@ -34,7 +33,8 @@ function rateState(r: InstallmentState, today: IsoDate): { label: string; tone: 
 
 export default function MemberPage() {
   const { id } = useParams<{ id: string }>();
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode } = useAppStore();
+  const ai = useAI();
   const at = now();
   const today = todayBerlin(at);
   const exists = state.contracts.some((c) => c.id === id);
@@ -51,9 +51,9 @@ export default function MemberPage() {
   useEffect(() => {
     if (!open || !view?.contact || stored || (draft?.forId === actionId && draft.tone === tone)) return;
     let cancelled = false;
-    void demoAI.draftReminder({ contact: view.contact, status: view.status, tone, paymentLink: paymentLinkFor(id) }).then((text) => {
+    ai.draftReminder(id, tone).then((text) => {
       if (!cancelled) setDraft({ forId: actionId, tone, text });
-    });
+    }, () => {});
     return () => {
       cancelled = true;
     };
@@ -82,7 +82,7 @@ export default function MemberPage() {
 
   let action: Action | null = stored ?? null;
   if (!action && contact && draft?.forId === actionId && draft.tone === tone) {
-    action = reminderAction({ contract, contact, status, text: draft.text, at, isDemo: true });
+    action = reminderAction({ contract, contact, status, text: draft.text, at, isDemo: mode === 'demo' });
   }
 
   // Wie beim Antwortentwurf: erst beim ersten Ändern oder Senden speichern.

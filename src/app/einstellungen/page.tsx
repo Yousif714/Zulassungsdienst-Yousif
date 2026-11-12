@@ -6,11 +6,13 @@ import { DemoBadge } from '@/components/DemoBadge';
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
+import { useMode } from '@/data/mode';
 import { useAppStore } from '@/data/store';
 import { validPhone } from '@/domain/matching/messages';
 
 export default function EinstellungenPage() {
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode } = useAppStore();
+  const { authenticated, setDemo } = useMode();
   const { settings } = state;
   const [resetDone, setResetDone] = useState(false);
 
@@ -61,10 +63,18 @@ export default function EinstellungenPage() {
       </ListGroup>
 
       <ListGroup title="Demo">
-        <ListRow key="reset" title={<span className="wrap-text">Alle Demo-Daten auf den Anfang</span>} subtitle={<DemoBadge />}
-          accessory={<button type="button" className="btn btn-secondary btn-small destructive" onClick={() => { dispatch({ type: 'resetDemo' }); setResetDone(true); }}>
-            Demo zurücksetzen
-          </button>} />
+        {authenticated && (
+          <ListRow key="demo-mode" title={<label className="wrap-text" htmlFor="set-demo">Demo-Modus</label>}
+            subtitle={<span className="wrap-text">{"Beispieldaten statt deiner echten Daten"}</span>}
+            accessory={<input id="set-demo" type="checkbox" role="switch" className="switch" checked={mode === 'demo'}
+              onChange={(e) => setDemo(e.target.checked)} />} />
+        )}
+        {mode === 'demo' && (
+          <ListRow key="reset" title={<span className="wrap-text">Alle Demo-Daten auf den Anfang</span>} subtitle={<DemoBadge />}
+            accessory={<button type="button" className="btn btn-secondary btn-small destructive" onClick={() => { dispatch({ type: 'resetDemo' }); setResetDone(true); }}>
+              Demo zurücksetzen
+            </button>} />
+        )}
       </ListGroup>
       <p role="status" className="settings-status">{resetDone ? 'Demo-Daten wurden zurückgesetzt.' : ''}</p>
     </>
