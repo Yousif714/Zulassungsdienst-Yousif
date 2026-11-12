@@ -17,6 +17,13 @@ describe('matchMessage', () => {
   test('ausgehend nutzt to', () => expect(matchMessage({ direction: 'out', from: '+49', to: '0209 111222', body: 'Hi' }, contacts, vehicles, jobs).contactId).toBe('d-schmidt'));
   test('Kennzeichen', () => expect(matchMessage({ direction: 'in', from: '+49000', to: '', body: 'Wegen BOT-MK 456' }, contacts, vehicles, jobs)).toEqual({ contactId: 'd-mueller', jobId: 'j-mueller-1' }));
   test('FIN', () => expect(matchMessage({ direction: 'in', from: '+49000', to: '', body: 'FIN WVWZZZ1KZAW123456' }, contacts, vehicles, jobs)).toEqual({ contactId: 'd-mueller', jobId: 'j-mueller-1' }));
+  test('Kennzeichen klein', () => expect(matchMessage({ direction: 'in', from: '+49000', to: '', body: 'ist der golf bot-mk 456 fertig?' }, contacts, vehicles, jobs)).toEqual({ contactId: 'd-mueller', jobId: 'j-mueller-1' }));
+  test('FIN klein', () => expect(matchMessage({ direction: 'in', from: '+49000', to: '', body: 'fin wvwzzz1kzaw123456' }, contacts, vehicles, jobs)).toEqual({ contactId: 'd-mueller', jobId: 'j-mueller-1' }));
+  test('Fließtext ist kein Kennzeichen', () => {
+    for (const body of ['Wir haben ab 12 Uhr geöffnet', 'bis ab 12 Uhr'])
+      expect(matchMessage({ direction: 'in', from: '+49000', to: '', body }, contacts, vehicles, jobs)).toEqual({ contactId: null, jobId: null });
+  });
+  test('17 Buchstaben ohne Ziffer keine FIN', () => expect(extractVins('ABCDEFGHJKLMNPRST')).toEqual([]));
   test('nichts', () => expect(matchMessage({ direction: 'in', from: '+49000', to: '', body: 'Hallo' }, contacts, vehicles, jobs)).toEqual({ contactId: null, jobId: null }));
 });
 describe('Antwortpflicht', () => {

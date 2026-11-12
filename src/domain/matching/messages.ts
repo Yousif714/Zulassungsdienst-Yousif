@@ -10,11 +10,20 @@ export function normalizePhone(s: string): string {
 const PLATE_RE = /(?<![A-Za-zÄÖÜ0-9])([A-ZÄÖÜ]{1,3})[- ]([A-Z]{1,2}) ?(\d{1,4}[EH]?)(?![A-Za-z0-9])/g;
 
 export function extractPlates(text: string): string[] {
-  return [...text.matchAll(PLATE_RE)].map((m) => `${m[1]}-${m[2]} ${m[3]}`);
+  return [...text.toUpperCase().matchAll(PLATE_RE)].map((m) => `${m[1]}-${m[2]} ${m[3]}`);
 }
 
 export function extractVins(text: string): string[] {
-  return [...text.matchAll(/(?<![A-Za-z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Za-z0-9])/g)].map((m) => m[0]);
+  return [...text.toUpperCase().matchAll(/(?<![A-Z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Z0-9])/g)]
+    .map((m) => m[0])
+    .filter((v) => /\d/.test(v));
+}
+
+/** Bekanntes Kennzeichen im (großgeschriebenen) Text, Trenner optional, mit Wortgrenzen. */
+function plateInText(plate: string, upperText: string): boolean {
+  const m = /^([A-ZÄÖÜ]{1,3})[- ]?([A-Z]{1,2}) ?(\d{1,4}[EH]?)$/.exec(plate.toUpperCase().trim());
+  if (!m) return false;
+  return new RegExp(`(?<![A-ZÄÖÜ0-9])${m[1]}[- ]?${m[2]}[- ]?${m[3]}(?![A-Z0-9])`).test(upperText);
 }
 
 type MatchInput = Pick<Message, 'from' | 'to' | 'direction' | 'body'>;
@@ -36,11 +45,9 @@ export function matchMessage(
     contactId = contacts.find((c) => c.emails.some((e) => e && addr.includes(e.toLowerCase())))?.id ?? null;
   }
 
-  const normPlate = (s: string) => extractPlates(s.toUpperCase())[0] ?? s;
-  const plates = extractPlates(m.body);
-  const vins = extractVins(m.body);
-  const vehicle =
-    vehicles.find((v) => plates.includes(normPlate(v.plate))) ?? vehicles.find((v) => vins.includes(v.vin.toUpperCase()));
+  const body = m.body.toUpperCase();
+  const vins = extractVins(body);
+  const vehicle = vehicles.find((v) => plateInText(v.plate, body)) ?? vehicles.find((v) => vins.includes(v.vin.toUpperCase()));
   if (vehicle) {
     contactId ??= vehicle.contactId;
     const open = jobs
