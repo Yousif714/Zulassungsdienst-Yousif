@@ -12,6 +12,7 @@ import { ListRow } from '@/components/ListRow';
 import { Bubble, RichText, TimeStamp, placeMessages } from '@/components/Messages';
 import { PageHeader } from '@/components/PageHeader';
 import { useAppStore } from '@/data/store';
+import { replyAction, replyActionId } from '@/domain/action-factory';
 import { formatBerlin, now, todayBerlin } from '@/domain/clock';
 import type { Action, AppState, Contact, Message } from '@/domain/types';
 
@@ -47,7 +48,7 @@ export default function ThreadPage() {
   const job = state.jobs.find((j) => j.id === jobId);
   const vehicle = job && state.vehicles.find((v) => v.id === job.vehicleId);
 
-  const actionId = lastIn ? `reply-${lastIn.id}` : null;
+  const actionId = lastIn ? replyActionId(lastIn.id) : null;
   const stored = state.actions.find((a) => a.id === actionId);
   const needsDraft = !!lastIn && last?.direction === 'in' && !stored;
 
@@ -81,18 +82,7 @@ export default function ThreadPage() {
 
   let action: Action | null = stored ?? null;
   if (!action && lastIn && actionId && draft?.forId === lastIn.id) {
-    action = {
-      id: actionId,
-      type: channel === 'email' ? 'send_email' : 'send_whatsapp',
-      company: contact?.company ?? null,
-      title: `Antwort an ${name}`,
-      payload: { threadId, channel, contactId, text: draft.text },
-      version: 1,
-      status: 'draft',
-      createdAt: at.toISOString(),
-      isDemo: true,
-      insightKey: `reply:${lastIn.id}`,
-    };
+    action = replyAction({ lastIn, contact, threadId, text: draft.text, at, isDemo: true });
   }
 
   // Die Aktion wird erst beim ersten Ändern oder Senden gespeichert.

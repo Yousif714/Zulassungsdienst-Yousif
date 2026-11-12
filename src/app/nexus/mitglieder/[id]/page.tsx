@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { demoAI, demoPaymentLink } from '@/ai/demo-ai';
+import { demoAI } from '@/ai/demo-ai';
 import { ActionSheet } from '@/components/ActionSheet';
 import { BackLink } from '@/components/BackLink';
 import { Figure, Figures } from '@/components/Figures';
@@ -14,9 +14,11 @@ import { PageHeader } from '@/components/PageHeader';
 import { Segmented } from '@/components/Segmented';
 import { TRAFFIC_LABEL, TrafficDot } from '@/components/TrafficDot';
 import { useAppStore } from '@/data/store';
+import { reminderAction, reminderActionId } from '@/domain/action-factory';
 import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
 import { formatEuro } from '@/domain/money';
+import { paymentLinkFor } from '@/domain/payment-link';
 import type { Action, InstallmentState, IsoDate } from '@/domain/types';
 
 type Tone = 'freundlich' | 'bestimmt';
@@ -43,13 +45,13 @@ export default function MemberPage() {
 
   const view = exists ? memberView(state, id, today) : null;
   // Eine Erinnerung je Rückstandsstand: kommt eine neue überfällige Rate dazu, gibt es eine neue Aktion.
-  const actionId = `reminder-${id}-${view?.status.oldestUnpaidDue ?? 'none'}`;
+  const actionId = reminderActionId(id, view?.status.oldestUnpaidDue ?? null);
   const stored = state.actions.find((a) => a.id === actionId);
 
   useEffect(() => {
     if (!open || !view?.contact || stored || (draft?.forId === actionId && draft.tone === tone)) return;
     let cancelled = false;
-    void demoAI.draftReminder(view.contact, view.status, tone, demoPaymentLink(id)).then((text) => {
+    void demoAI.draftReminder(view.contact, view.status, tone, paymentLinkFor(id)).then((text) => {
       if (!cancelled) setDraft({ forId: actionId, tone, text });
     });
     return () => {
@@ -80,18 +82,7 @@ export default function MemberPage() {
 
   let action: Action | null = stored ?? null;
   if (!action && contact && draft?.forId === actionId && draft.tone === tone) {
-    action = {
-      id: actionId,
-      type: 'send_reminder',
-      company: 'nexus',
-      title: `Erinnerung an ${name}`,
-      payload: { threadId: `t-${contact.id}`, channel: 'whatsapp', contactId: contact.id, text: draft.text },
-      version: 1,
-      status: 'draft',
-      createdAt: at.toISOString(),
-      isDemo: true,
-      insightKey: `overdue:${id}`,
-    };
+    action = reminderAction({ contract, contact, status, text: draft.text, at, isDemo: true });
   }
 
   // Wie beim Antwortentwurf: erst beim ersten Ändern oder Senden speichern.

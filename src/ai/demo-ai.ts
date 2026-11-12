@@ -7,8 +7,6 @@ import { formatEuro } from '@/domain/money';
 import type { AppState, Call, Contact, Job, Message } from '@/domain/types';
 import type { AIProvider, ChatAnswer } from './provider';
 
-export const demoPaymentLink = (contractId: string) => `https://buy.stripe.com/demo/${contractId}`;
-
 const GENERIC = new Set(['autohaus', 'gmbh', 'kg', 'und', 'co', 'herr', 'frau']);
 const FALLBACK = 'Das kann die Demo noch nicht beantworten. Ab Phase 2 beantwortet Claude jede Frage.';
 

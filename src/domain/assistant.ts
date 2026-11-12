@@ -1,11 +1,12 @@
-import { demoPaymentLink } from '@/ai/demo-ai';
 import type { AIProvider } from '@/ai/provider';
 import { newId } from './ids';
+import { reminderAction, reminderActionId } from './action-factory';
 import { REJECT_REASON_DE, approve } from './actions/machine';
 import { todayBerlin } from './clock';
 import { memberView } from './detectors';
 import type { StoreEvent } from './events';
 import { normalizePhone, validPhone } from './matching/messages';
+import { paymentLinkFor } from './payment-link';
 import type { Action, AppState, AssistantMessage, Contact, MemberContract } from './types';
 
 type Button = NonNullable<AssistantMessage['buttons']>[number];
@@ -54,21 +55,17 @@ export async function handleInbound(
     const { contract, contact } = member;
     const status = memberView(s, contract.id, todayBerlin(now)).status;
     if (status.arrearsCents === 0) return deliver(s, [inbound], `${contact.name} hat keinen Rückstand – keine Erinnerung nötig.`, now);
-    const id = `reminder-${contract.id}-${status.oldestUnpaidDue ?? 'none'}`;
+    const id = reminderActionId(contract.id, status.oldestUnpaidDue);
     const stored = s.actions.find((a) => a.id === id);
     if (stored && stored.status !== 'draft') {
       return deliver(s, [inbound], `Die Erinnerung an ${contact.name} ist schon freigegeben.`, now, {
         links: [{ label: contact.name, href: `/nexus/mitglieder/${contract.id}` }],
       });
     }
-    const action: Action = stored ?? {
-      id, type: 'send_reminder', company: 'nexus', title: `Erinnerung an ${contact.name}`,
-      payload: {
-        threadId: `t-${contact.id}`, channel: 'whatsapp', contactId: contact.id,
-        text: await ai.draftReminder(contact, status, 'freundlich', demoPaymentLink(contract.id)),
-      },
-      version: 1, status: 'draft', createdAt: now.toISOString(), isDemo: true, insightKey: `overdue:${contract.id}`,
-    };
+    const action: Action = stored ?? reminderAction({
+      contract, contact, status, at: now, isDemo: true,
+      text: await ai.draftReminder(contact, status, 'freundlich', paymentLinkFor(contract.id)),
+    });
     const buttons: Button[] = (['Senden', 'Ändern', 'Später'] as const).map((label) => ({ label, actionId: id, version: action.version, issuedAt: now.toISOString() }));
     const events: StoreEvent[] = stored ? [inbound] : [inbound, { type: 'createAction', action }];
     return deliver(s, events, `Entwurf: ${action.title}\n\n${String(action.payload.text ?? '')}`, now, { buttons });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { demoAI, demoPaymentLink } from '@/ai/demo-ai';
+import { demoAI } from '@/ai/demo-ai';
+import { paymentLinkFor } from '@/domain/payment-link';
 import { refresh } from '@/data/store';
 import { createDemoState } from '@/data/seed';
 import { nexusForecast, overdueMembers } from '@/data/selectors';
@@ -62,7 +63,7 @@ describe('DemoAI', () => {
   it('Entwürfe', async () => {
     const kaya = s.contacts.find((c) => c.id === 'm-kaya')!;
     const mc = s.contracts.find((c) => c.contactId === kaya.id)!;
-    const link = demoPaymentLink(mc.id);
+    const link = paymentLinkFor(mc.id);
     const st = { traffic: 'red', arrearsCents: 15000 } as never;
     for (const tone of ['freundlich', 'bestimmt'] as const) {
       const t = await demoAI.draftReminder(kaya, st, tone, link);

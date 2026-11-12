@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { demoAI, demoPaymentLink } from '@/ai/demo-ai';
+import { demoAI } from '@/ai/demo-ai';
+import { paymentLinkFor } from '@/domain/payment-link';
 import { createDemoState } from '@/data/seed';
 import { reducer, refresh, type StoreEvent } from '@/data/store';
 import { handleButton, handleInbound } from '@/domain/assistant';
@@ -53,7 +54,7 @@ describe('handleInbound', () => {
     expect(a.status).toBe('draft');
     const kaya = s.contacts.find((c) => c.id === 'm-kaya')!;
     const status = (await import('@/domain/detectors')).memberView(s, 'mc-kaya', '2026-11-12').status;
-    const text = await demoAI.draftReminder(kaya, status, 'freundlich', demoPaymentLink('mc-kaya'));
+    const text = await demoAI.draftReminder(kaya, status, 'freundlich', paymentLinkFor('mc-kaya'));
     expect(a.payload).toEqual({ threadId: 't-m-kaya', channel: 'whatsapp', contactId: 'm-kaya', text });
     expect(r.reply!.text).toContain(text);
     expect(r.reply!.buttons).toEqual(['Senden', 'Ändern', 'Später'].map((label) => ({ label, actionId: a.id, version: 1, issuedAt: NOW.toISOString() })));
