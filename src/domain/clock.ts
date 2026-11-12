@@ -1,7 +1,9 @@
 import { TZDate } from '@date-fns/tz';
 import { addDays, differenceInCalendarDays, format } from 'date-fns';
 
-export type IsoDate = string; // 'YYYY-MM-DD'
+import type { IsoDate } from './types';
+
+export type { IsoDate };
 
 const TZ = 'Europe/Berlin';
 export const DEMO_NOW = new Date('2026-11-12T09:30:00+01:00');
