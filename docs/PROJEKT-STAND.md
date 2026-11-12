@@ -54,9 +54,8 @@ Kernziele:
 `npm test` (Vitest, ~406) · `npm run test:integration` (Supabase-Testprojekt) · `npx tsc --noEmit` · `npm run lint` · `npm run contrast` · `npm run e2e` (Playwright, vorher `fuser -k 3100/tcp`) · Screenshots: `SCREENSHOTS=1 npm run e2e -- tests/e2e/screenshots.spec.ts`
 
 ## Stand & nächste Schritte
-- Phase 1 + Design-Feinschliff live (PR #1, #2 gemergt).
-- **Paket 2a (Fundament) fertig** auf `claude/cool-hopper-hcnb9d`: 14 Tasks, Abschlussreview mit Fixes, 406 Unit-Tests + E2E grün, `next build` ohne Env grün. Entscheidungen in Spec Abschnitt 2, offene Punkte in `docs/phase2-backlog.md` („Offen aus Paket 2a“).
-- **Als Nächstes (Inhaber):** PR prüfen und mergen; Vercel-Team auf Pro (5-Min-Cron, sonst scheitert das Deployment); nur ein Vercel-Projekt am Repo lassen (aktuell 4); dann Supabase + Vercel nach `docs/setup-phase2a.md`.
-- **Danach (Entwickler):** `npm run test:integration` gegen Testprojekt „nexus-test“; dann Paket 2b (Verbindungen) nach Spec, Backlog-Punkte „Vor 2b/2f“ zuerst.
+- **Paket 2a live** (PR #3, Fix #4): Produktion `https://nexus-iota-gold-96.vercel.app` (Vercel-Projekt `nexus`, Team NEXUS, Pro), Supabase `nexus-assistent` (Frankfurt, Free), Migration ausgeführt, alle Variablen nur für Production gesetzt, Inhaber mit Passkey angemeldet, Echtmodus zeigt „Noch nichts verbunden“.
+- Die Session-Umgebung „NEXUS Video“ hat einen Vercel-Token (30 Tage) für `api.vercel.com`: Variablen, Deployments und Logs lassen sich darüber selbst prüfen.
+- **Als Nächstes:** Supabase auf Pro (Backups) vor echten Bankdaten; überzählige Vercel-Projekte (`assistent`, `zulassungsdienst-yousif`, `zulassungsdienst-yousif-epbs`) löschen; `npm run test:integration` gegen ein Testprojekt; dann Paket 2b (Verbindungen) nach Spec, Backlog „Vor 2b/2f“ zuerst.
 - Zugänge des Inhabers: alles vorhanden außer einer zweiten WhatsApp-Nummer (erst 2e). Banken: Qonto (NEXUS, API) und Sparkasse Essen (Zulassung, CAMT-Upload). info@ beim Team, IMAP-Daten auf Anfrage. Kalender: Google und iCloud.
 - Offen: Codex-Zweitmeinung; Gefühl der Wischgesten am iPhone.
