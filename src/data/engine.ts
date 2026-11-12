@@ -11,9 +11,11 @@ import { areaStale } from '@/domain/freshness';
 import { normalizePhone, validPhone } from '@/domain/matching/messages';
 import { classifyBankTx, matchBankPayment } from '@/domain/matching/payments';
 import { stripeAllocations } from '@/domain/matching/stripe';
+import { validateContractDraft } from '@/domain/import/contract-draft';
 import { mergeBatch } from '@/domain/import/merge';
+import { deriveProposals, findContactFor } from '@/domain/import/proposals';
 import { formatEuro } from '@/domain/money';
-import type { Action, AppState, AssistantMessage, AuditEntry, Connection, Message, Settings } from '@/domain/types';
+import type { Action, AppState, AssistantMessage, AuditEntry, Connection, Contact, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
 export interface EngineContext { at: Date; isDemo: boolean; newId: () => string }
@@ -318,6 +320,37 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       const state = { ...s, connections };
       return conn.status === 'error' ? { state } : { state, audit: { actor: 'system', text: `Abgleich ${conn.label}: Fehler – ${e.error}` } };
     }
+    case 'confirmProposal': {
+      const p = deriveProposals(s).find((x) => x.id === e.proposalId);
+      if (!p) return { state: s, audit: { actor: 'owner', text: 'Vorschlag nicht mehr offen' } };
+      const errors = validateContractDraft(e.draft);
+      if (errors.length) return { state: s, audit: { actor: 'owner', text: `Vertrag nicht angelegt: ${errors.join(' ')}` } };
+      const contractId = ctx.newId(); // zuerst: created[0] ist die Vertrags-ID
+      const found = findContactFor(p, s.contacts);
+      const reuse = found.contactId !== null && (found.match === 'ref' || found.match === 'email' || (found.match === 'name' && e.contactId === found.contactId));
+      let contacts = s.contacts;
+      let contactId: string;
+      if (reuse) {
+        contactId = found.contactId!;
+        contacts = contacts.map((c) => {
+          if (c.id !== contactId) return c;
+          const refs = c.externalRefs ?? [];
+          const missing = p.contactRefs.filter((r) => !refs.some((x) => x.connectionId === r.connectionId && x.externalId === r.externalId));
+          return missing.length ? { ...c, externalRefs: [...refs, ...missing] } : c;
+        });
+      } else {
+        contactId = ctx.newId();
+        const c: Contact = { id: contactId, company: 'nexus', kind: 'member', name: p.name, phones: [], emails: p.email ? [p.email] : [], externalRefs: [...p.contactRefs] };
+        contacts = [...contacts, c];
+      }
+      const contract: MemberContract = { ...e.draft, id: contractId, contactId, billing: p.billing, origin: p.sources };
+      const isSource = (x: { connectionId: string; externalId: string }) => p.sources.some((r) => r.connectionId === x.connectionId && r.externalId === x.externalId);
+      const subscriptions = s.subscriptions.map((x) => (isSource(x) ? { ...x, contractId, confirmedPriceCents: x.priceCents, confirmedEndDate: x.endDate } : x));
+      const state = { ...s, contacts, contracts: [...s.contracts, contract], subscriptions };
+      return owner({ state, text: `Vertrag übernommen: ${p.name}, ${e.draft.installments} × ${formatEuro(e.draft.installmentCents)}` });
+    }
+    case 'dismissProposal':
+      return s.dismissedProposals.includes(e.proposalId) ? { state: s } : { state: { ...s, dismissedProposals: [...s.dismissedProposals, e.proposalId] } };
     case 'assistantInbound': {
       const owner = validPhone(s.settings.ownerPhone);
       const fromOwner = e.channel === 'app' || (owner !== null && normalizePhone(e.from) === owner);

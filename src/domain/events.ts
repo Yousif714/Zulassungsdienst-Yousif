@@ -1,4 +1,5 @@
 import type { ImportBatch } from './import/batch';
+import type { ContractDraft } from './import/contract-draft';
 import type { Action, AssistantMessage, Call, Connection, ConnectionId, Job, Settings } from './types';
 
 /** Woher eine Nachricht an den Assistenten kommt: WhatsApp (Absender wird geprüft) oder die angemeldete App. */
@@ -32,4 +33,7 @@ export type StoreEvent =
   /** Nur Server: Ergebnis eines Abrufs (Stripe, Lexware). */
   | { type: 'importBatch'; connectionId: ConnectionId; batch: ImportBatch; cursor: string | null; complete: boolean }
   | { type: 'syncFailed'; connectionId: ConnectionId; error: string }
+  /** `contactId`: „Ja“ auf „Ist das … ?“ (Name-Treffer); sonst null. */
+  | { type: 'confirmProposal'; proposalId: string; draft: ContractDraft; contactId: string | null }
+  | { type: 'dismissProposal'; proposalId: string }
   | { type: 'resetDemo' };

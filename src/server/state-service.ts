@@ -14,6 +14,7 @@ const MAX_ATTEMPTS = 3;
 export const CLIENT_EVENTS: ReadonlySet<StoreEvent['type']> = new Set<StoreEvent['type']>([
   'confirmPaymentMatch', 'settleInvoice', 'linkInvoiceToJob', 'setJobStatus', 'createAction', 'editAction', 'approveAction',
   'retryAction', 'checkAction', 'dismissInsight', 'snoozeInsight', 'suppressCoach', 'setSlides', 'updateSettings',
+  'confirmProposal', 'dismissProposal',
 ]);
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -45,6 +46,13 @@ const isDraft = (a: unknown) =>
   && (a.insightKey === undefined || isStr(a.insightKey))
   && SERVER_ONLY_ACTION_FIELDS.every((k) => a[k] === undefined);
 
+const isIsoDate = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const isCatchUp = oneOf<'first_rate' | 'spread'>({ first_rate: true, spread: true });
+/** Grundform des Vertragsentwurfs; Wertebereiche und Rechenregeln prüft die Engine (validateContractDraft). */
+const isContractDraft = (d: unknown) =>
+  isObj(d) && Number.isInteger(d.totalCents) && Number.isInteger(d.installments) && Number.isInteger(d.installmentCents)
+  && Number.isInteger(d.dueDay) && isIsoDate(d.startDate) && isCatchUp(d.catchUpMode);
+
 const isSlides = (v: unknown) => Array.isArray(v) && v.every((x) => isObj(x) && Number.isInteger(x.position) && typeof x.title === 'string' && typeof x.body === 'string');
 
 /** Pflichtfelder je erlaubtem Ereignis (Grundform; die Fachregeln prüft die Engine). */
@@ -65,6 +73,8 @@ const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
   suppressCoach: (e) => isStr(e.key),
   setSlides: (e) => isStr(e.callId) && isSlides(e.slides) && isSlidesStatus(e.status),
   updateSettings: (e) => isSettingsPatch(e.patch),
+  confirmProposal: (e) => isStr(e.proposalId) && isContractDraft(e.draft) && (e.contactId === null || isStr(e.contactId)),
+  dismissProposal: (e) => isStr(e.proposalId),
 };
 
 export function isClientEvent(e: unknown): e is StoreEvent {
