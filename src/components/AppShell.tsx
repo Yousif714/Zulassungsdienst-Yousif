@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="shell-main">
         <div className="shell-content">{children}</div>
       </main>
-      {pathname !== '/chat' && <AssistantButton />}
+      {pathname !== '/chat' && pathname !== '/assistent' && <AssistantButton />}
       <TabBar />
     </>
   );

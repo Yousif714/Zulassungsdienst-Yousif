@@ -1483,3 +1483,254 @@ a.task-body:active {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------------------------------ Chat */
+.chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-suggestion {
+  padding: 8px 14px;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  line-height: 20px;
+}
+
+.chat-turn {
+  display: contents;
+}
+
+.link-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.link-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 22px;
+  background: var(--fill);
+  color: var(--tint);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link-chip:active {
+  background: var(--bg-pressed);
+}
+
+.composer {
+  position: sticky;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom, 0px) + 8px);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 24px;
+  background: var(--bar);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+@media (min-width: 768px) {
+  .composer {
+    bottom: 16px;
+  }
+}
+
+.composer-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0.5px solid var(--separator);
+  border-radius: 22px;
+  background: var(--bg-elevated);
+  color: var(--label);
+  font: inherit;
+  font-size: 17px;
+}
+
+.composer .btn {
+  border-radius: 22px;
+}
+
+/* ------------------------------------------------------------------ WhatsApp-Assistent */
+.wa-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wa-chat {
+  margin: 0 0 16px;
+  padding: 12px 10px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--teal) 8%, var(--bg));
+}
+
+.wa-empty {
+  margin: 24px 8px;
+  color: var(--label-2);
+  text-align: center;
+}
+
+.wa-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wa-bubble {
+  max-width: 85%;
+  padding: 8px 12px 6px;
+  border-radius: 14px;
+  border-top-left-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--label);
+  align-self: flex-start;
+  box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
+}
+
+.wa-bubble[data-direction="from_owner"] {
+  align-self: flex-end;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 4px;
+  background: color-mix(in srgb, var(--green) 22%, var(--bg-elevated));
+}
+
+.wa-bubble a {
+  color: var(--tint);
+}
+
+.wa-buttons {
+  display: grid;
+  margin: 8px -12px -6px;
+  border-top: 0.5px solid var(--separator);
+}
+
+.wa-button {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--tint);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.wa-button + .wa-button {
+  border-top: 0.5px solid var(--separator);
+}
+
+.wa-button:active {
+  background: var(--bg-pressed);
+}
+
+.wa-ignored {
+  align-self: center;
+  max-width: 90%;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--label-2);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ Verbindungen */
+.conn-help {
+  padding: 0 16px 8px;
+  color: var(--label-2);
+  font-size: 15px;
+}
+
+.conn-help summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--tint);
+  cursor: pointer;
+}
+
+.conn-help p {
+  margin: 0 0 6px;
+}
+
+/* ------------------------------------------------------------------ Einstellungen */
+.switch {
+  appearance: none;
+  position: relative;
+  width: 51px;
+  height: 31px;
+  margin: 6px 0;
+  border-radius: 16px;
+  background: var(--fill);
+  cursor: pointer;
+  transition: background 200ms var(--ease-out);
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16);
+  transition: transform 200ms var(--ease-out);
+}
+
+.switch:checked {
+  background: var(--green);
+}
+
+.switch:checked::after {
+  transform: translateX(20px);
+}
+
+.switch:focus-visible,
+.settings-input:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
+
+.settings-input {
+  width: 9.5em;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0.5px solid var(--separator);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--label);
+  font: inherit;
+  text-align: right;
+}
+
+.settings-number {
+  width: 5em;
+}
+
+.btn.destructive {
+  color: var(--red);
+}
+
+.settings-status {
+  min-height: 20px;
+  margin: 0 16px;
+  color: var(--label-2);
+  font-size: 13px;
+}

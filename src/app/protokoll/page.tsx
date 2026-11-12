@@ -9,35 +9,16 @@ import { useAppStore } from '@/data/store';
 import { formatBerlin } from '@/domain/clock';
 import type { AuditEntry } from '@/domain/types';
 
-type Row = { key: string; latest: AuditEntry; index: number; steps: string[] };
-
-/** Neueste zuerst. Einträge derselben Aktion bilden eine Zeile (letzter Stand), frühere Schritte stehen kurz darunter. */
-function rows(audit: AuditEntry[]): Row[] {
-  const out: Row[] = [];
-  const byAction = new Map<string, Row>();
-  audit.forEach((e, i) => {
-    const row = e.actionId ? byAction.get(e.actionId) : undefined;
-    if (row) {
-      row.steps.push(row.latest.text.split(':')[0]);
-      row.latest = e;
-      row.index = i;
-      return;
-    }
-    const fresh: Row = { key: e.actionId ?? `e-${i}`, latest: e, index: i, steps: [] };
-    if (e.actionId) byAction.set(e.actionId, fresh);
-    out.push(fresh);
-  });
-  // Das Protokoll wird nur angehängt: der Index ist die Reihenfolge, auch bei gleicher Demo-Uhrzeit.
-  return out.sort((a, b) => b.index - a.index);
-}
+const ACTOR: Record<AuditEntry['actor'], string> = { owner: 'Inhaber', assistant: 'Assistent', system: 'System' };
 
 export default function ProtokollPage() {
   const { state } = useAppStore();
-  const list = rows(state.audit);
+  // Das Protokoll wird nur angehängt: umgekehrte Reihenfolge = neueste zuerst, auch bei gleicher Demo-Uhrzeit.
+  const list = state.audit.map((e, i) => ({ e, i })).reverse();
 
   return (
     <>
-      <PageHeader title="Protokoll" />
+      <PageHeader title="Protokoll" subtitle="Alles, was die App getan hat." />
       {list.length === 0 ? (
         <div className="empty-state">
           <IconLog size={40} />
@@ -45,10 +26,10 @@ export default function ProtokollPage() {
         </div>
       ) : (
         <ListGroup testId="audit-list">
-          {list.map(({ key, latest, steps }) => (
-            <ListRow key={key} testId="audit-row" title={latest.text}
-              subtitle={[formatBerlin(new Date(latest.at), 'dd.MM. HH:mm'), ...(steps.length ? [steps.join(' → ')] : [])].join(' · ')}
-              accessory={latest.isDemo ? <DemoBadge /> : undefined} />
+          {list.map(({ e, i }) => (
+            <ListRow key={i} testId="audit-row" title={<span className="wrap-text">{e.text}</span>}
+              subtitle={`${formatBerlin(new Date(e.at), 'dd.MM. HH:mm')} · ${ACTOR[e.actor]}`}
+              accessory={e.isDemo ? <DemoBadge /> : undefined} />
           ))}
         </ListGroup>
       )}

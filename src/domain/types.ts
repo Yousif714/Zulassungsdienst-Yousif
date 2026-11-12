@@ -31,7 +31,6 @@ export type ActionType = 'send_whatsapp'|'send_email'|'send_reminder'|'create_in
 export type ActionStatus = 'draft'|'approved'|'executing'|'executed'|'failed'|'uncertain'|'cancelled';
 export interface Action { id: string; type: ActionType; company: Company | null; title: string; payload: Record<string, unknown>; version: number; status: ActionStatus; createdAt: string; approvedVia?: 'app'|'whatsapp'|'auto'; approvedAt?: string; executedAt?: string; error?: string; isDemo: true; insightKey?: string }
 export interface AuditEntry { at: string; actor: 'owner'|'assistant'|'system'; text: string; actionId?: string; isDemo: boolean }
-// finalized in Task 16
 export interface AssistantMessage { id: string; direction: 'to_owner'|'from_owner'|'ignored'; from: string; text: string; at: string; buttons?: { label: 'Senden'|'Ändern'|'Später'; actionId: string; version: number; issuedAt: string }[] }
 
 export interface AppState { connections: Connection[]; contacts: Contact[]; contracts: MemberContract[]; exceptions: Record<string, ContractException[]>; payments: Payment[]; allocations: Allocation[]; ibanLinks: IbanLink[]; invoices: Invoice[]; messages: Message[]; commitments: Commitment[]; events: CalendarEvent[]; calls: Call[]; content: ContentItem[]; vehicles: Vehicle[]; jobs: Job[]; insights: StoredInsight[]; actions: Action[]; audit: AuditEntry[]; jobRuns: string[]; assistantChat: AssistantMessage[]; settings: Settings }

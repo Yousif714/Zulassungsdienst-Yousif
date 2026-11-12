@@ -12,7 +12,7 @@ import { areaStale } from '@/domain/freshness';
 import { normalizePhone } from '@/domain/matching/messages';
 import { classifyBankTx, matchBankPayment } from '@/domain/matching/payments';
 import { formatEuro } from '@/domain/money';
-import type { Action, AppState, AssistantMessage, AuditEntry, Call, Connection, ConnectionId, Job, Message } from '@/domain/types';
+import type { Action, AppState, AssistantMessage, AuditEntry, Call, Connection, ConnectionId, Job, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
 export const STORE_KEY = 'nexus-demo-v1';
@@ -34,6 +34,7 @@ export type StoreEvent =
   | { type: 'setConnectionStatus'; id: ConnectionId; status: Connection['status'] }
   | { type: 'assistantInbound'; from: string; text: string }
   | { type: 'assistantOutbound'; text: string; buttons?: AssistantMessage['buttons'] }
+  | { type: 'updateSettings'; patch: Partial<Settings> }
   | { type: 'resetDemo' };
 
 export const REJECT_REASON_DE = {
@@ -266,7 +267,8 @@ function mutate(s: AppState, e: StoreEvent, at: Date): { state: AppState; audit?
     }
     case 'assistantInbound': {
       const fromOwner = normalizePhone(e.from) === normalizePhone(s.settings.ownerPhone);
-      const msg: AssistantMessage = { id: `am-${s.assistantChat.length + 1}`, direction: fromOwner ? 'from_owner' : 'ignored', from: e.from, text: e.text, at: at.toISOString() };
+      const text = fromOwner ? e.text : `Nachricht von fremder Nummer ignoriert: „${e.text}“`;
+      const msg: AssistantMessage = { id: `am-${s.assistantChat.length + 1}`, direction: fromOwner ? 'from_owner' : 'ignored', from: e.from, text, at: at.toISOString() };
       const st = { ...s, assistantChat: [...s.assistantChat, msg] };
       return fromOwner
         ? { state: st, audit: { actor: 'owner', text: `Nachricht an den Assistenten: ${e.text}` } }
@@ -278,6 +280,13 @@ function mutate(s: AppState, e: StoreEvent, at: Date): { state: AppState; audit?
         ...(e.buttons ? { buttons: e.buttons } : {}),
       };
       return { state: { ...s, assistantChat: [...s.assistantChat, msg] }, audit: { actor: 'assistant', text: `Assistent an Inhaber: ${e.text}` } };
+    }
+    case 'updateSettings': {
+      const LABEL: Record<keyof Settings, string> = {
+        replyThresholdHours: 'Antwortzeit-Schwelle', briefingsEnabled: 'Briefings', ownerPhone: 'Inhaber-Nummer', suppressedCoachKeys: 'Coach-Tipps',
+      };
+      const keys = Object.keys(e.patch) as (keyof Settings)[];
+      return owner({ state: { ...s, settings: { ...s.settings, ...e.patch } }, text: `Einstellungen geändert: ${keys.map((k) => LABEL[k]).join(', ')}` });
     }
     case 'resetDemo':
       return { state: createDemoState() };
