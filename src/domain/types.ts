@@ -27,9 +27,9 @@ export interface Insight { dedupeKey: string; type: InsightType; company: Compan
 export interface StoredInsight extends Insight { status: 'open'|'done'|'snoozed'|'dismissed'|'stale'; createdAt: string; resolvedAt?: string }
 export interface Settings { replyThresholdHours: number; briefingsEnabled: boolean; ownerPhone: string; suppressedCoachKeys: string[] }
 
-// finalized in Task 8
-export interface Action { id: string; type: string; company: Company | null; title: string; payload: Record<string, unknown>; version: number; status: string; createdAt: string; isDemo: true }
-// finalized in Task 8
+export type ActionType = 'send_whatsapp'|'send_email'|'send_reminder'|'create_invoice_draft'|'create_calendar_event'|'mark_invoice_settled'|'link_invoice_to_job'|'confirm_payment_match';
+export type ActionStatus = 'draft'|'approved'|'executing'|'executed'|'failed'|'uncertain'|'cancelled';
+export interface Action { id: string; type: ActionType; company: Company | null; title: string; payload: Record<string, unknown>; version: number; status: ActionStatus; createdAt: string; approvedVia?: 'app'|'whatsapp'|'auto'; approvedAt?: string; executedAt?: string; error?: string; isDemo: true; insightKey?: string }
 export interface AuditEntry { at: string; actor: 'owner'|'assistant'|'system'; text: string; actionId?: string; isDemo: boolean }
 // finalized in Task 16
 export interface AssistantMessage { id: string; direction: 'to_owner'|'from_owner'|'ignored'; from: string; text: string; at: string }
