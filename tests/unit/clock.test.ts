@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  addDaysIso, berlinLocalToUtc, berlinParts, daysBetween, formatBerlin, now, setNowForTests, todayBerlin,
+  addDaysIso, berlinLocalToUtc, berlinParts, daysBetween, formatBerlin, formatBerlinDe, now, setNowForTests, todayBerlin,
 } from '@/domain/clock';
 
 afterEach(() => setNowForTests(null));
 
 describe('clock', () => {
+  it('formatBerlinDe nutzt deutsche Namen und Berliner Datum', () => {
+    expect(formatBerlinDe(new Date('2026-11-11T23:30:00Z'), 'EEEE, d. MMMM')).toBe('Donnerstag, 12. November');
+  });
   it('todayBerlin nutzt Europe/Berlin', () => {
     expect(todayBerlin(new Date('2026-11-11T23:30:00Z'))).toBe('2026-11-12');
   });

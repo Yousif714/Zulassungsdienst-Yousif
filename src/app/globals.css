@@ -793,6 +793,245 @@ a.task-body:active {
   margin-bottom: 6px;
 }
 
+/* ------------------------------------------------------------------ Knöpfe */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.41px;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms var(--ease-out);
+}
+
+.btn:active {
+  opacity: 0.7;
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: var(--tint);
+  color: #fff;
+}
+
+.btn-primary .demo-badge {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: var(--fill);
+  color: var(--tint);
+}
+
+.btn-plain {
+  background: none;
+  color: var(--tint);
+  font-weight: 400;
+  padding: 0 8px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ------------------------------------------------------------------ Heute */
+.money-cards {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 35px;
+}
+
+@media (min-width: 560px) {
+  .money-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.coach-card {
+  padding: 14px 16px 12px;
+  border-radius: var(--radius-group);
+  background: var(--bg-elevated);
+}
+
+.coach-title {
+  font-weight: 600;
+}
+
+.coach-title a {
+  color: inherit;
+}
+
+.coach-body {
+  margin: 4px 0 0;
+  color: var(--label-2);
+  font-size: 15px;
+  letter-spacing: -0.24px;
+}
+
+.coach-buttons,
+.action-sheet-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.briefing {
+  margin: -20px 0 35px;
+}
+
+.briefing-panel {
+  margin-top: 6px;
+  padding: 14px 16px;
+  border-radius: var(--radius-group);
+  background: var(--bg-elevated);
+  font-size: 15px;
+  line-height: 22px;
+  letter-spacing: -0.24px;
+  white-space: pre-line;
+}
+
+.briefing-panel[hidden] {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ Nachrichten-Verlauf */
+.page-header-bar:has(.back-button) {
+  justify-content: flex-start;
+}
+
+.back-button {
+  margin-left: -8px;
+}
+
+.back-chevron {
+  transform: rotate(180deg);
+}
+
+.bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 28px;
+  padding: 0;
+  list-style: none;
+}
+
+.bubble {
+  max-width: 80%;
+  padding: 8px 12px 6px;
+  border-radius: 18px;
+  background: var(--bg-elevated);
+  color: var(--label);
+  align-self: flex-start;
+  border-bottom-left-radius: 6px;
+}
+
+.bubble[data-direction="out"] {
+  align-self: flex-end;
+  background: var(--tint);
+  color: #fff;
+  border-bottom-left-radius: 18px;
+  border-bottom-right-radius: 6px;
+}
+
+.bubble-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bubble-time {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  text-align: right;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ Aktionsblatt (Entwurf + Senden) */
+.action-sheet {
+  margin: 0 0 24px;
+  padding: 14px 16px 16px;
+  border-radius: var(--radius-card);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-card);
+}
+
+.action-sheet-loading {
+  color: var(--label-2);
+}
+
+.action-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--label-2);
+  font-size: 13px;
+  letter-spacing: -0.08px;
+}
+
+.action-sheet-head > span:first-child {
+  text-transform: uppercase;
+}
+
+.action-sheet-text {
+  margin-top: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.action-sheet-editor {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--separator);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--label);
+  font: inherit;
+  resize: vertical;
+}
+
+.action-sheet-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-weight: 600;
+}
+
+.action-sheet-ok {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+}
+
+.action-sheet-ok svg {
+  width: 16px;
+  height: 16px;
+}
+
+.action-sheet-error {
+  color: var(--red);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,5 +1,6 @@
 import { TZDate } from '@date-fns/tz';
 import { addDays, differenceInCalendarDays, format } from 'date-fns';
+import { de } from 'date-fns/locale';
 
 import type { IsoDate } from './types';
 
@@ -29,6 +30,11 @@ export function now(): Date {
 
 export function formatBerlin(d: Date, pattern: string): string {
   return format(new TZDate(d, TZ), pattern);
+}
+
+/** Wie `formatBerlin`, aber mit deutschen Monats- und Wochentagsnamen (z. B. 'EEEE, d. MMMM'). */
+export function formatBerlinDe(d: Date, pattern: string): string {
+  return format(new TZDate(d, TZ), pattern, { locale: de });
 }
 
 export function todayBerlin(d: Date = now()): IsoDate {

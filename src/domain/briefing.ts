@@ -17,7 +17,8 @@ export type Briefing = {
   staleSources: ConnectionId[];
 };
 
-const AREA: Record<Company, ConnectionId[]> = { nexus: ['bank', 'stripe_nexus'], zulassung: ['lexware_zulassung'] };
+/** Quellen, von denen die Geldkarte einer Firma abhängt. */
+export const MONEY_SOURCES: Record<Company, ConnectionId[]> = { nexus: ['bank', 'stripe_nexus'], zulassung: ['lexware_zulassung'] };
 
 export function buildBriefing(s: AppState, kind: 'morning' | 'evening', now: Date): Briefing {
   const today = todayBerlin(now);
@@ -42,8 +43,8 @@ export function buildBriefing(s: AppState, kind: 'morning' | 'evening', now: Dat
     top,
     events: s.events.filter((e) => berlinParts(new Date(e.startAt)).date === today).sort((a, b) => a.startAt.localeCompare(b.startAt)),
     money: [
-      { company: 'nexus', openCents: nexusOpen, overdueCents: nexusOverdue, stale: areaStale(AREA.nexus, s.connections, now).length > 0 },
-      { company: 'zulassung', openCents: zOpen, overdueCents: zOverdue, stale: areaStale(AREA.zulassung, s.connections, now).length > 0 },
+      { company: 'nexus', openCents: nexusOpen, overdueCents: nexusOverdue, stale: areaStale(MONEY_SOURCES.nexus, s.connections, now).length > 0 },
+      { company: 'zulassung', openCents: zOpen, overdueCents: zOverdue, stale: areaStale(MONEY_SOURCES.zulassung, s.connections, now).length > 0 },
     ],
     repliesOpen: openReplies(s.messages, now, s.settings.replyThresholdHours).length,
     coach,
