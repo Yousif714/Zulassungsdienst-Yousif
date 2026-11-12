@@ -61,3 +61,11 @@ export function find<T extends { type: string }>(l: T[], type: string): T {
 }
 export const muellerDone: Job = { id: 'j-mueller-1', vehicleId: 'v-bot', contactId: 'd-mueller', service: 'Zulassung', location: 'bottrop', priceCents: 8900, status: 'done', doneAt: '2026-11-10T10:00:00Z', invoiceIds: [] };
 export const schmidtIn: Message = msg({ id: 'm-schmidt-1', threadId: 't-schmidt', from: '+49209111222', contactId: 'd-schmidt', needsReply: true, sentAt: '2026-11-12T05:30:00Z' });
+
+export function contractOf(s: AppState, contactId: string): string {
+  const c = s.contracts.find((x) => x.contactId === contactId);
+  if (!c) throw new Error(`Kein Vertrag für ${contactId}`);
+  return c.id;
+}
+export const open = (s: AppState) => s.insights.filter((i) => i.status === 'open');
+export const isOpen = (s: AppState, key: string) => s.insights.some((i) => i.dedupeKey === key && i.status === 'open');

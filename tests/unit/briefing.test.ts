@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { buildBriefing, renderBriefingText } from '@/domain/briefing';
+import { createDemoState } from '@/data/seed';
+import { refresh } from '@/data/store';
 import type { StoredInsight } from '@/domain/types';
 import { NOW_0930 as NOW, conn, inv, ins, stateWith } from './helpers';
 
@@ -44,5 +46,15 @@ describe('Briefing', () => {
     const b = buildBriefing(s, 'morning', NOW);
     expect(b.staleSources).toContain('lexware_zulassung');
     expect(renderBriefingText(b)).toContain('Geld Zulassungsdienst: Datenstand zu alt');
+  });
+});
+
+describe('Briefing mit Demo-Daten', () => {
+  test('Morgen', () => {
+    const b = buildBriefing(refresh(createDemoState(), NOW), 'morning', NOW);
+    expect(b.top.length).toBeLessThanOrEqual(3);
+    const t = renderBriefingText(b);
+    expect(t).toMatch(/^Guten Morgen/);
+    expect(t).toContain('Stand: 09:30');
   });
 });

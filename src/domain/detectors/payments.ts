@@ -5,7 +5,8 @@ import type { AppState, Insight } from '../types';
 import { memberView } from './members';
 import { paymentRef } from './refs';
 
-export function detectUnmatchedPayments(s: AppState, now: Date): Insight[] {
+/** Erwartete Beträge je Mitglied (nächste offene Rate, Rückstand) für die Zahlungszuordnung. */
+export function expectedAmounts(s: AppState, now: Date): Expected {
   const today = todayBerlin(now);
   const expected: Expected = new Map();
   for (const c of s.contracts) {
@@ -16,6 +17,11 @@ export function detectUnmatchedPayments(s: AppState, now: Date): Insight[] {
       arrearsCents: v.status.arrearsCents,
     });
   }
+  return expected;
+}
+
+export function detectUnmatchedPayments(s: AppState, now: Date): Insight[] {
+  const expected = expectedAmounts(s, now);
   const out: Insight[] = [];
   for (const p of s.payments) {
     // Nur NEXUS hat Mitgliedsverträge; Stripe-Zahlungen sind keine Bankzahlungen.
