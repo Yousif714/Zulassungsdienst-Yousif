@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { createDemoState } from '@/data/seed';
-import { reducer, refresh } from '@/data/store';
+import { STORE_KEY, loadInitial, reducer, refresh } from '@/data/store';
+import type { AppState, Invoice } from '@/domain/types';
 import type { Action } from '@/domain/types';
 import { NOW_0930 as NOW, contractOf, isOpen } from './helpers';
 
@@ -117,5 +118,60 @@ describe('Hinweise, Coach und Rest', () => {
   test('resetDemo', () => {
     const r = reducer(reducer(s, { type: 'dismissInsight', key: 'slides:call-seele' }), { type: 'resetDemo' });
     expect(JSON.stringify(r)).toBe(JSON.stringify(refresh(createDemoState(), NOW)));
+  });
+});
+
+describe('Zusagen', () => {
+  const demirInv = (issuedOn: string): Invoice => ({
+    id: 'i-z-demir', company: 'zulassung', source: 'lexware', connectionId: 'lexware_zulassung', externalId: 'lex-demir', contactId: 'p-demir',
+    number: 'RE-Z-2026-320', totalCents: 4900, openCents: 4900, issuedOn, dueDate: '2026-11-26', status: 'open',
+  });
+  test('offen → eingehalten, wenn die Rechnung rechtzeitig kommt', () => {
+    const fresh = createDemoState();
+    const r = refresh({ ...fresh, invoices: [...fresh.invoices, demirInv('2026-11-11')] }, NOW);
+    expect(r.commitments.find((c) => c.id === 'c-demir')!.status).toBe('kept');
+    expect(isOpen(r, 'commit:c-demir')).toBe(false);
+  });
+  test('gebrochen → eingehalten, wenn die Rechnung nachgeholt wird; Hinweis schließt', () => {
+    expect(s.commitments.find((c) => c.id === 'c-demir')!.status).toBe('broken');
+    expect(isOpen(s, 'commit:c-demir')).toBe(true);
+    const r = refresh({ ...s, invoices: [...s.invoices, demirInv('2026-11-12')] }, NOW);
+    expect(r.commitments.find((c) => c.id === 'c-demir')!.status).toBe('kept');
+    expect(isOpen(r, 'commit:c-demir')).toBe(false);
+  });
+});
+
+describe('loadInitial', () => {
+  const memStorage = (init: Record<string, string> = {}) => {
+    const m = new Map(Object.entries(init));
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), m };
+  };
+  const old = (): AppState => reducer(s, { type: 'dismissInsight', key: 'slides:call-seele' });
+  const status = (st: AppState) => st.insights.find((i) => i.dedupeKey === 'slides:call-seele')!.status;
+
+  test('reset=1 → frische Demo, sofort gespeichert; zweiter Lauf ohne Parameter (StrictMode) behält sie', () => {
+    const storage = memStorage({ [STORE_KEY]: JSON.stringify(old()) });
+    const first = loadInitial(storage, '?reset=1', NOW);
+    expect(first.stripReset).toBe(true);
+    expect(status(first.state)).toBe('open');
+    expect(JSON.parse(storage.m.get(STORE_KEY)!)).toEqual(first.state);
+    const second = loadInitial(storage, '', NOW);
+    expect(second.stripReset).toBe(false);
+    expect(status(second.state)).toBe('open');
+  });
+  test('kaputtes JSON → Demo-Daten', () => {
+    const r = loadInitial(memStorage({ [STORE_KEY]: '{kaputt' }), '', NOW);
+    expect(JSON.stringify(r.state)).toBe(JSON.stringify(refresh(createDemoState(), NOW)));
+  });
+  test('leerer Speicher → Demo-Daten', () => {
+    expect(JSON.stringify(loadInitial(memStorage(), '', NOW).state)).toBe(JSON.stringify(refresh(createDemoState(), NOW)));
+  });
+  test('normaler Start → gespeicherter Zustand, neu abgeglichen', () => {
+    const stored = old();
+    const raw = { ...stored, insights: stored.insights.filter((i) => i.dedupeKey !== 'reply:m-schmidt-in-1') };
+    const r = loadInitial(memStorage({ [STORE_KEY]: JSON.stringify(raw) }), '?foo=1', NOW);
+    expect(r.stripReset).toBe(false);
+    expect(status(r.state)).toBe('dismissed');
+    expect(isOpen(r.state, 'reply:m-schmidt-in-1')).toBe(true);
   });
 });

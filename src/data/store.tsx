@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { approve, editDraft, finishExecution, startExecution } from '@/domain/actions/machine';
 import { berlinParts, now, todayBerlin } from '@/domain/clock';
@@ -66,7 +66,7 @@ function autoAllocate(s: AppState, at: Date): AppState {
 function settleCommitments(s: AppState, at: Date): AppState {
   let changed = false;
   const commitments = s.commitments.map((c) => {
-    if (c.status !== 'open') return c;
+    if (c.status === 'kept') return c;
     const msg = s.messages.find((m) => m.id === c.messageId);
     const since = msg ? berlinParts(new Date(msg.sentAt)).date : '0000-00-00';
     const kept = c.kind === 'invoice' && s.invoices.some((i) => i.contactId === c.contactId && i.issuedOn >= since);
@@ -74,7 +74,7 @@ function settleCommitments(s: AppState, at: Date): AppState {
       changed = true;
       return { ...c, status: 'kept' as const };
     }
-    if (Date.parse(c.dueAt) < at.getTime()) {
+    if (c.status === 'open' && Date.parse(c.dueAt) < at.getTime()) {
       changed = true;
       return { ...c, status: 'broken' as const };
     }
@@ -296,31 +296,43 @@ export function reducer(s: AppState, e: StoreEvent): AppState {
 type Store = { state: AppState; dispatch: (e: StoreEvent) => void };
 const StoreContext = createContext<Store | null>(null);
 
-function loadInitial(): AppState {
+/** Startzustand aus dem Speicher (sonst Demo-Daten), neu abgeglichen. Bei `reset=1` wird die frische Demo sofort gespeichert,
+ *  damit ein zweiter Lauf (React StrictMode) ohne Parameter denselben Zustand lädt. */
+export function loadInitial(
+  storage: Pick<Storage, 'getItem' | 'setItem'>,
+  search: string,
+  at: Date,
+): { state: AppState; stripReset: boolean } {
+  if (new URLSearchParams(search).get('reset') === '1') {
+    const state = refresh(createDemoState(), at);
+    storage.setItem(STORE_KEY, JSON.stringify(state));
+    return { state, stripReset: true };
+  }
   let s: AppState;
   try {
-    const raw = window.localStorage.getItem(STORE_KEY);
+    const raw = storage.getItem(STORE_KEY);
     s = raw ? (JSON.parse(raw) as AppState) : createDemoState();
   } catch {
     s = createDemoState();
   }
-  s = refresh(s, now());
-  const url = new URL(window.location.href);
-  if (url.searchParams.get('reset') === '1') {
-    s = reducer(s, { type: 'resetDemo' });
-    url.searchParams.delete('reset');
-    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
-  }
-  return s;
+  return { state: refresh(s, at), stripReset: false };
 }
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState | null>(null);
+  const loaded = useRef(false);
 
   useEffect(() => {
-    // Erst nach der Hydrierung laden: localStorage und URL gibt es nur im Browser.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setState(loadInitial());
+    // Erst nach der Hydrierung laden: localStorage und URL gibt es nur im Browser. Der Ref verhindert doppeltes Laden (StrictMode).
+    if (loaded.current) return;
+    loaded.current = true;
+    const { state: initial, stripReset } = loadInitial(window.localStorage, window.location.search, now());
+    if (stripReset) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('reset');
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+    setState(initial);
   }, []);
 
   useEffect(() => {
