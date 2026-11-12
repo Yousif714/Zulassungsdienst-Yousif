@@ -6,6 +6,7 @@ import { AppStoreProvider } from '@/data/store';
 
 import './globals.css';
 import './motion.css';
+import './messages.css';
 
 export const metadata: Metadata = {
   title: 'Nexus Assistent',

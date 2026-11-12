@@ -45,6 +45,11 @@ for (const [mode, t] of [['hell', L], ['dunkel', D]]) {
   check(`${mode}: Weiß auf tint-fill (Primärknopf, aktive Seitenleiste, eigene Blase, Assistenten-Knopf)`, WHITE, t.tintFill);
   check(`${mode}: Blasen-Uhrzeit (Weiß 0,95) auf tint-fill`, over(WHITE, 0.95, t.tintFill), t.tintFill);
   check(`${mode}: tint-fill-Fläche (Knopf) gegen bg`, t.tintFill, t.bg, 3);
+  // iMessage: Blase des Gegenübers (systemGray5 hell / systemGray4 dunkel), Zeitstempel, Wisch-Aktion „Später“
+  const imsgIn = hex(t === L ? '#e9e9eb' : '#3a3a3c');
+  check(`${mode}: label auf Blase (eingehend)`, t === L ? hex('#000000') : WHITE, imsgIn);
+  check(`${mode}: label-2 (Tipp-Punkte) auf Blase (eingehend)`, over(t.label2[0], t.label2[1], imsgIn), imsgIn, 3);
+  check(`${mode}: Weiß auf indigo (Wisch-Aktion „Später“)`, WHITE, hex(t === L ? '#5856d6' : '#5e5ce6'));
   check(`${mode}: Demo-Etikett im Primärknopf (Weiß auf Schwarz 0,2 über tint-fill)`, WHITE, over(hex('#000000'), 0.2, t.tintFill));
   for (const [sn, s] of [['elevated', t.elevated], ['bg', t.bg]]) {
     check(`${mode}: Demo-Etikett (demo-fg auf orange 14 %) über ${sn}`, t.demoFg, over(t.orange, 0.14, s));
@@ -65,6 +70,8 @@ for (const [name, stops] of Object.entries(CARDS)) {
   }
 }
 
+// Kontaktbild (Initialen „NA“, 26px fett = große Schrift) auf grauem Verlauf
+for (const stop of ['#7c8190', '#626673']) check(`Kontaktbild @${stop}: Weiß (26px fett)`, WHITE, hex(stop), 3);
 let failed = 0;
 for (const r of rows) {
   const ok = r.ratio >= r.min;

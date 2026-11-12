@@ -271,6 +271,7 @@ function mutate(s: AppState, e: StoreEvent, at: Date): { state: AppState; audit?
       const msg: AssistantMessage = {
         id: `am-${s.assistantChat.length + 1}`, direction: 'to_owner', from: 'Nexus Assistent', text: e.text, at: at.toISOString(),
         ...(e.buttons ? { buttons: e.buttons } : {}),
+        ...(e.links?.length ? { links: e.links } : {}),
       };
       return { state: { ...s, assistantChat: [...s.assistantChat, msg] }, audit: { actor: 'assistant', text: `Assistent an Inhaber: ${e.text}` } };
     }
