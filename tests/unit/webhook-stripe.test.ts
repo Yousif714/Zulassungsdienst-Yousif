@@ -24,6 +24,15 @@ describe('verifyStripeSignature', () => {
   test('mehrere v1 (Schlüsselwechsel): eine passende reicht', () =>
     expect(verifyStripeSignature(BODY, `t=1000,v1=${'0'.repeat(64)},${sign(BODY, 1000).split(',')[1]}`, SECRET, 1000).ok).toBe(true));
   test('fehlender Header', () => expect(verifyStripeSignature(BODY, null, SECRET, 1000)).toEqual({ ok: false, reason: 'missing' }));
+  test('Zeitstempel in der Zukunft außerhalb der Toleranz', () => expect(verifyStripeSignature(BODY, sign(BODY, 1301), SECRET, 1000)).toEqual({ ok: false, reason: 'timestamp' }));
+  test('genau 300 s Abstand wird akzeptiert, 301 s nicht', () => {
+    expect(verifyStripeSignature(BODY, sign(BODY, 1000), SECRET, 1300).ok).toBe(true);
+    expect(verifyStripeSignature(BODY, sign(BODY, 1000), SECRET, 1301)).toEqual({ ok: false, reason: 'timestamp' });
+  });
+  test('v1 mit falscher Länge oder ohne Hex → signature, keine Exception', () => {
+    for (const v of ['abc', 'zz'.repeat(32), '0'.repeat(66), ''])
+      expect(verifyStripeSignature(BODY, `t=1000,v1=${v}`, SECRET, 1000)).toEqual({ ok: false, reason: 'signature' });
+  });
   test('Header ohne v1 → format', () => expect(verifyStripeSignature(BODY, 't=1000', SECRET, 1000)).toEqual({ ok: false, reason: 'format' }));
   test('Signatur gültig, aber ohne id/type → format', () => {
     const b = JSON.stringify({ foo: 1 });
@@ -66,6 +75,11 @@ describe('Route', () => {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', '');
     expect((await POST(req(BODY, sign(BODY, nowSec())))).status).toBe(503);
     expect((await POST(req(BODY, null))).status).toBe(503);
+    expect(syncSpy).not.toHaveBeenCalled();
+  });
+  test('zu großer Body → 413, kein Sync', async () => {
+    const big = JSON.stringify({ id: 'evt_big', type: 'invoice.paid', pad: 'x'.repeat(1_100_000) });
+    expect((await POST(req(big, sign(big, nowSec())))).status).toBe(413);
     expect(syncSpy).not.toHaveBeenCalled();
   });
   test('Antwort enthält nie das Geheimnis', async () => expect(await (await POST(req(BODY, 'x'))).text()).not.toContain(SECRET));

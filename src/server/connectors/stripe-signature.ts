@@ -1,3 +1,4 @@
+import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export type StripeSignatureResult =
@@ -34,7 +35,7 @@ export function verifyStripeSignature(rawBody: string, header: string | null, se
   const ts = t !== undefined && /^\d+$/.test(t) ? Number(t) : NaN;
   if (!Number.isSafeInteger(ts) || sigs.length === 0) return { ok: false, reason: 'format' };
   if (Math.abs(nowSec - ts) > toleranceSec) return { ok: false, reason: 'timestamp' };
-  const expected = createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest();
+  const expected = createHmac('sha256', secret).update(`${t}.${rawBody}`).digest();
   const match = sigs.map((s) => (/^[0-9a-f]{64}$/i.test(s) ? Buffer.from(s, 'hex') : null)).some((b) => b !== null && b.length === expected.length && timingSafeEqual(b, expected));
   if (!match) return { ok: false, reason: 'signature' };
   let ev: unknown;

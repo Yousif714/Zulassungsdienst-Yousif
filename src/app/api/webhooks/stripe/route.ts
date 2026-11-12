@@ -5,12 +5,17 @@ import { readEnv } from '@/server/env';
 import { getRepos, getSyncDeps } from '@/server/registry';
 import { syncConnections } from '@/server/sync';
 
+const MAX_BODY = 1_000_000; // Stripe-Events sind klein; schützt den unauthentifizierten Endpunkt
+
 // Keine Sitzung: Stripe ruft ohne Login auf. Die Echtheit sichert allein die Signaturprüfung.
 export async function POST(req: Request) {
   await connection();
   const secret = readEnv().stripeWebhookSecret;
   if (!secret) return NextResponse.json({ error: 'Nicht eingerichtet' }, { status: 503 });
+  const tooBig = () => NextResponse.json({ error: 'Zu groß' }, { status: 413 });
+  if (Number(req.headers.get('content-length')) > MAX_BODY) return tooBig();
   const raw = await req.text(); // Rohtext: die Signatur gilt für die exakten Bytes
+  if (raw.length > MAX_BODY) return tooBig();
   const at = realNow();
   const v = verifyStripeSignature(raw, req.headers.get('stripe-signature'), secret, Math.floor(at.getTime() / 1000));
   if (!v.ok) return NextResponse.json({ error: 'Signatur ungültig' }, { status: 400 });
