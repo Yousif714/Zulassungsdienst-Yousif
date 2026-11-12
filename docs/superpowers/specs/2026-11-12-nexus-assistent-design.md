@@ -48,7 +48,9 @@ Ein persönlicher KI-Assistent für einen Inhaber mit zwei Firmen (NEXUS, Zulass
                                          └──────────────────────────────────────────┘
 ```
 
-**Stack:** Next.js (TypeScript, App Router) als PWA · Supabase (Postgres, Auth mit Passkey, Storage, `pg_cron`) · Vercel (Hosting + Cron) · `@anthropic-ai/sdk` · Playwright + Vitest.
+**Stack:** Next.js (TypeScript, App Router) als PWA · Supabase (Postgres, Auth mit Passkey, Storage) · Vercel (Hosting + **Vercel Cron als einziger Taktgeber**, kein `pg_cron`) · `@anthropic-ai/sdk` · Playwright + Vitest.
+
+**Phase 1 (Vorschau):** Alle Fachlogik (`ledger/`, `matching/`, `detectors/`, `actions/`, Scheduler) ist reines TypeScript ohne DB-Zugriff. Die Vorschau speichert Demo-Daten im Browser (Repository-Schnittstelle mit `DemoRepository` auf localStorage) und nutzt eine deterministische `DemoAI`. Damit läuft die Vorschau ohne Konten und ohne API-Schlüssel, und die Tests sind reproduzierbar. Ab Phase 2 kommen `SupabaseRepository` und die Claude-Anbindung hinter dieselben Schnittstellen.
 
 **Leitregel:** Zahlen rechnet `ledger/` als reine, getestete Funktionen. Die KI (`ai/`) liest Daten nur über Tools und formuliert. Sie erfindet keine Beträge.
 
@@ -71,7 +73,7 @@ Ein persönlicher KI-Assistent für einen Inhaber mit zwei Firmen (NEXUS, Zulass
 
 ## 4. Datenmodell (Kern)
 
-Alle fachlichen Tabellen haben `company` (`nexus` | `zulassung`), wo zutreffend.
+Importierte Datensätze sind über **(connection_id, external_id) unique**. Alle fachlichen Tabellen haben `company` (`nexus` | `zulassung`), wo zutreffend.
 
 **Gemeinsam**
 - `connection` (company, provider, status, last_success_at, last_error)
@@ -86,6 +88,7 @@ Alle fachlichen Tabellen haben `company` (`nexus` | `zulassung`), wo zutreffend.
 - `audit_log` (at, actor, what, refs)
 - `preference` (key, value): u. a. unterdrückte Coach-Vorschläge, Automatik-Freigaben, Antwortzeit-Schwelle
 - `llm_usage` (at, route, model, input_tokens, output_tokens, cost_cents)
+- `job_run` (key **unique**, job, scheduled_for, started_at, finished_at, result)
 
 **NEXUS**
 - `member_contract` (contact_id, total_cents, installments, installment_cents, due_day, start_date, special_terms, catch_up_mode `first_rate|spread`, status)
@@ -98,11 +101,63 @@ Alle fachlichen Tabellen haben `company` (`nexus` | `zulassung`), wo zutreffend.
 
 **Zulassungsdienst**
 - `vehicle` (contact_id, vin, plate, model)
-- `job` (vehicle_id, service, location `bottrop|essen|online|onsite`, status `open|waiting_customer|done|invoiced|paid`, done_at, invoice_id?, notes)
+- `job` (vehicle_id, service, location `bottrop|essen|online|onsite`, price_cents, status `open|waiting_customer|done|invoiced|paid`, done_at, notes)
+- `job_invoice` (job_id, invoice_id): ein Auftrag kann mehrere (Teil-)Rechnungen haben
 
 Raten werden **nicht gespeichert**, sondern von `ledger/` aus Vertrag, Ausnahmen und Zuordnungen berechnet. So gibt es nur eine Wahrheit.
 
 ---
+
+## 4a. Festgelegte Rechen- und Zuordnungsregeln
+
+**Beträge** immer in Cent (Ganzzahl). **Datum** als Kalendertag in Europe/Berlin.
+
+**Ratenplan**
+- Raten 1 bis n-1 = `installment_cents`, letzte Rate = Gesamtsumme minus Summe der übrigen (fängt Rundung und Sonderkonditionen auf).
+- Fälligkeit = `due_day` im jeweiligen Monat ab `start_date`, bei kürzeren Monaten der letzte Tag.
+- **Stundung** (von, bis): Raten mit Fälligkeit im Zeitraum werden auf „bis“ verschoben. Betrag bleibt.
+- **Pause** (ab, Monate): alle Raten ab „ab“ verschieben sich um die Anzahl Monate.
+- **Fälligkeitstag ändern** (ab, neuer Tag): gilt für alle Raten ab „ab“.
+
+**Zahlungen verteilen:** Gutschriften kommen nur aus `payment` (Bank, Stripe, manuell), nie aus dem Lexware-Rechnungsstatus. Sie werden auf die **älteste offene Rate zuerst** verteilt, Überschuss auf die nächste.
+
+**Mitgliedsstatus:** `fällig` = Summe der Raten mit Fälligkeit ≤ heute. `Rückstand` = fällig − gezahlt (min. 0). `künftig` = Summe der Raten mit Fälligkeit > heute, abzüglich Überzahlung. `offen gesamt` = Rückstand + künftig. Ampel: 🟢 kein Rückstand · 🟡 älteste unbezahlte Rate ≤ 7 Tage überfällig · 🔴 > 7 Tage.
+
+**Referenzbeispiel (muss als Test existieren):** 1.200 € Vertrag, 4 × 300 €, zwei Raten fällig, 450 € gezahlt → **150 € Rückstand, 600 € künftig, 750 € offen gesamt.** Übernahme `first_rate` → 450 € + 300 €. `spread` → 375 € + 375 €. Beide ergeben 750 €. Bei `spread` geht ein Rundungsrest in Cent auf die **letzte** Rate.
+
+**Doppelgutschriften vermeiden**
+- Import-Schlüssel ist **Verbindung + externe ID**. Erneuter Import ändert nichts.
+- Bankbuchungen von Stripe (Auszahlungen) werden als `stripe_payout` erkannt (Gegenpartei enthält „Stripe“ oder Verwendungszweck mit Stripe-Auszahlungskennung) und **nie** einem Mitglied gutgeschrieben. Die Gutschrift kommt nur aus der einzelnen Stripe-Zahlung.
+
+**Zuordnungs-Konfidenz für Überweisungen**
+- **hoch** (automatisch): bestätigte IBAN des Mitglieds **und** Betrag = nächste offene Rate oder = gesamter Rückstand.
+- **mittel** (Vorschlag in „Zuordnen“): bestätigte IBAN, aber anderer Betrag; **oder** keine IBAN-Verknüpfung, aber Name passt und Betrag passt.
+- **niedrig** („Zuordnen“ ohne Vorschlag): alles andere, auch Sammelzahlungen und Zahlungen von unbekannten Dritten.
+- Bestätige ich einen Vorschlag, wird die IBAN als Zahler-Hinweis mit dem Mitglied verknüpft.
+
+**Antwortpflicht:** Eine eingehende Nachricht mit `needs_reply` gilt erst als beantwortet, wenn im **selben Kanal und selben Thread** eine ausgehende Nachricht nach ihr kommt oder ich sie manuell erledige. Schwelle für den Hinweis: 2 Std. (einstellbar).
+
+**Nicht abgerechnet:** Auftrag hat `price_cents`. Hinweis, solange Status `erledigt` und die Summe der verknüpften Rechnungen < Preis. Der Hinweis nennt den Restbetrag und schließt, sobald die Summe ≥ Preis ist.
+
+**Datenstand:** Eine Quelle gilt als **veraltet**, wenn der letzte erfolgreiche Abruf älter als 45 Min. ist oder sie im Fehler steht. Bereiche, die von ihr abhängen, zeigen dann **„Datenstand zu alt, um das zu beurteilen“** statt „nichts offen“.
+
+**Aktionen**
+- Status: `entwurf → freigegeben → wird ausgeführt → ausgeführt` / `fehlgeschlagen` / `ausgang unklar` / `abgebrochen`. Jede Änderung am Entwurf erhöht die `version`.
+- Freigabe ist an **Aktion + Version** gebunden. Ein zweites Tippen auf „Senden“ ändert nichts. Ein alter WhatsApp-Knopf (andere Version, bereits ausgeführt oder älter als 24 Std.) wird abgelehnt, mit Hinweis an mich.
+- Idempotenzschlüssel beim Anbieter: `aktion:version`.
+- Timeout beim Anbieter → `ausgang unklar`. Vor einem neuen Versuch wird beim Anbieter abgeglichen. Erneut senden geht nur aus `fehlgeschlagen`.
+
+**Zeitgesteuerte Läufe**
+- Vercel Cron ruft alle 5 Min. einen Takt-Endpunkt auf. Der Takt berechnet in **Europe/Berlin**, welche Läufe fällig sind (Briefing 7:00, Abend 19:00, sonntags zusätzlich Wochenrückblick, Sync alle 15 Min.).
+- Jeder Lauf hat einen eindeutigen Schlüssel `job:Datum:Uhrzeit` (in `job_run`, unique). Doppelte Takte erzeugen keinen zweiten Lauf. Sommer- und Winterzeit sind dadurch korrekt.
+- Briefings lassen sich in den Einstellungen ein- und ausschalten. Höchstens ein Briefing pro geplantem Versand. Jedes Briefing zeigt seinen Datenstand.
+- Zustellung: WhatsApp frei formuliert, wenn das 24-Std.-Fenster offen ist. Sonst die freigegebene Utility-Vorlage. Ohne nutzbare Vorlage oder ohne WhatsApp kommt es als Push.
+
+**Coach (Phase 1 regelbasiert, Formulierung später durch Claude)**
+- Gleiche ausgehende Nachricht (normalisiert, erste 60 Zeichen) ≥ 3-mal in 7 Tagen → Schnellantwort vorschlagen.
+- Mitglied zahlt bei ≥ 3 Raten in Folge ≥ 4 Tage nach Fälligkeit → Fälligkeitstag verschieben vorschlagen.
+- Vor-Ort-Auftrag ohne Aufpreis-Position auf der Rechnung → Hinweis mit Summe.
+- Durchschnittlich > 1 Tag zwischen „erledigt“ und Rechnung → Erinnerung direkt nach „erledigt“ vorschlagen.
 
 ## 5. Abläufe
 
@@ -168,5 +223,16 @@ Prompt-Caching für feste Systemanweisungen. Verbrauch in `llm_usage`, Monatslim
 
 - **Unit (Vitest):** `ledger/` (Ratenplan, Ausnahmen, Teilzahlung älteste zuerst, Rückstand vs. künftig, Übernahme ohne Doppelrate, Monatsvorschau), `matching/` (Konfidenzstufen, IBAN-Lernen, Sammelzahlung → Prüfung), `detectors/` (Auslösen, Dedupe, Auflösen).
 - **Integration:** Connector-Normalisierung gegen gespeicherte Beispielantworten (Fixtures).
-- **E2E (Playwright, iPhone-Profil + Desktop):** Abnahme 1–10 aus dem Prompt.
-- **KI-Stichprobe:** 30 anonymisierte Beispielnachrichten mit erwarteter Einordnung (Antwortbedarf, Zusage ja/nein), vor jedem Modell- oder Prompt-Wechsel prüfen.
+- **E2E (Playwright, iPhone-Profil + Desktop), Abnahme Phase 1:**
+  1. Heute zeigt höchstens 3 Hinweise. „Kunde wartet seit 3 Std.“ → Verlauf → Entwurf → Senden (Demo) → steht im Protokoll, Hinweis schließt.
+  2. NEXUS → überfälliges Mitglied → Rechenweg (Rückstand vs. künftige Raten) → Erinnerung mit Stripe-Link vorbereitet.
+  3. Übernahme des Referenzbeispiels → 150 / 600 / 750 €. `first_rate` 450 + 300, `spread` 375 + 375.
+  4. Unbekannte Überweisung → Zuordnen → bestätigen → die nächste Zahlung derselben IBAN mit passendem Betrag wird automatisch zugeordnet.
+  5. Lexware offen + Stripe bezahlt → Hinweis → zuordnen → Hinweis schließt.
+  6. SEELE-Call → 10 Folientexte → für Gamma kopieren.
+  7. Auftrag erledigt → Hinweis „nicht abgerechnet“ → passende Rechnung zuordnen → Hinweis schließt.
+  8. Chat: „Wer ist bei NEXUS überfällig?“, „Was ist heute noch offen?“, „Was fehlt für SEELE?“, „Was ist mit dem Auftrag von Autohaus Schmidt?“, „Wie viel Geld kommt diesen Monat noch rein?“ → korrekte Antworten mit Links.
+  9. Gebrochene Zusage („Rechnung schicke ich morgen“) wird als Hinweis erkannt.
+  10. WhatsApp-Assistent (simuliert): Briefing kommt an, Frage wird beantwortet, [Senden] führt aus, ein alter Knopf wird abgelehnt, eine fremde Nummer wird ignoriert.
+  11. Verbindung im Fehler → betroffene Bereiche zeigen „Datenstand zu alt“.
+- **KI-Stichprobe (ab Phase 2):** 30 anonymisierte Beispielnachrichten mit erwarteter Einordnung. **Übersehene Antwortpflichten und übersehene Zusagen werden getrennt gezählt**, weil genau diese Fehler den Wachposten entwerten. Vor jedem Modell- oder Prompt-Wechsel prüfen.
