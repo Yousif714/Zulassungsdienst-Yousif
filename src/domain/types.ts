@@ -24,7 +24,7 @@ export interface Job { id: string; vehicleId: string; contactId: string; service
 export type InsightType = 'reply_waiting'|'member_overdue'|'unmatched_payment'|'stripe_paid_lexware_open'|'double_invoice'|'job_not_invoiced'|'invoice_overdue'|'call_slides_missing'|'commitment_broken'|'stale_source'|'coach_quick_reply'|'coach_due_day'|'coach_onsite_surcharge'|'coach_invoice_delay';
 export interface Ref { kind: 'member'|'message'|'thread'|'invoice'|'job'|'call'|'payment'|'connection'; id: string; href: string; label: string }
 export interface Insight { dedupeKey: string; type: InsightType; company: Company | null; priority: 'now'|'today'|'info'; title: string; body: string; amountCents?: number; refs: Ref[]; nextStep: string; needsSources: ConnectionId[] }
-export interface StoredInsight extends Insight { status: 'open'|'done'|'snoozed'|'dismissed'; createdAt: string; resolvedAt?: string }
+export interface StoredInsight extends Insight { status: 'open'|'done'|'snoozed'|'dismissed'|'stale'; createdAt: string; resolvedAt?: string }
 export interface Settings { replyThresholdHours: number; briefingsEnabled: boolean; ownerPhone: string; suppressedCoachKeys: string[] }
 
 // finalized in Task 8
