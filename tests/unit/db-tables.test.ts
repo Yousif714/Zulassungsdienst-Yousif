@@ -38,6 +38,18 @@ describe('tables', () => {
     expect(toRows(s).insights.every((r) => r.dedupe_key === r.id)).toBe(true);
     expect(TABLES.exceptions).toBeDefined();
   });
+  it('fromRows sortiert nach ord, unabhängig von der Eingabereihenfolge', () => {
+    const s = demo();
+    s.assistantChat = [{ id: 'm2', text: 'b' }, { id: 'm1', text: 'a' }] as never;
+    const rows = toRows(s);
+    const shuffled = Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, [...v].reverse()]));
+    expect(fromRows(shuffled, s.jobRuns)).toEqual(s);
+  });
+  it('Umordnen erzeugt Upserts (ord ist Teil der Zeile)', () => {
+    const s = demo();
+    const n = { ...s, contacts: [...s.contacts].reverse() };
+    if (s.contacts.length > 1) expect(diffState(s, n).contacts.upsert.length).toBeGreaterThan(0);
+  });
   it('diffState(s, s) ist leer', () => {
     const s = demo();
     for (const c of Object.values(diffState(s, s))) expect(c).toEqual({ upsert: [], delete: [] });

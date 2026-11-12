@@ -83,5 +83,38 @@ export function repositoryContract(name: string, make: () => Promise<Repos>): vo
       expect(await auth.consumeRecoveryCode('old', AT)).toBe(false);
       expect(await auth.consumeRecoveryCode('new', AT)).toBe(true);
     });
+
+    it('Reihenfolge von Chat und Allocations bleibt über mehrere Saves stabil', async () => {
+      const { state } = await make();
+      let cur = (await state.load()).state;
+      let rev = 0;
+      const step = async (next: typeof cur) => {
+        const r = await state.save(diffState(cur, next), rev);
+        expect(r.ok).toBe(true);
+        if (r.ok) rev = r.revision;
+        cur = (await state.load()).state;
+      };
+      const m = (id: string) => ({ id, text: id }) as never;
+      const al = (amountCents: number) => ({ paymentId: 'p1', contractId: 'c1', amountCents, method: 'manual' as const });
+      await step({ ...cur, assistantChat: [m('m1'), m('m2')] });
+      await step({ ...cur, assistantChat: [...cur.assistantChat, m('m3')], allocations: [al(100), al(200)] });
+      const expected = structuredClone(cur);
+      expect(cur.assistantChat.map((x) => x.id)).toEqual(['m1', 'm2', 'm3']);
+      expect(cur.allocations.map((x) => x.amountCents)).toEqual([100, 200]);
+      await step({ ...cur, settings: { ...cur.settings, ownerPhone: '+49' } });
+      expect(cur).toEqual({ ...expected, settings: { ...expected.settings, ownerPhone: '+49' } });
+      expect(cur.allocations).toHaveLength(2);
+    });
+
+    it('save löscht Zeilen', async () => {
+      const { state } = await make();
+      const base = (await state.load()).state;
+      const m = (id: string) => ({ id, text: id }) as never;
+      const withMsgs = { ...base, assistantChat: [m('a'), m('b')] };
+      expect(await state.save(diffState(base, withMsgs), 0)).toEqual({ ok: true, revision: 1 });
+      const without = { ...base, assistantChat: [m('a')] };
+      expect(await state.save(diffState(withMsgs, without), 1)).toEqual({ ok: true, revision: 2 });
+      expect((await state.load()).state.assistantChat.map((x) => x.id)).toEqual(['a']);
+    });
   });
 }
