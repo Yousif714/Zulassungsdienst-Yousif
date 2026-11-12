@@ -1,5 +1,5 @@
 import { todayBerlin } from '../clock';
-import { contractSources } from '../connections';
+import { contractSources, notConnected } from '../connections';
 import { allocate } from '../ledger/allocate';
 import { buildSchedule } from '../ledger/schedule';
 import { memberStatus, type MemberStatus } from '../ledger/status';
@@ -36,15 +36,20 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
   const out: Insight[] = [];
   let sum = 0;
   let count = 0;
+  // Sammelhinweis: nur Verträge, deren Quelle verbunden ist (wie in den Selektoren)
   const sources = new Set<ConnectionId>();
+  const summaryRefs: Insight['refs'] = [];
   for (const c of s.contracts) {
     const v = memberView(s, c.id, today);
     if (!v.contact || v.status.traffic === 'green') continue;
     const name = v.contact.name;
     const arrears = v.status.arrearsCents;
-    sum += arrears;
-    count++;
-    contractSources(c).forEach((x) => sources.add(x));
+    if (!notConnected(contractSources(c), s.connections)) {
+      sum += arrears;
+      count++;
+      contractSources(c).forEach((x) => sources.add(x));
+      summaryRefs.push(memberRef(c.id, name));
+    }
     out.push({
       dedupeKey: `overdue:${c.id}`,
       type: 'member_overdue',
@@ -67,7 +72,7 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
       title: `${count} Mitglieder überfällig, zusammen ${formatEuro(sum)}`,
       body: `Offene Rückstände bei ${count} Mitgliedern.`,
       amountCents: sum,
-      refs: out.map((i) => i.refs[0]),
+      refs: summaryRefs,
       nextStep: 'Erinnerungen vorbereiten',
       needsSources: [...sources],
     });

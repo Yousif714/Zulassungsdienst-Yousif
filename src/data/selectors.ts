@@ -71,7 +71,7 @@ export const unallocatedBankPayments = (s: AppState): Payment[] =>
 /** Stripe-Zahlungen von Mitgliedschafts-Abos, die auf einen bestätigten Vertrag warten (Abo hat noch keinen Vertrag). */
 export const waitingStripePayments = (s: AppState): Payment[] =>
   s.payments.filter((p) => {
-    if (p.source !== 'stripe' || p.kind !== 'incoming' || s.allocations.some((a) => a.paymentId === p.id)) return false;
+    if (p.source !== 'stripe' || p.kind !== 'incoming' || p.amountCents <= 0 || s.allocations.some((a) => a.paymentId === p.id)) return false;
     const sub = s.subscriptions.find((x) => x.externalId === p.subscriptionExternalId);
     return !!sub && sub.contractId === null && (isMembership(sub.productName) || isMembership(sub.invoiceLineText ?? ''));
   });

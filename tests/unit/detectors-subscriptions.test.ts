@@ -19,6 +19,11 @@ describe('detectSubscriptionChanges', () => {
     expect(refresh(s, NOW, false).contracts).toEqual(s.contracts);
   });
   test('Erstattung → Hinweis', () => expect(detectSubscriptionChanges(confirmedSub(stripeState, 'sub_B', 'k-weber')).some((i) => i.dedupeKey === 'sub:sub_B:refund:re_B1')).toBe(true));
+  test('Erstattung ohne Abo-Referenz findet das Abo über die erstattete Zahlung', () => {
+    const s = confirmedSub(stripeState, 'sub_B', 'k-weber');
+    const noRef = { ...s, payments: s.payments.map((p) => (p.externalId === 're_B1' ? { ...p, subscriptionExternalId: undefined } : p)) };
+    expect(detectSubscriptionChanges(noRef).some((i) => i.dedupeKey === 'sub:sub_B:refund:re_B1')).toBe(true);
+  });
   test('unbestätigtes Abo → keine Hinweise', () => expect(detectSubscriptionChanges(patchSub(stripeState, 'sub_A', { status: 'canceled' }))).toEqual([]));
   test('unverändertes bestätigtes Abo → keine Hinweise', () => expect(detectSubscriptionChanges(confirmedSub(stripeState, 'sub_F', 'k-f'))).toEqual([]));
 });

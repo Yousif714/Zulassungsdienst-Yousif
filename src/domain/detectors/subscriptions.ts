@@ -1,5 +1,6 @@
 import { formatEuro } from '../money';
 import type { AppState, Insight, Subscription } from '../types';
+import { subscriptionOf } from '../matching/stripe';
 import { memberRef } from './refs';
 
 /** Hinweise auf Änderungen an Stripe-Abos mit bestätigtem Vertrag. Der Vertrag selbst bleibt unverändert. */
@@ -32,7 +33,7 @@ export function detectSubscriptionChanges(s: AppState): Insight[] {
     if (sub.disputes.length > 0) add('dispute', `${name}: Chargeback in Stripe`, `${sub.disputes.length} Streitfall/Streitfälle zum Abo. ${note}`);
 
     for (const p of s.payments) {
-      if (p.source !== 'stripe' || !p.refundOf || p.subscriptionExternalId !== sub.externalId) continue;
+      if (p.source !== 'stripe' || !p.refundOf || subscriptionOf(s, p)?.externalId !== sub.externalId) continue;
       add(`refund:${p.externalId}`, `${name}: Erstattung ${formatEuro(-p.amountCents)}`, `Stripe hat ${formatEuro(-p.amountCents)} erstattet (${p.bookedOn}). ${note}`, -p.amountCents);
     }
   }

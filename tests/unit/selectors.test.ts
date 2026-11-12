@@ -88,6 +88,10 @@ describe('Verträge je Quelle', () => {
     expect(ids).toContain('in_A1');
     expect(ids).not.toContain('in_D1'); // Coaching-Abo: keine Mitgliedschaft
   });
+  test('Erstattungen zählen nicht als wartende Zahlungen', () => {
+    expect(stripeState.payments.some((p) => p.externalId === 're_B1')).toBe(true);
+    expect(waitingStripePayments(stripeState).map((p) => p.externalId)).not.toContain('re_B1');
+  });
   test('bestätigtes Abo: keine wartenden Zahlungen mehr', () => {
     const st = confirmedSub(stripeState, 'sub_A', 'k-ayse');
     expect(waitingStripePayments(st).map((p) => p.externalId)).not.toContain('in_A1');

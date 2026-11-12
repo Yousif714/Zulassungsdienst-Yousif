@@ -110,6 +110,22 @@ describe('Rückstand je Vertragsquelle', () => {
     expect(runDetectors(st, NOW_0930).some((i) => i.type === 'member_overdue')).toBe(true);
     expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['stripe_nexus']);
   });
+  test('Sammelhinweis bleibt bei fehlender Bank, wenn Stripe-Verträge überfällig sind', () => {
+    const st = stripeContractOverdue({ bank: 'missing', stripe_nexus: 'connected' });
+    const two = {
+      ...st,
+      contracts: [
+        st.contracts[0],
+        { ...st.contracts[0], id: 'c2', contactId: 'm-yilmaz' },
+        { ...st.contracts[0], id: 'c3', contactId: 'm-kaya', billing: 'legacy' as const },
+      ],
+    };
+    const all = runDetectors(two, NOW_0930).filter((i) => i.dedupeKey.startsWith('overdue:all:'));
+    expect(all).toHaveLength(1);
+    expect(all[0].title).toMatch(/^2 Mitglieder/);
+    expect(all[0].needsSources).toEqual(['stripe_nexus']);
+    expect(all[0].refs.map((r) => r.id)).toEqual(['c1', 'c2']);
+  });
   test('Legacy-Vertrag ohne Bank → kein Rückstand-Hinweis', () => {
     const st = stateWith({
       contracts: [{ ...base, contactId: 'm-kaya', startDate: '2026-09-01' }],
