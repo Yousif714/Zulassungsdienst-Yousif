@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { demoAI } from '@/ai/demo-ai';
+import { createStateTools } from '@/ai/tools';
 import { DemoBadge } from '@/components/DemoBadge';
 import { Bubble, ContactHeader, LinkCards, RichText, TimeStamp, TypingBubble, placeMessages, type Placed } from '@/components/Messages';
 import { useAppStore } from '@/data/store';
@@ -90,7 +91,7 @@ export default function AssistentPage() {
   const inbound = async (from: string, text: string) => {
     setBusy(true);
     try {
-      const r = await handleInbound(state, from, text, now(), demoAI);
+      const r = await handleInbound(state, from, text, now(), demoAI, createStateTools(state, now()));
       r.events.forEach(dispatch);
     } finally {
       setBusy(false);

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { demoAI } from '@/ai/demo-ai';
+import { createStateTools } from '@/ai/tools';
 import type { ChatAnswer } from '@/ai/provider';
 import { Bubble, LinkCards, RichText, TimeStamp, TypingBubble } from '@/components/Messages';
 import { PageHeader } from '@/components/PageHeader';
@@ -39,7 +40,7 @@ export default function ChatPage() {
     if (!q) return;
     const id = nextId.current++;
     setTurns((t) => [...t, { id, question: q, answer: null }]);
-    const [answer] = await Promise.all([demoAI.answer(q, state, now()), pause(TYPING_MS)]);
+    const [answer] = await Promise.all([demoAI.answer(q, { now: now(), tools: createStateTools(state, now()) }), pause(TYPING_MS)]);
     setTurns((t) => t.map((x) => (x.id === id ? { ...x, answer } : x)));
   };
 

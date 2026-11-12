@@ -6,11 +6,12 @@ import { createDemoState } from '@/data/seed';
 import { nexusForecast, overdueMembers } from '@/data/selectors';
 import { todayBerlin } from '@/domain/clock';
 import { formatEuro } from '@/domain/money';
+import { createStateTools } from '@/ai/tools';
 import { NOW_0930 } from './helpers';
 
 const s = refresh(createDemoState(), NOW_0930);
 const today = todayBerlin(NOW_0930);
-const ask = (q: string) => demoAI.answer(q, s, NOW_0930);
+const ask = (q: string) => demoAI.answer(q, { now: NOW_0930, tools: createStateTools(s, NOW_0930) });
 
 describe('DemoAI', () => {
   it('überfällig', async () => {
@@ -54,11 +55,11 @@ describe('DemoAI', () => {
     expect(sl[0].body).toContain('\n');
     expect(await demoAI.slidesFor(call)).toEqual(sl);
   });
-  it('detectCommitment', () => {
-    expect(demoAI.detectCommitment('Die Rechnung schicke ich Ihnen morgen.', '2026-11-10T10:00:00Z')).toEqual({ kind: 'invoice', dueAt: '2026-11-11T17:00:00.000Z' });
-    expect(demoAI.detectCommitment('Ich schicke die Rechnung heute.', '2026-11-10T10:00:00Z')?.dueAt).toBe('2026-11-10T17:00:00.000Z');
-    expect(demoAI.detectCommitment('Ich melde mich.', '2026-11-10T10:00:00Z')).toEqual({ kind: 'callback', dueAt: '2026-11-12T10:00:00.000Z' });
-    expect(demoAI.detectCommitment('Danke, bis dann', '2026-11-10T10:00:00Z')).toBeNull();
+  it('detectCommitment', async () => {
+    expect((await demoAI.detectCommitment('Die Rechnung schicke ich Ihnen morgen.', '2026-11-10T10:00:00Z'))).toEqual({ kind: 'invoice', dueAt: '2026-11-11T17:00:00.000Z' });
+    expect((await demoAI.detectCommitment('Ich schicke die Rechnung heute.', '2026-11-10T10:00:00Z'))?.dueAt).toBe('2026-11-10T17:00:00.000Z');
+    expect((await demoAI.detectCommitment('Ich melde mich.', '2026-11-10T10:00:00Z'))).toEqual({ kind: 'callback', dueAt: '2026-11-12T10:00:00.000Z' });
+    expect((await demoAI.detectCommitment('Danke, bis dann', '2026-11-10T10:00:00Z'))).toBeNull();
   });
   it('Entwürfe', async () => {
     const kaya = s.contacts.find((c) => c.id === 'm-kaya')!;
@@ -66,12 +67,12 @@ describe('DemoAI', () => {
     const link = paymentLinkFor(mc.id);
     const st = { traffic: 'red', arrearsCents: 15000 } as never;
     for (const tone of ['freundlich', 'bestimmt'] as const) {
-      const t = await demoAI.draftReminder(kaya, st, tone, link);
+      const t = await demoAI.draftReminder({ contact: kaya, status: st, tone, paymentLink: link });
       expect(t).toContain(link);
       expect(t).toContain(formatEuro(15000));
     }
     const thread = s.messages.filter((m) => m.threadId === 't-schmidt');
-    const r = await demoAI.draftReply(thread, s.contacts.find((c) => c.id === 'd-schmidt')!);
+    const r = await demoAI.draftReply({ thread, contact: s.contacts.find((c) => c.id === 'd-schmidt')! });
     expect(r).toContain('Autohaus Schmidt');
     expect(r).toContain('GE-AS 123');
   });

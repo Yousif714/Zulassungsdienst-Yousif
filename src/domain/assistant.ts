@@ -1,4 +1,4 @@
-import type { AIProvider } from '@/ai/provider';
+import type { AIProvider, AITools } from './ai-port';
 import { newId } from './ids';
 import { reminderAction, reminderActionId } from './action-factory';
 import { REJECT_REASON_DE, approve } from './actions/machine';
@@ -43,7 +43,7 @@ function deliver(
 }
 
 export async function handleInbound(
-  s: AppState, from: string, text: string, now: Date, ai: AIProvider,
+  s: AppState, from: string, text: string, now: Date, ai: AIProvider, tools: AITools,
 ): Promise<{ events: StoreEvent[]; reply: AssistantMessage | null }> {
   const inbound: StoreEvent = { type: 'assistantInbound', from, text };
   // Der Store legt fremde Absender als `ignored` ab und protokolliert sie. Ohne gültige Inhaber-Nummer gilt niemand als Inhaber.
@@ -64,14 +64,14 @@ export async function handleInbound(
     }
     const action: Action = stored ?? reminderAction({
       contract, contact, status, at: now, isDemo: true,
-      text: await ai.draftReminder(contact, status, 'freundlich', paymentLinkFor(contract.id)),
+      text: await ai.draftReminder({ contact, status, tone: 'freundlich', paymentLink: paymentLinkFor(contract.id) }),
     });
     const buttons: Button[] = (['Senden', 'Ändern', 'Später'] as const).map((label) => ({ label, actionId: id, version: action.version, issuedAt: now.toISOString() }));
     const events: StoreEvent[] = stored ? [inbound] : [inbound, { type: 'createAction', action }];
     return deliver(s, events, `Entwurf: ${action.title}\n\n${String(action.payload.text ?? '')}`, now, { buttons });
   }
 
-  const ans = await ai.answer(text, s, now);
+  const ans = await ai.answer(text, { now, tools });
   return deliver(s, [inbound], ans.text, now, { links: ans.links });
 }
 

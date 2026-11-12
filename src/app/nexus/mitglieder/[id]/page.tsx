@@ -51,7 +51,7 @@ export default function MemberPage() {
   useEffect(() => {
     if (!open || !view?.contact || stored || (draft?.forId === actionId && draft.tone === tone)) return;
     let cancelled = false;
-    void demoAI.draftReminder(view.contact, view.status, tone, paymentLinkFor(id)).then((text) => {
+    void demoAI.draftReminder({ contact: view.contact, status: view.status, tone, paymentLink: paymentLinkFor(id) }).then((text) => {
       if (!cancelled) setDraft({ forId: actionId, tone, text });
     });
     return () => {

@@ -58,7 +58,7 @@ export default function ThreadPage() {
   useEffect(() => {
     if (!needsDraft || !lastIn || draft?.forId === lastIn.id) return;
     let cancelled = false;
-    void demoAI.draftReply(messages, contact).then((text) => {
+    void demoAI.draftReply({ thread: messages, contact }).then((text) => {
       if (!cancelled) setDraft({ forId: lastIn.id, text });
     });
     return () => {
