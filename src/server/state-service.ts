@@ -1,6 +1,6 @@
 import 'server-only';
 import { applyEvent, applyEvents, refresh, type EngineContext } from '@/data/engine';
-import { checkAction, executeApproved, type EventSink } from '@/data/executor';
+import { checkAction, executeApproved, sweepStaleExecutions, type EventSink } from '@/data/executor';
 import type { ActionProvider } from '@/domain/actions/machine';
 import type { StoreEvent } from '@/domain/events';
 import { newId } from '@/domain/ids';
@@ -132,4 +132,13 @@ export async function dispatchEvents(
   await executeApproved(sink, deps.provider);
   for (const e of events) if (e.type === 'checkAction') await checkAction(sink, deps.provider, e.id);
   return { state: sink.current(), created: r.value };
+}
+
+/** Cron-Sync: Ableitungen (Zuordnung, Hinweise) speichern und hängende Ausführungen zu „Ausgang unklar“ machen. */
+export async function syncState(repos: Repos, deps: { at: Date }): Promise<AppState> {
+  const ctx = (): EngineContext => ({ at: deps.at, isDemo: false, newId });
+  const r = await commit(repos.state, (s) => ({ state: refresh(s, deps.at, false), value: undefined }));
+  const sink = serverSink(repos.state, r.state, ctx);
+  await sweepStaleExecutions(sink, deps.at);
+  return sink.current();
 }

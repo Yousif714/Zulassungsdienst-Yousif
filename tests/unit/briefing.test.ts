@@ -41,6 +41,11 @@ describe('Briefing', () => {
     expect(t).toMatch(/^Guten Abend\. Rückblick:/);
     expect(t.split('\n').pop()).toContain('Schnellantwort');
   });
+  test('Wochenrückblick', () => {
+    const b = buildBriefing(state(), 'weekly', NOW);
+    expect(b.title).toBe('Wochenrückblick');
+    expect(renderBriefingText(b)).toMatch(/^Wochenrückblick:/);
+  });
   test('veraltete Quelle', () => {
     const s = stateWith({ connections: [conn({ id: 'lexware_zulassung', status: 'error' })] });
     const b = buildBriefing(s, 'morning', NOW);

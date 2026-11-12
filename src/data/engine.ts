@@ -290,6 +290,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     case 'assistantOutbound': {
       const msg: AssistantMessage = {
         id: e.id ?? ctx.newId(), direction: 'to_owner', from: 'Nexus Assistent', text: e.text, at: at.toISOString(),
+        ...(e.delivery ? { delivery: e.delivery } : {}),
         ...(e.buttons ? { buttons: e.buttons } : {}),
         ...(e.links?.length ? { links: e.links } : {}),
       };

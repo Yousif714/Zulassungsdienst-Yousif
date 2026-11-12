@@ -6,7 +6,7 @@ import { formatEuro } from './money';
 import type { AppState, CalendarEvent, Company, ConnectionId, StoredInsight } from './types';
 
 export type Briefing = {
-  kind: 'morning' | 'evening';
+  kind: 'morning' | 'evening' | 'weekly';
   title: string;
   top: StoredInsight[];
   events: CalendarEvent[];
@@ -20,7 +20,7 @@ export type Briefing = {
 /** Quellen, von denen die Geldkarte einer Firma abhängt. */
 export const MONEY_SOURCES: Record<Company, ConnectionId[]> = { nexus: ['bank', 'stripe_nexus'], zulassung: ['lexware_zulassung'] };
 
-export function buildBriefing(s: AppState, kind: 'morning' | 'evening', now: Date): Briefing {
+export function buildBriefing(s: AppState, kind: 'morning' | 'evening' | 'weekly', now: Date): Briefing {
   const today = todayBerlin(now);
   const open = s.insights.filter((i) => i.status === 'open');
   const coach = open.filter((i) => i.type.startsWith('coach_'));
@@ -39,7 +39,7 @@ export function buildBriefing(s: AppState, kind: 'morning' | 'evening', now: Dat
 
   return {
     kind,
-    title: kind === 'morning' ? 'Guten Morgen' : 'Guten Abend',
+    title: kind === 'morning' ? 'Guten Morgen' : kind === 'evening' ? 'Guten Abend' : 'Wochenrückblick',
     top,
     events: s.events.filter((e) => berlinParts(new Date(e.startAt)).date === today).sort((a, b) => a.startAt.localeCompare(b.startAt)),
     money: [
@@ -55,7 +55,7 @@ export function buildBriefing(s: AppState, kind: 'morning' | 'evening', now: Dat
 
 export function renderBriefingText(b: Briefing): string {
   const lines: string[] = [];
-  lines.push(b.kind === 'morning' ? `Guten Morgen. ${b.top.length} Dinge heute:` : 'Guten Abend. Rückblick:');
+  lines.push(b.kind === 'morning' ? `Guten Morgen. ${b.top.length} Dinge heute:` : b.kind === 'evening' ? 'Guten Abend. Rückblick:' : 'Wochenrückblick:');
   b.top.forEach((t, i) => lines.push(`${i + 1}. ${t.title} · ${t.nextStep}`));
   if (b.events.length) {
     lines.push('Termine:');
@@ -67,7 +67,7 @@ export function renderBriefingText(b: Briefing): string {
     lines.push(m.stale ? `${label}: Datenstand zu alt` : `${label}: offen ${formatEuro(m.openCents)}, überfällig ${formatEuro(m.overdueCents)}`);
   }
   lines.push(`Stand: ${b.dataAsOf}`);
-  if (b.kind === 'evening' && b.coach.length) {
+  if (b.kind !== 'morning' && b.coach.length) {
     lines.push('Coach-Tipps:');
     for (const c of b.coach) lines.push(`- ${c.title} · ${c.nextStep}`);
   }
