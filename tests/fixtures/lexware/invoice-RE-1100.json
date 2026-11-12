@@ -1,0 +1,25 @@
+{
+  "id": "inv-RE-1100",
+  "voucherNumber": "RE-1100",
+  "voucherDate": "2026-09-10T00:00:00.000+02:00",
+  "dueDate": "2026-09-24T00:00:00.000+02:00",
+  "voucherStatus": "open",
+  "address": {
+    "contactId": "c-81"
+  },
+  "title": "Rechnung",
+  "introduction": "Vielen Dank für Ihre Anmeldung.",
+  "lineItems": [
+    {
+      "type": "custom",
+      "name": "NEXUS-Mitgliedschaft 12 Monate, fällig jeweils zum 15. des Monats",
+      "description": "Gesamtbetrag"
+    }
+  ],
+  "totalPrice": {
+    "currency": "EUR",
+    "totalNetAmount": 1008.4,
+    "totalGrossAmount": 1200.0
+  },
+  "updatedDate": "2026-09-10T08:00:00.000+02:00"
+}
