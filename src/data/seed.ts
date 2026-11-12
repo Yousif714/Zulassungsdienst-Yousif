@@ -2,7 +2,7 @@ import { CONNECTION_CATALOG } from '@/domain/connections';
 import { addDaysIso, berlinLocalToUtc } from '@/domain/clock';
 import { buildSchedule } from '@/domain/ledger/schedule';
 import type {
-  Allocation, AppState, CalendarEvent, Call, Connection, ConnectionId, Contact, ContentItem, IbanLink, Invoice, IsoDate, Job,
+  Allocation, AppState, CalendarEvent, Call, Connection, Contact, ContentItem, IbanLink, Invoice, IsoDate, Job,
   MemberContract, Message, Payment, Vehicle,
 } from '@/domain/types';
 

@@ -82,4 +82,4 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 - Session-500 ohne Anmelde-Flag führt zu Demo statt Offline. Fehler beim Schreiben des Flags führen fälschlich zu Offline.
 - Architektur-Test erkennt keine dynamischen Importe. `api-guard` prüft nur per Textsuche.
 - Die globale Demo-Leiste schiebt den Seitenkopf um ca. 44 px.
-- Kleinkram: ungenutzter `ConnectionId`-Import in `seed.ts`, Import-Reihenfolge, schwache Assertions in einzelnen Tests.
+- Kleinkram: Import-Reihenfolge, schwache Assertions in einzelnen Tests.
