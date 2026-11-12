@@ -151,6 +151,8 @@ export function deriveProposals(s: AppState): ContractProposal[] {
 
 export function findContactFor(p: ContractProposal, contacts: Contact[]): { match: 'ref' | 'email' | 'name' | 'none'; contactId: string | null; name: string | null } {
   const hit = (m: 'ref' | 'email' | 'name', c: Contact) => ({ match: m, contactId: c.id, name: c.name });
+  // Mitgliedsverträge gehören zu NEXUS: Kontakte anderer Firmen werden nie wiederverwendet.
+  contacts = contacts.filter((c) => c.company === 'nexus');
   const keys = new Set(p.contactRefs.map(refKey));
   const byRef = contacts.find((c) => (c.externalRefs ?? []).some((r) => keys.has(refKey(r))));
   if (byRef) return hit('ref', byRef);
@@ -160,7 +162,7 @@ export function findContactFor(p: ContractProposal, contacts: Contact[]): { matc
     if (byEmail) return hit('email', byEmail);
   }
   const n = normalizeName(p.name);
-  const byName = n === '' ? undefined : contacts.find((c) => c.company === 'nexus' && normalizeName(c.name) === n);
+  const byName = n === '' ? undefined : contacts.find((c) => normalizeName(c.name) === n);
   if (byName) return hit('name', byName);
   return { match: 'none', contactId: null, name: null };
 }

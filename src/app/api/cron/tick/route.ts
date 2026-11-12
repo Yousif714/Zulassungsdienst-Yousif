@@ -6,6 +6,9 @@ import { readEnv } from '@/server/env';
 import { getActionProvider, getRepos, getSyncDeps } from '@/server/registry';
 import { syncConnections } from '@/server/sync';
 
+// Sekunden; das Sync-Budget (40 s) liegt darunter.
+export const maxDuration = 60;
+
 const digest = (s: string) => createHash('sha256').update(s).digest();
 
 export async function GET(req: Request) {

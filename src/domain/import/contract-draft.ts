@@ -23,7 +23,7 @@ export function validateContractDraft(d: ContractDraft): string[] {
   if (!isInt(d.installmentCents) || d.installmentCents <= 0) errors.push('Die Rate muss größer als 0 sein.');
   if (!validDate(d.startDate)) errors.push('Das Startdatum ist ungültig.');
   if (d.catchUpMode !== 'first_rate' && d.catchUpMode !== 'spread') errors.push('Der Nachholmodus ist ungültig.');
-  if (errors.length === 0 && d.totalCents - d.installmentCents * (d.installments - 1) <= 0) errors.push('Die letzte Rate wäre negativ.');
+  if (errors.length === 0 && d.totalCents - d.installmentCents * (d.installments - 1) <= 0) errors.push('Die letzte Rate wäre null oder negativ.');
   return errors;
 }
 

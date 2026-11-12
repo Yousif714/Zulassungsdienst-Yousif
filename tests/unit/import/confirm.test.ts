@@ -16,7 +16,7 @@ const withContact = (s: AppState, c: Partial<Contact> & { id: string; name: stri
 
 test('validateContractDraft', () => {
   expect(validateContractDraft(draftA)).toEqual([]);
-  expect(validateContractDraft({ ...draftA, totalCents: 50000 })).toContain('Die letzte Rate wäre negativ.');
+  expect(validateContractDraft({ ...draftA, totalCents: 50000 })).toContain('Die letzte Rate wäre null oder negativ.');
   expect(validateContractDraft({ ...draftA, dueDay: 32 })).toContain('Fälligkeitstag muss zwischen 1 und 31 liegen.');
   expect(validateContractDraft({ ...draftA, installments: 0 })).not.toEqual([]);
   expect(validateContractDraft({ ...draftA, installmentCents: 10.5 })).not.toEqual([]);

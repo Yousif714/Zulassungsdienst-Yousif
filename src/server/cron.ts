@@ -43,7 +43,10 @@ export async function runTick(deps: { repos: Repos; at: Date; provider: ActionPr
   }
   // Einmal je Takt, auch wenn mehrere Sync-Slots fällig waren. Ein Fehler bricht den Takt nicht ab.
   if (syncClaimed && sync) {
-    try { await sync(); } catch { /* Fehler stehen je Verbindung im Zustand */ }
+    try { await sync(); } catch (e) {
+      // Details stehen je Verbindung im Zustand; ins Log nur der Fehlertyp, nie Meldung oder Geheimnisse.
+      console.error('Sync nach dem Takt fehlgeschlagen:', e instanceof Error ? e.name : typeof e);
+    }
   }
   return { ran, skipped };
 }

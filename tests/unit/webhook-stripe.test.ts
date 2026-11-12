@@ -82,5 +82,14 @@ describe('Route', () => {
     expect((await POST(req(big, sign(big, nowSec())))).status).toBe(413);
     expect(syncSpy).not.toHaveBeenCalled();
   });
+  test('Sync-Fehler wird geloggt (nur Fehlername), Antwort bleibt 200', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    syncSpy.mockRejectedValueOnce(new RangeError('whsec_GEHEIM'));
+    expect((await POST(req(BODY, sign(BODY, nowSec())))).status).toBe(200);
+    expect(spy).toHaveBeenCalledWith('Stripe-Webhook: Sync fehlgeschlagen:', 'RangeError');
+    expect(JSON.stringify(spy.mock.calls)).not.toContain('GEHEIM');
+    spy.mockRestore();
+  });
+  test('maxDuration 60 s', async () => expect((await import('@/app/api/webhooks/stripe/route')).maxDuration).toBe(60));
   test('Antwort enthält nie das Geheimnis', async () => expect(await (await POST(req(BODY, 'x'))).text()).not.toContain(SECRET));
 });

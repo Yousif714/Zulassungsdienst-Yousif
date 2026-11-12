@@ -112,6 +112,13 @@ test('findContactFor: Ref vor E-Mail vor Name', () => {
   expect(findContactFor(p, [mk('z', 'Ayşe Öztürk')]).match).toBe('name');
   expect(findContactFor(p, []).match).toBe('none');
 });
+test('findContactFor: Zulassungs-Kontakte werden nie wiederverwendet', () => {
+  const p = P(stripeState, 'stripe_nexus:sub_A')!;
+  const z = (c: Partial<Contact>): Contact => ({ ...mk('z1', 'Ayşe Öztürk'), company: 'zulassung', ...c });
+  expect(findContactFor(p, [z({ emails: ['ayse@example.de'] })]).match).toBe('none');
+  expect(findContactFor(p, [z({ externalRefs: [{ connectionId: 'stripe_nexus', externalId: 'cus_A' }] })]).match).toBe('none');
+  expect(findContactFor(p, [z({})]).match).toBe('none');
+});
 test('normalizeName: türkische Buchstaben, NFD, Titel', () => {
   expect(normalizeName('Ayşe Öztürk')).toBe('ayse oeztuerk');
   expect(normalizeName('Ayşe Öztürk'.normalize('NFD'))).toBe('ayse oeztuerk');

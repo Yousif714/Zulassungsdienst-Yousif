@@ -105,4 +105,16 @@ describe('runTick Sync', () => {
     const r = await runTick({ repos, at: new Date('2026-11-12T06:05:00Z'), provider, sync: async () => { throw new Error('x'); } });
     expect(r.ran.length).toBeGreaterThan(0);
   });
+  test('Sync-Fehler wird geloggt: fester Präfix, nur Fehlername, nie Meldung oder Geheimnis', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await runTick({ repos, at: new Date('2026-11-12T06:05:00Z'), provider, sync: async () => { throw new TypeError('sk_live_GEHEIM'); } });
+    expect(spy).toHaveBeenCalledWith('Sync nach dem Takt fehlgeschlagen:', 'TypeError');
+    expect(JSON.stringify(spy.mock.calls)).not.toContain('GEHEIM');
+    spy.mockRestore();
+  });
+});
+
+test('Route: maxDuration 60 s, über dem Sync-Budget von 40 s', async () => {
+  const route = await import('@/app/api/cron/tick/route');
+  expect(route.maxDuration).toBe(60);
 });
