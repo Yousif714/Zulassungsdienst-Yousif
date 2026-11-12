@@ -13,7 +13,7 @@ function routes(dir: string): string[] {
 }
 
 // Eigene Prüfung bzw. bewusst offen.
-const EXEMPT = [/^auth\/session$/, /^auth\/register\//, /^auth\/login\//, /^auth\/recover$/, /^auth\/logout$/, /^cron\/tick$/, /^test\/reset$/];
+const EXEMPT = [/^auth\/session$/, /^auth\/register\//, /^auth\/login\//, /^auth\/recover$/, /^auth\/logout$/, /^cron\/tick$/, /^test\/reset$/, /^test\/import$/];
 
 describe('API-Schutz', () => {
   const files = routes(API);

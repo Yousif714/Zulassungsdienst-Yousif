@@ -16,11 +16,12 @@ const BRIEFING: Partial<Record<JobName, 'morning' | 'evening' | 'weekly'>> = {
 };
 
 /** Ein Takt: fällige Läufe atomar beanspruchen (`job_runs`), nur der Gewinner führt aus. */
-export async function runTick(deps: { repos: Repos; at: Date; provider: ActionProvider }): Promise<{ ran: string[]; skipped: string[] }> {
-  const { repos, at, provider } = deps;
+export async function runTick(deps: { repos: Repos; at: Date; provider: ActionProvider; sync?: () => Promise<unknown> }): Promise<{ ran: string[]; skipped: string[] }> {
+  const { repos, at, provider, sync } = deps;
   const state = await loadState(repos, at);
   const ran: string[] = [];
   const skipped: string[] = [];
+  let syncClaimed = false;
   const claimed = new Set(await repos.state.recentJobRuns(new Date(at.getTime() - JOB_RUN_LOOKBACK_MS)));
   for (const run of dueRuns(at, claimed, state.settings)) {
     if (!(await repos.state.claimJobRun(run.key, at))) {
@@ -36,8 +37,13 @@ export async function runTick(deps: { repos: Repos; at: Date; provider: ActionPr
       await dispatchEvents(repos, [{ type: 'assistantOutbound', text, delivery }], { at: () => at, provider });
     } else {
       await syncState(repos, { at });
+      syncClaimed = true;
     }
     ran.push(run.key);
+  }
+  // Einmal je Takt, auch wenn mehrere Sync-Slots fällig waren. Ein Fehler bricht den Takt nicht ab.
+  if (syncClaimed && sync) {
+    try { await sync(); } catch { /* Fehler stehen je Verbindung im Zustand */ }
   }
   return { ran, skipped };
 }

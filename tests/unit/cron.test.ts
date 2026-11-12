@@ -87,3 +87,22 @@ describe('GET /api/cron/tick', () => {
     expect(Array.isArray(j.ran) && Array.isArray(j.skipped)).toBe(true);
   });
 });
+
+describe('runTick Sync', () => {
+  test('Sync läuft genau einmal je Takt, auch bei mehreren fälligen Sync-Slots', async () => {
+    const sync = vi.fn(async () => {});
+    await runTick({ repos, at: new Date('2026-11-12T06:05:00Z'), provider, sync });
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+  test('kein Sync-Slot beansprucht → kein Sync', async () => {
+    const sync = vi.fn(async () => {});
+    const at = new Date('2026-11-12T06:05:00Z');
+    await runTick({ repos, at, provider });
+    await runTick({ repos, at, provider, sync });
+    expect(sync).not.toHaveBeenCalled();
+  });
+  test('Fehler im Sync bricht den Takt nicht ab', async () => {
+    const r = await runTick({ repos, at: new Date('2026-11-12T06:05:00Z'), provider, sync: async () => { throw new Error('x'); } });
+    expect(r.ran.length).toBeGreaterThan(0);
+  });
+});
