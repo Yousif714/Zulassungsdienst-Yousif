@@ -11,11 +11,12 @@ import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
 import { Segmented } from '@/components/Segmented';
 import { useAppStore } from '@/data/store';
+import { stripePlanAction, stripePlanActionId } from '@/domain/action-factory';
 import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
 import { planTakeover } from '@/domain/ledger/takeover';
 import { formatEuro } from '@/domain/money';
-import type { Action, Installment, MemberContract } from '@/domain/types';
+import type { Installment, MemberContract } from '@/domain/types';
 
 type Mode = MemberContract['catchUpMode'];
 
@@ -26,7 +27,7 @@ const MODE_OPTIONS: { value: Mode; label: string }[] = [
 
 export default function TakeoverPage() {
   const { id } = useParams<{ id: string }>();
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode: appMode } = useAppStore();
   const at = now();
   const today = todayBerlin(at);
   const contract = state.contracts.find((c) => c.id === id);
@@ -46,7 +47,7 @@ export default function TakeoverPage() {
   const name = contact?.name ?? 'Unbekannt';
   const plan = planTakeover(states, today, mode);
   // Ein Stripe-Plan pro Vertrag: ein vorhandener Entwurf bleibt maßgeblich, egal welcher Modus gerade gewählt ist.
-  const actionId = `stripe-plan-${id}`;
+  const actionId = stripePlanActionId(id);
   const prepared = state.actions.find((a) => a.id === actionId);
   const preparedPlan = prepared?.payload as { mode: Mode; rates: Installment[] } | undefined;
   const history = state.allocations
@@ -58,17 +59,7 @@ export default function TakeoverPage() {
     .sort((x, y) => x.p.bookedOn.localeCompare(y.p.bookedOn));
 
   const prepare = () => {
-    const action: Action = {
-      id: actionId,
-      type: 'create_invoice_draft',
-      company: 'nexus',
-      title: `Stripe-Ratenplan für ${name}`,
-      payload: { contractId: id, contactId: contract.contactId, mode, rates: plan.rates },
-      version: 1,
-      status: 'draft',
-      createdAt: at.toISOString(),
-      isDemo: true,
-    };
+    const action = stripePlanAction({ contract, name, mode, rates: plan.rates, at, isDemo: appMode === 'demo' });
     dispatch({ type: 'createAction', action });
   };
 

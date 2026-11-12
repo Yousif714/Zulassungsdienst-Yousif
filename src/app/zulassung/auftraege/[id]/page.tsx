@@ -12,10 +12,11 @@ import { Segmented } from '@/components/Segmented';
 import { INVOICE_STATUS_LABEL, JOB_STATUS_LABEL, LOCATION_LABEL } from '@/components/zulassung-labels';
 import { invoiceCandidates } from '@/data/selectors';
 import { useAppStore } from '@/data/store';
+import { jobInvoiceDraftAction, jobInvoiceDraftId } from '@/domain/action-factory';
 import { jobBilling } from '@/domain/billing';
 import { formatBerlin, formatIsoDe, now } from '@/domain/clock';
 import { formatEuro } from '@/domain/money';
-import type { Action, Job } from '@/domain/types';
+import type { Job } from '@/domain/types';
 
 type Switchable = 'open' | 'waiting_customer' | 'done';
 const SWITCH_OPTIONS: { value: Switchable; label: string }[] = [
@@ -27,7 +28,7 @@ const isSwitchable = (s: Job['status']): s is Switchable => s === 'open' || s ==
 
 export default function JobPage() {
   const { id } = useParams<{ id: string }>();
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode } = useAppStore();
   const at = now();
   const back = <BackLink href="/zulassung" label="Zulassungsdienst" />;
   const job = state.jobs.find((j) => j.id === id);
@@ -51,21 +52,11 @@ export default function JobPage() {
     .filter((m) => m.jobId === job.id || (m.contactId === job.contactId && !m.jobId))
     .sort((a, b) => b.sentAt.localeCompare(a.sentAt))[0];
 
-  const draftId = `invoice-draft-${job.id}`;
+  const draftId = jobInvoiceDraftId(job.id);
   const draft = state.actions.find((a) => a.id === draftId);
   const draftPayload = draft?.payload as { amountCents: number; text: string } | undefined;
   const prepareDraft = () => {
-    const action: Action = {
-      id: draftId,
-      type: 'create_invoice_draft',
-      company: 'zulassung',
-      title: `Rechnungsentwurf für ${name}`,
-      payload: { jobId: job.id, contactId: job.contactId, amountCents: rest, text: `${job.service} ${vehicle?.plate ?? ''}`.trim() },
-      version: 1,
-      status: 'draft',
-      createdAt: at.toISOString(),
-      isDemo: true,
-    };
+    const action = jobInvoiceDraftAction({ job, contactName: name, plate: vehicle?.plate ?? null, restCents: rest, at, isDemo: mode === 'demo' });
     dispatch({ type: 'createAction', action });
   };
 

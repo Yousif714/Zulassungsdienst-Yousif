@@ -1,6 +1,7 @@
 'use client';
 
 import { useAppStore } from '@/data/store';
+import { notConnected } from '@/domain/connections';
 import type { ConnectionId } from '@/domain/types';
 
 import { IconWarning } from './Icons';
@@ -13,7 +14,7 @@ export function StaleNotice({ sources }: { sources: ConnectionId[] }) {
     <div className="stale-notice" data-testid="stale-notice" role="note">
       <IconWarning />
       <div>
-        <div>Datenstand zu alt, um das zu beurteilen</div>
+        <div>{notConnected(sources, state.connections) ? 'Noch nicht verbunden' : 'Datenstand zu alt, um das zu beurteilen'}</div>
         {labels.length > 0 && <div className="stale-notice-sources">Quelle: {labels.join(', ')}</div>}
       </div>
     </div>

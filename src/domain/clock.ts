@@ -10,14 +10,25 @@ const TZ = 'Europe/Berlin';
 export const DEMO_NOW = new Date('2026-11-12T09:30:00+01:00');
 
 let override: Date | null = null;
+let clockMode: 'demo' | 'real' = 'demo';
+
+export function setClockMode(m: 'demo' | 'real'): void {
+  clockMode = m;
+}
+
+/** Echte Systemzeit. Die einzige Stelle in src/domain, die `new Date()` für die aktuelle Zeit aufruft. */
+export function realNow(): Date {
+  return new Date();
+}
 
 export function setNowForTests(d: Date | null): void {
   override = d;
 }
 
-/** Aktuelle Zeit: Test-Override, dann ?now= (nur Browser), sonst DEMO_NOW. */
+/** Aktuelle Zeit: Test-Override, im Echtmodus die echte Uhr, dann ?now= (nur Browser), sonst DEMO_NOW. */
 export function now(): Date {
   if (override) return override;
+  if (clockMode === 'real') return realNow();
   if (typeof window !== 'undefined') {
     const raw = new URLSearchParams(window.location.search).get('now');
     if (raw) {

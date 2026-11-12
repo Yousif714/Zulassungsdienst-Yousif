@@ -1,10 +1,12 @@
-import { demoPaymentLink } from '@/ai/demo-ai';
-import type { AIProvider } from '@/ai/provider';
+import type { AIProvider, AITools } from './ai-port';
+import { newId } from './ids';
+import { reminderAction, reminderActionId } from './action-factory';
 import { REJECT_REASON_DE, approve } from './actions/machine';
 import { todayBerlin } from './clock';
 import { memberView } from './detectors';
-import type { StoreEvent } from './events';
+import type { InboundChannel, StoreEvent } from './events';
 import { normalizePhone, validPhone } from './matching/messages';
+import { paymentLinkFor } from './payment-link';
 import type { Action, AppState, AssistantMessage, Contact, MemberContract } from './types';
 
 type Button = NonNullable<AssistantMessage['buttons']>[number];
@@ -27,54 +29,58 @@ const isReminderCommand = (text: string) => {
   return t.includes('schick') && t.includes('erinnerung');
 };
 
-/** Die Antwort wird über `assistantOutbound` zugestellt; sie ist das letzte Ereignis. Die Id entspricht der, die der Store vergibt. */
+/** Die Antwort wird über `assistantOutbound` zugestellt; sie ist das letzte Ereignis. Die Id wird hier vergeben und im Ereignis mitgegeben. */
 /** Links reisen strukturiert an der Nachricht (die Oberfläche zeigt sie als Karten), nicht als Text. */
 function deliver(
   s: AppState, events: StoreEvent[], text: string, at: Date, extra: { buttons?: Button[]; links?: LinkRef[] } = {},
 ): { events: StoreEvent[]; reply: AssistantMessage } {
-  const chatEvents = events.filter((e) => e.type === 'assistantInbound' || e.type === 'assistantOutbound').length;
   const { buttons, links } = extra;
   const more = { ...(buttons ? { buttons } : {}), ...(links?.length ? { links } : {}) };
   const reply: AssistantMessage = {
-    id: `am-${s.assistantChat.length + chatEvents + 1}`, direction: 'to_owner', from: 'Nexus Assistent', text, at: at.toISOString(), ...more,
+    id: newId(), direction: 'to_owner', from: 'Nexus Assistent', text, at: at.toISOString(), ...more,
   };
-  return { events: [...events, { type: 'assistantOutbound', text, ...more }], reply };
+  return { events: [...events, { type: 'assistantOutbound', id: reply.id, text, ...more }], reply };
 }
 
+/**
+ * `channel`: `'whatsapp'` prüft den Absender gegen die Inhaber-Nummer (ohne gültige Nummer gilt niemand als Inhaber).
+ * `'app'` nur für Eingaben aus einer angemeldeten Sitzung: der Absender ist dort bereits als Inhaber authentifiziert.
+ * `isDemo`: Kennzeichen neu angelegter Entwürfe.
+ */
+export type InboundOptions = { channel: InboundChannel; isDemo: boolean };
+
 export async function handleInbound(
-  s: AppState, from: string, text: string, now: Date, ai: AIProvider,
+  s: AppState, from: string, text: string, now: Date, ai: AIProvider, tools: AITools, opts: InboundOptions,
 ): Promise<{ events: StoreEvent[]; reply: AssistantMessage | null }> {
-  const inbound: StoreEvent = { type: 'assistantInbound', from, text };
-  // Der Store legt fremde Absender als `ignored` ab und protokolliert sie. Ohne gültige Inhaber-Nummer gilt niemand als Inhaber.
-  const owner = validPhone(s.settings.ownerPhone);
-  if (owner === null || normalizePhone(from) !== owner) return { events: [inbound], reply: null };
+  const inbound: StoreEvent = { type: 'assistantInbound', from, text, ...(opts.channel === 'app' ? { channel: 'app' as const } : {}) };
+  // Der Store legt fremde Absender als `ignored` ab und protokolliert sie.
+  if (opts.channel !== 'app') {
+    const owner = validPhone(s.settings.ownerPhone);
+    if (owner === null || normalizePhone(from) !== owner) return { events: [inbound], reply: null };
+  }
 
   const member = isReminderCommand(text) ? findMember(s, text) : null;
   if (member) {
     const { contract, contact } = member;
     const status = memberView(s, contract.id, todayBerlin(now)).status;
     if (status.arrearsCents === 0) return deliver(s, [inbound], `${contact.name} hat keinen Rückstand – keine Erinnerung nötig.`, now);
-    const id = `reminder-${contract.id}-${status.oldestUnpaidDue ?? 'none'}`;
+    const id = reminderActionId(contract.id, status.oldestUnpaidDue);
     const stored = s.actions.find((a) => a.id === id);
     if (stored && stored.status !== 'draft') {
       return deliver(s, [inbound], `Die Erinnerung an ${contact.name} ist schon freigegeben.`, now, {
         links: [{ label: contact.name, href: `/nexus/mitglieder/${contract.id}` }],
       });
     }
-    const action: Action = stored ?? {
-      id, type: 'send_reminder', company: 'nexus', title: `Erinnerung an ${contact.name}`,
-      payload: {
-        threadId: `t-${contact.id}`, channel: 'whatsapp', contactId: contact.id,
-        text: await ai.draftReminder(contact, status, 'freundlich', demoPaymentLink(contract.id)),
-      },
-      version: 1, status: 'draft', createdAt: now.toISOString(), isDemo: true, insightKey: `overdue:${contract.id}`,
-    };
+    const action: Action = stored ?? reminderAction({
+      contract, contact, status, at: now, isDemo: opts.isDemo,
+      text: await ai.draftReminder({ contact, status, tone: 'freundlich', paymentLink: paymentLinkFor(contract.id) }),
+    });
     const buttons: Button[] = (['Senden', 'Ändern', 'Später'] as const).map((label) => ({ label, actionId: id, version: action.version, issuedAt: now.toISOString() }));
     const events: StoreEvent[] = stored ? [inbound] : [inbound, { type: 'createAction', action }];
     return deliver(s, events, `Entwurf: ${action.title}\n\n${String(action.payload.text ?? '')}`, now, { buttons });
   }
 
-  const ans = await ai.answer(text, s, now);
+  const ans = await ai.answer(text, { now, tools });
   return deliver(s, [inbound], ans.text, now, { links: ans.links });
 }
 
@@ -86,6 +92,12 @@ function editHref(s: AppState, a: Action): string {
   return p.threadId ? `/nachrichten/${p.threadId}` : '/';
 }
 
+/** Link „Entwurf öffnen“ zu einer Aktion (Knopf „Ändern“ und Echtmodus-Chat ohne Knöpfe); null, wenn es sie nicht gibt. */
+export function draftLink(s: AppState, actionId: string): LinkRef | null {
+  const a = s.actions.find((x) => x.id === actionId);
+  return a ? { label: 'Entwurf öffnen', href: editHref(s, a) } : null;
+}
+
 const invalid = (reason: string) => `Dieser Knopf ist nicht mehr gültig (${reason.replace(/\.$/, '')}). Ich habe nichts gesendet.`;
 
 export function handleButton(s: AppState, b: Button, now: Date): { events: StoreEvent[]; reply: AssistantMessage } {
@@ -94,7 +106,7 @@ export function handleButton(s: AppState, b: Button, now: Date): { events: Store
 
   if (b.label === 'Später') return deliver(s, [], 'Okay, ich erinnere dich später.', now);
   if (b.label === 'Ändern') {
-    return deliver(s, [], 'Zum Ändern öffne den Entwurf in der App.', now, { links: [{ label: 'Entwurf öffnen', href: editHref(s, a) }] });
+    return deliver(s, [], 'Zum Ändern öffne den Entwurf in der App.', now, { links: [draftLink(s, a.id)!] });
   }
 
   const approveEvent: StoreEvent = { type: 'approveAction', id: a.id, version: b.version, via: 'whatsapp', buttonIssuedAt: b.issuedAt };
@@ -102,5 +114,5 @@ export function handleButton(s: AppState, b: Button, now: Date): { events: Store
   // Auch die Ablehnung läuft durch den Store, damit sie im Protokoll steht.
   if (!r.ok) return deliver(s, [approveEvent], invalid(REJECT_REASON_DE[r.reason]), now);
   const contact = s.contacts.find((c) => c.id === (a.payload as { contactId?: string }).contactId);
-  return deliver(s, [approveEvent, { type: 'actionExecuted', id: a.id, result: 'ok' }], `Gesendet (Demo): ${contact?.name ?? a.title}`, now);
+  return deliver(s, [approveEvent], `Gesendet (Demo): ${contact?.name ?? a.title}`, now);
 }

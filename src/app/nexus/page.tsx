@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 
-import { DemoBadge } from '@/components/DemoBadge';
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { MoneyCard } from '@/components/MoneyCard';
@@ -34,7 +33,7 @@ export default function NexusPage() {
 
   return (
     <>
-      <PageHeader title="NEXUS" badge={<DemoBadge />} />
+      <PageHeader title="NEXUS" />
 
       <section className="money-cards" aria-label="Geld">
         <MoneyCard company="nexus" openCents={money.openCents} overdueCents={money.overdueCents} stale={areaStale(MONEY_SOURCES.nexus, state.connections, at)} />

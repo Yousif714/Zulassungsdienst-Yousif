@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { createDemoState } from '@/data/seed';
 import { STORE_KEY, loadInitial, reducer, refresh } from '@/data/store';
+import { UnauthorizedError, createRealClient } from '@/data/real-client';
 import type { AppState, Invoice } from '@/domain/types';
 import type { Action } from '@/domain/types';
 import { openReplies } from '@/domain/matching/messages';
@@ -165,14 +166,15 @@ describe('Zusagen erkennen', () => {
     r = reducer(r, { type: 'approveAction', id: 'a-1', version: 1, via: 'app' });
     r = reducer(r, { type: 'actionExecuted', id: 'a-1', result: 'ok' });
     const msg = r.messages.at(-1)!;
-    expect(r.commitments.find((c) => c.id === `c-${msg.id}`)).toEqual({
-      id: `c-${msg.id}`, messageId: msg.id, contactId: 'd-schmidt', kind: 'invoice', text: 'Die Rechnung schicke ich Ihnen morgen.', dueAt: '2026-11-13T17:00:00.000Z', status: 'open',
+    const commitment = r.commitments.find((c) => c.messageId === msg.id)!;
+    expect(commitment).toEqual({
+      id: commitment.id, messageId: msg.id, contactId: 'd-schmidt', kind: 'invoice', text: 'Die Rechnung schicke ich Ihnen morgen.', dueAt: '2026-11-13T17:00:00.000Z', status: 'open',
     });
     const later = new Date('2026-11-14T08:00:00Z');
     const fresh = { ...r, connections: r.connections.map((c) => (c.lastSuccessAt ? { ...c, lastSuccessAt: later.toISOString() } : c)) };
     const after = refresh(fresh, later);
-    expect(after.commitments.find((c) => c.id === `c-${msg.id}`)!.status).toBe('broken');
-    expect(isOpen(after, `commit:c-${msg.id}`)).toBe(true);
+    expect(after.commitments.find((c) => c.messageId === msg.id)!.status).toBe('broken');
+    expect(isOpen(after, `commit:${commitment.id}`)).toBe(true);
   });
   test('Nachricht ohne Zusage legt nichts an', () => {
     let r = reducer(s, { type: 'createAction', action: draft() });
@@ -214,5 +216,54 @@ describe('loadInitial', () => {
     expect(r.stripReset).toBe(false);
     expect(status(r.state)).toBe('dismissed');
     expect(isOpen(r.state, 'reply:m-schmidt-in-1')).toBe(true);
+  });
+});
+
+describe('Echt-Client', () => {
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  test('schreibt nie in localStorage (STORE_KEY)', async () => {
+    const setItem = vi.fn();
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem, removeItem: vi.fn() });
+    try {
+      const f = vi.fn(async (_u: string, init?: RequestInit) => json(init?.method === 'POST' ? { state: s, created: ['x'] } : { state: s }));
+      const c = createRealClient(f as unknown as typeof fetch);
+      expect(await c.load()).toEqual(s);
+      expect(await c.dispatch({ type: 'dismissInsight', key: 'k' })).toEqual({ state: s, created: ['x'] });
+      expect(f).toHaveBeenCalledWith('/api/events', expect.objectContaining({ method: 'POST', body: JSON.stringify({ event: { type: 'dismissInsight', key: 'k' } }) }));
+      expect(setItem).not.toHaveBeenCalled();
+      expect(setItem).not.toHaveBeenCalledWith(STORE_KEY, expect.anything());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('sendet nacheinander: das zweite Ereignis erst nach der Antwort auf das erste', async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const f = vi.fn(async (_u: string, init?: RequestInit) => {
+      const type = (JSON.parse(String(init!.body)) as { event: { type: string } }).event.type;
+      order.push(`start ${type}`);
+      if (type === 'createAction') await gate;
+      order.push(`end ${type}`);
+      return json({ state: s, created: [] });
+    });
+    const c = createRealClient(f as unknown as typeof fetch);
+    const a = c.dispatch({ type: 'createAction', action: draft({ isDemo: false }) });
+    const b = c.dispatch({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' });
+    await Promise.resolve();
+    release();
+    await Promise.all([a, b]);
+    expect(order).toEqual(['start createAction', 'end createAction', 'start approveAction', 'end approveAction']);
+  });
+
+  test('401 → UnauthorizedError, sonst Fehler; ein Fehler blockiert die Warteschlange nicht', async () => {
+    const statuses = [401, 409, 200];
+    const f = vi.fn(async () => (statuses[0] === 200 ? json({ state: s, created: [] }) : json({ error: 'x' }, statuses.shift()!)));
+    const c = createRealClient(f as unknown as typeof fetch);
+    await expect(c.dispatch({ type: 'dismissInsight', key: 'k' })).rejects.toBeInstanceOf(UnauthorizedError);
+    await expect(c.dispatch({ type: 'dismissInsight', key: 'k' })).rejects.toThrow();
+    await expect(c.dispatch({ type: 'dismissInsight', key: 'k' })).resolves.toEqual({ state: s, created: [] });
   });
 });

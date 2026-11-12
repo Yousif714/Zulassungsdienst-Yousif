@@ -14,10 +14,14 @@ type Props = {
   /** Neuer Entwurfstext nach „Ändern“. Der Aufrufer schickt `editAction` (erhöht die Version). */
   onEdit: (text: string) => void;
   onLater: () => void;
+  /** Bei „fehlgeschlagen“: Aktion erneut freigeben (`retryAction`). */
+  onRetry: () => void;
+  /** Bei „Ausgang unklar“: beim Anbieter nachsehen (`checkAction`), nie ein zweites Mal senden. */
+  onCheck: () => void;
 };
 
 /** Vorbereitete Aktion mit Entwurf: Senden (Demo) · Ändern · Später. Zeigt nach der Ausführung das Ergebnis. */
-export function ActionSheet({ action, onSend, onEdit, onLater }: Props) {
+export function ActionSheet({ action, onSend, onEdit, onLater, onRetry, onCheck }: Props) {
   const text = typeof action.payload.text === 'string' ? action.payload.text : '';
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(text);
@@ -95,6 +99,17 @@ export function ActionSheet({ action, onSend, onEdit, onLater }: Props) {
         <div className="action-sheet-buttons">
           <button type="button" className="btn btn-primary" onClick={() => stopEdit(true)}>Übernehmen</button>
           <button type="button" className="btn btn-plain" onClick={() => stopEdit(false)}>Abbrechen</button>
+        </div>
+      )}
+
+      {action.status === 'failed' && (
+        <div className="action-sheet-buttons">
+          <button type="button" className="btn btn-secondary" onClick={onRetry}>Erneut versuchen</button>
+        </div>
+      )}
+      {action.status === 'uncertain' && (
+        <div className="action-sheet-buttons">
+          <button type="button" className="btn btn-secondary" onClick={onCheck}>Prüfen</button>
         </div>
       )}
 

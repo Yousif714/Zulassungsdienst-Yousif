@@ -2,11 +2,11 @@
 
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 
-import { demoAI } from '@/ai/demo-ai';
 import { DemoBadge } from '@/components/DemoBadge';
 import { Bubble, ContactHeader, LinkCards, RichText, TimeStamp, TypingBubble, placeMessages, type Placed } from '@/components/Messages';
+import { useAI } from '@/data/ai-client';
 import { useAppStore } from '@/data/store';
-import { handleInbound } from '@/domain/assistant';
+import { draftLink } from '@/domain/assistant';
 import { buildBriefing, renderBriefingText } from '@/domain/briefing';
 import { formatBerlin, now, todayBerlin } from '@/domain/clock';
 import { chooseDelivery } from '@/domain/scheduler';
@@ -25,7 +25,13 @@ function stampLabel(iso: string): string {
   return todayBerlin(d) === todayBerlin(now()) ? `Heute ${formatBerlin(d, 'HH:mm')}` : formatBerlin(d, 'dd.MM. HH:mm');
 }
 
-function Message({ p, fresh, onButton }: { p: Placed<AssistantMessage>; fresh: boolean; onButton: (b: Button) => void }) {
+type LinkRef = NonNullable<AssistantMessage['links']>[number];
+
+/**
+ * `onButton` fehlt im Echtmodus: Knopf-Freigaben kommen dort nur über WhatsApp (Webhook), nicht aus der App.
+ * Statt der Knöpfe zeigt der Echtmodus `draft`, den Link „Entwurf öffnen“.
+ */
+function Message({ p, fresh, onButton, draft }: { p: Placed<AssistantMessage>; fresh: boolean; onButton?: (b: Button) => void; draft?: LinkRef | null }) {
   const m = p.item;
   if (m.direction === 'ignored') {
     return (
@@ -38,7 +44,8 @@ function Message({ p, fresh, onButton }: { p: Placed<AssistantMessage>; fresh: b
     <li className="imsg-row" data-side={p.side} data-first={p.first} data-testid="wa-msg">
       <Bubble side={p.side} tail={p.tail} enter={fresh}><RichText text={m.text} /></Bubble>
       {m.links && <LinkCards links={m.links} />}
-      {m.buttons && (
+      {draft && <LinkCards links={[draft]} />}
+      {m.buttons && onButton && (
         <div className="imsg-pills">
           {m.buttons.map((b) => (
             <button key={b.label} type="button" className="imsg-pill" data-kind={b.label === 'Senden' ? 'primary' : undefined} onClick={() => onButton(b)}>{b.label}</button>
@@ -76,9 +83,12 @@ function useReveal(chat: AssistantMessage[]) {
 }
 
 export default function AssistentPage() {
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode } = useAppStore();
+  const ai = useAI();
+  const demo = mode === 'demo';
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const chat = state.assistantChat;
   const { visible, typing, fresh } = useReveal(chat);
@@ -87,11 +97,13 @@ export default function AssistentPage() {
     endRef.current?.scrollIntoView?.({ block: 'end' });
   }, [visible.length, typing]);
 
-  const inbound = async (from: string, text: string) => {
+  const send = async (text: string) => {
     setBusy(true);
+    setError('');
     try {
-      const r = await handleInbound(state, from, text, now(), demoAI);
-      r.events.forEach(dispatch);
+      await ai.sendToAssistant(text);
+    } catch {
+      setError('Nachricht konnte nicht gesendet werden.');
     } finally {
       setBusy(false);
     }
@@ -102,7 +114,7 @@ export default function AssistentPage() {
     const text = input.trim();
     if (!text || busy) return;
     setInput('');
-    void inbound(state.settings.ownerPhone, text);
+    void send(text);
   };
 
   const briefing = (kind: 'morning' | 'evening') => {
@@ -119,28 +131,31 @@ export default function AssistentPage() {
 
   return (
     <>
-      <ContactHeader name="Nexus Assistent" initials="NA" note={<DemoBadge />} />
+      <ContactHeader name="Nexus Assistent" initials="NA" note={demo ? <DemoBadge /> : undefined} />
 
-      <section className="list-group" aria-labelledby="wa-tools">
+      {demo && <section className="list-group" aria-labelledby="wa-tools">
         <h2 id="wa-tools" className="list-group-title">Demo-Werkzeuge</h2>
         <div className="wa-tools">
           <button type="button" className="btn btn-secondary" onClick={() => briefing('morning')}>Morgenbriefing auslösen</button>
           <button type="button" className="btn btn-secondary" onClick={() => briefing('evening')}>Abendrückblick auslösen</button>
-          <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void inbound(FOREIGN_NUMBER, 'Hallo, wer ist da?')}>
+          {/* Fremde Absender ignoriert der Assistent ohne KI; das Ereignis reicht. */}
+          <button type="button" className="btn btn-secondary" onClick={() => dispatch({ type: 'assistantInbound', from: FOREIGN_NUMBER, text: 'Hallo, wer ist da?' })}>
             Nachricht von fremder Nummer simulieren
           </button>
         </div>
-      </section>
+      </section>}
 
       <div className="wa-chat">
         {chat.length === 0 ? (
-          <p className="wa-empty">Noch keine Nachrichten. Schreib dem Assistenten oder löse ein Briefing aus.</p>
+          <p className="wa-empty">{demo ? 'Noch keine Nachrichten. Schreib dem Assistenten oder löse ein Briefing aus.' : 'Noch keine Nachrichten. Schreib dem Assistenten.'}</p>
         ) : (
           <ol className="imsg-list" aria-live="polite">
             {placeMessages(visible, (m) => (m.direction === 'ignored' ? null : m.direction === 'from_owner' ? 'out' : 'in'), (m) => m.at).map((p) => (
               <Fragment key={p.item.id}>
                 {p.stamp && <TimeStamp dateTime={p.item.at}>{stampLabel(p.item.at)}</TimeStamp>}
-                <Message p={p} fresh={fresh.has(p.item.id)} onButton={(button) => dispatch({ type: 'assistantButton', button })} />
+                <Message p={p} fresh={fresh.has(p.item.id)}
+                  onButton={demo ? (button) => dispatch({ type: 'assistantButton', button }) : undefined}
+                  draft={!demo && p.item.buttons?.length ? draftLink(state, p.item.buttons[0].actionId) : null} />
               </Fragment>
             ))}
             {typing && <li className="imsg-row" data-side="in"><TypingBubble /></li>}
@@ -149,6 +164,7 @@ export default function AssistentPage() {
         <div ref={endRef} className="imsg-end" />
       </div>
 
+      {error && <p className="form-error" role="alert">{error}</p>}
       <form className="composer" onSubmit={submit}>
         <label className="visually-hidden" htmlFor="wa-input">Nachricht an den Assistenten</label>
         <input id="wa-input" data-testid="wa-input" className="composer-input" value={input} onChange={(e) => setInput(e.target.value)}

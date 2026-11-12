@@ -1,6 +1,5 @@
 'use client';
 
-import { DemoBadge } from '@/components/DemoBadge';
 import { CountFigure, Figures } from '@/components/Figures';
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
@@ -24,7 +23,7 @@ export default function ZulassungPage() {
 
   return (
     <>
-      <PageHeader title="Zulassungsdienst" subtitle={formatBerlinDe(at, 'EEEE, d. MMMM')} badge={<DemoBadge />} />
+      <PageHeader title="Zulassungsdienst" subtitle={formatBerlinDe(at, 'EEEE, d. MMMM')} />
 
       <Figures title="Heute" columns={4}>
         <CountFigure label="Heute erledigt" value={kpis.doneToday} testId="kpi-done-today" />

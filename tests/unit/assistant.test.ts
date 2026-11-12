@@ -1,26 +1,33 @@
 import { describe, expect, test } from 'vitest';
-import { demoAI, demoPaymentLink } from '@/ai/demo-ai';
+import { demoAI } from '@/ai/demo-ai';
+import { createStateTools } from '@/ai/tools';
+import { paymentLinkFor } from '@/domain/payment-link';
 import { createDemoState } from '@/data/seed';
 import { reducer, refresh, type StoreEvent } from '@/data/store';
-import { handleButton, handleInbound } from '@/domain/assistant';
+import { draftLink, handleButton, handleInbound } from '@/domain/assistant';
 import type { AppState } from '@/domain/types';
-import { NOW_0930 as NOW } from './helpers';
+import { NOW_0930 as NOW, drain } from './helpers';
 
 const apply = (st: AppState, events: StoreEvent[]) => events.reduce(reducer, st);
 const s = refresh(createDemoState(), NOW);
 const OWNER = '+491510000000';
+/** WhatsApp-Kanal im Demo-Modus: Absender wird gegen die Inhaber-Nummer geprüft. */
+const WA = { channel: 'whatsapp', isDemo: true } as const;
+/** Ausgehende Nachricht mit dem Text der Aktion (IDs sind UUIDs und tragen keine Aktions-ID mehr). */
+const isSentOf = (st: AppState, actionId: string, m: AppState['messages'][number]) =>
+  m.direction === 'out' && m.body === String(st.actions.find((a) => a.id === actionId)!.payload.text);
 
 describe('handleInbound', () => {
   test('Brief: fremde Nummer → kein Reply; Erinnerung mit Knöpfen; alter Knopf ungültig', async () => {
-    expect((await handleInbound(s, '+4917099999', 'Hallo', NOW, demoAI)).reply).toBeNull();
-    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI);
+    expect((await handleInbound(s, '+4917099999', 'Hallo', NOW, demoAI, createStateTools(s, NOW), WA)).reply).toBeNull();
+    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(s, NOW), WA);
     expect(r.reply!.buttons!.map((b) => b.label)).toEqual(['Senden', 'Ändern', 'Später']);
     const btn = r.reply!.buttons![0];
     expect(handleButton(apply(s, r.events), { ...btn, issuedAt: '2026-11-11T07:00:00Z' }, NOW).reply.text).toContain('nicht mehr gültig');
   });
 
   test('fremde Nummer: ignorierte Nachricht und Protokolleintrag, keine Antwort', async () => {
-    const r = await handleInbound(s, '+4917099999', 'Hallo, wer ist da?', NOW, demoAI);
+    const r = await handleInbound(s, '+4917099999', 'Hallo, wer ist da?', NOW, demoAI, createStateTools(s, NOW), WA);
     const st = apply(s, r.events);
     expect(st.assistantChat).toHaveLength(1);
     expect(st.assistantChat[0]).toMatchObject({ direction: 'ignored', from: '+4917099999' });
@@ -30,7 +37,7 @@ describe('handleInbound', () => {
   });
 
   test('Erinnerung ohne Rückstand: keine Aktion, kurze Antwort', async () => {
-    const r = await handleInbound(s, OWNER, 'Schick Anna Schulz die Erinnerung', NOW, demoAI);
+    const r = await handleInbound(s, OWNER, 'Schick Anna Schulz die Erinnerung', NOW, demoAI, createStateTools(s, NOW), WA);
     expect(r.reply!.text).toBe('Anna Schulz hat keinen Rückstand – keine Erinnerung nötig.');
     expect(r.reply!.buttons).toBeUndefined();
     expect(r.events.some((e) => e.type === 'createAction')).toBe(false);
@@ -38,19 +45,19 @@ describe('handleInbound', () => {
   });
 
   test('Inhaber mit anderer Schreibweise der Nummer wird erkannt', async () => {
-    const r = await handleInbound(s, '0151 0000000', 'Wer ist überfällig?', NOW, demoAI);
+    const r = await handleInbound(s, '0151 0000000', 'Wer ist überfällig?', NOW, demoAI, createStateTools(s, NOW), WA);
     expect(r.reply).not.toBeNull();
   });
 
   test('Erinnerung: Entwurf mit Task-14-Id, Payload, Knöpfe mit Version und Zeit', async () => {
-    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI);
+    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(s, NOW), WA);
     const st = apply(s, r.events);
     const a = st.actions.find((x) => x.type === 'send_reminder')!;
     expect(a.id).toBe('reminder-mc-kaya-2026-11-01');
     expect(a.status).toBe('draft');
     const kaya = s.contacts.find((c) => c.id === 'm-kaya')!;
     const status = (await import('@/domain/detectors')).memberView(s, 'mc-kaya', '2026-11-12').status;
-    const text = await demoAI.draftReminder(kaya, status, 'freundlich', demoPaymentLink('mc-kaya'));
+    const text = await demoAI.draftReminder({ contact: kaya, status, tone: 'freundlich', paymentLink: paymentLinkFor('mc-kaya') });
     expect(a.payload).toEqual({ threadId: 't-m-kaya', channel: 'whatsapp', contactId: 'm-kaya', text });
     expect(r.reply!.text).toContain(text);
     expect(r.reply!.buttons).toEqual(['Senden', 'Ändern', 'Später'].map((label) => ({ label, actionId: a.id, version: 1, issuedAt: NOW.toISOString() })));
@@ -59,8 +66,8 @@ describe('handleInbound', () => {
   });
 
   test('Frage geht an ai.answer, Links strukturiert an der Nachricht', async () => {
-    const r = await handleInbound(s, OWNER, 'Wer ist überfällig?', NOW, demoAI);
-    const ans = await demoAI.answer('Wer ist überfällig?', s, NOW);
+    const r = await handleInbound(s, OWNER, 'Wer ist überfällig?', NOW, demoAI, createStateTools(s, NOW), WA);
+    const ans = await demoAI.answer('Wer ist überfällig?', { now: NOW, tools: createStateTools(s, NOW) });
     expect(ans.links.length).toBeGreaterThan(0);
     expect(r.reply!.text).toBe(ans.text);
     expect(r.reply!.links).toEqual(ans.links);
@@ -73,19 +80,18 @@ describe('handleInbound', () => {
 
 describe('handleButton', () => {
   async function withDraft() {
-    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI);
+    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(s, NOW), WA);
     return { st: apply(s, r.events), buttons: r.reply!.buttons! };
   }
 
   test('Senden → freigegeben über WhatsApp, ausgeführt, „Gesendet (Demo)“', async () => {
     const { st, buttons } = await withDraft();
     const r = handleButton(st, buttons[0], NOW);
-    expect(r.events.slice(0, 2)).toEqual([
+    expect(r.events.slice(0, 1)).toEqual([
       { type: 'approveAction', id: buttons[0].actionId, version: 1, via: 'whatsapp', buttonIssuedAt: buttons[0].issuedAt },
-      { type: 'actionExecuted', id: buttons[0].actionId, result: 'ok' },
     ]);
     expect(r.reply.text).toBe('Gesendet (Demo): Mehmet Kaya');
-    const after = apply(st, r.events);
+    const after = await drain(apply(st, r.events));
     expect(after.actions.find((a) => a.id === buttons[0].actionId)).toMatchObject({ status: 'executed', approvedVia: 'whatsapp' });
     expect(after.assistantChat.at(-1)).toMatchObject({ direction: 'to_owner', text: 'Gesendet (Demo): Mehmet Kaya' });
     // Knopfdruck erzeugt keine Inhaber-Nachricht
@@ -94,8 +100,8 @@ describe('handleButton', () => {
 
   test('schon freigegebene Erinnerung → Hinweis mit Link zur Mitgliedsseite', async () => {
     const { st, buttons } = await withDraft();
-    const sent = apply(st, handleButton(st, buttons[0], NOW).events);
-    const r = await handleInbound(sent, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI);
+    const sent = await drain(apply(st, handleButton(st, buttons[0], NOW).events));
+    const r = await handleInbound(sent, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(sent, NOW), WA);
     expect(r.reply!.text).toBe('Die Erinnerung an Mehmet Kaya ist schon freigegeben.');
     expect(r.reply!.links).toEqual([{ label: 'Mehmet Kaya', href: '/nexus/mitglieder/mc-kaya' }]);
     expect(apply(sent, r.events).assistantChat.at(-1)!.links).toEqual(r.reply!.links);
@@ -103,11 +109,11 @@ describe('handleButton', () => {
 
   test('derselbe Knopf zweimal → nicht mehr gültig, nichts gesendet', async () => {
     const { st, buttons } = await withDraft();
-    const once = apply(st, handleButton(st, buttons[0], NOW).events);
+    const once = await drain(apply(st, handleButton(st, buttons[0], NOW).events));
     const r = handleButton(once, buttons[0], NOW);
     expect(r.reply.text).toBe('Dieser Knopf ist nicht mehr gültig (Die Aktion wurde bereits freigegeben). Ich habe nichts gesendet.');
-    const after = apply(once, r.events);
-    expect(after.messages.filter((m) => m.id.startsWith(`m-out-${buttons[0].actionId}`))).toHaveLength(1);
+    const after = await drain(apply(once, r.events));
+    expect(after.messages.filter((m) => isSentOf(after, buttons[0].actionId, m))).toHaveLength(1);
   });
 
   test('abgelaufener Knopf → Grund auf Deutsch', async () => {
@@ -139,15 +145,15 @@ describe('Store: Einstellungen', () => {
 
 describe('Fix-Runde 1', () => {
   test('Doppelklick auf Senden: der Store wertet den Knopf mit dem frischesten Stand aus', async () => {
-    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI);
+    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(s, NOW), WA);
     const st = apply(s, r.events);
     const btn = r.reply!.buttons![0];
     // Beide Klicks entstehen aus demselben (veralteten) Seitenstand.
-    const after = apply(st, [{ type: 'assistantButton', button: btn }, { type: 'assistantButton', button: btn }]);
+    const after = await drain(apply(st, [{ type: 'assistantButton', button: btn }, { type: 'assistantButton', button: btn }]));
     const replies = after.assistantChat.filter((m) => m.direction === 'to_owner').map((m) => m.text);
     expect(replies.filter((t) => t.startsWith('Gesendet (Demo)'))).toHaveLength(1);
     expect(replies.at(-1)).toBe('Dieser Knopf ist nicht mehr gültig (Die Aktion wurde bereits freigegeben). Ich habe nichts gesendet.');
-    expect(after.messages.filter((m) => m.id.startsWith(`m-out-${btn.actionId}`))).toHaveLength(1);
+    expect(after.messages.filter((m) => isSentOf(after, btn.actionId, m))).toHaveLength(1);
     expect(after.assistantChat.filter((m) => m.direction === 'from_owner')).toHaveLength(1);
   });
 
@@ -164,9 +170,52 @@ describe('Fix-Runde 1', () => {
   test('ohne Inhaber-Nummer wird jede Nachricht ignoriert, auch ein leerer Absender', async () => {
     const noOwner = { ...s, settings: { ...s.settings, ownerPhone: '' } };
     for (const from of ['', OWNER]) {
-      const r = await handleInbound(noOwner, from, 'Wer ist überfällig?', NOW, demoAI);
+      const r = await handleInbound(noOwner, from, 'Wer ist überfällig?', NOW, demoAI, createStateTools(noOwner, NOW), WA);
       expect(r.reply).toBeNull();
       expect(apply(noOwner, r.events).assistantChat.at(-1)!.direction).toBe('ignored');
     }
+  });
+});
+
+describe('In-App-Kanal (angemeldeter Inhaber) und isDemo', () => {
+  const noOwner = { ...s, settings: { ...s.settings, ownerPhone: '' } };
+  const APP = { channel: 'app', isDemo: false } as const;
+
+  test('App-Kanal: Antwort auch ohne gespeicherte Inhaber-Nummer, Eingang als Inhaber-Nachricht', async () => {
+    const r = await handleInbound(noOwner, 'App', 'Wer ist überfällig?', NOW, demoAI, createStateTools(noOwner, NOW), APP);
+    expect(r.reply).not.toBeNull();
+    const chat = apply(noOwner, r.events).assistantChat.slice(-2);
+    expect(chat.map((m) => m.direction)).toEqual(['from_owner', 'to_owner']);
+    expect(chat[0].text).toBe('Wer ist überfällig?');
+  });
+
+  test('WhatsApp-Kanal bleibt geschützt: fremde Nummer und fehlende Inhaber-Nummer → ignoriert', async () => {
+    for (const st of [s, noOwner]) {
+      const r = await handleInbound(st, '+4917099999', 'Hallo', NOW, demoAI, createStateTools(st, NOW), { channel: 'whatsapp', isDemo: false });
+      expect(r.reply).toBeNull();
+      expect(apply(st, r.events).assistantChat.at(-1)!.direction).toBe('ignored');
+    }
+  });
+
+  test('Store: Eingang ohne App-Kanal von fremder Nummer bleibt ignoriert', () => {
+    const st = reducer(noOwner, { type: 'assistantInbound', from: '+4917099999', text: 'Hallo' });
+    expect(st.assistantChat.at(-1)!.direction).toBe('ignored');
+  });
+
+  test('isDemo wird an den Erinnerungsentwurf weitergegeben', async () => {
+    for (const isDemo of [true, false]) {
+      const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(s, NOW), { channel: 'whatsapp', isDemo });
+      const created = r.events.find((e) => e.type === 'createAction');
+      expect(created?.type === 'createAction' && created.action.isDemo).toBe(isDemo);
+    }
+  });
+
+  test('draftLink: derselbe Entwurfs-Link wie beim Knopf „Ändern“', async () => {
+    const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(s, NOW), WA);
+    const st = apply(s, r.events);
+    const id = r.reply!.buttons![0].actionId;
+    expect(draftLink(st, id)).toEqual({ label: 'Entwurf öffnen', href: '/nexus/mitglieder/mc-kaya' });
+    expect(handleButton(st, r.reply!.buttons![1], NOW).reply.links).toEqual([draftLink(st, id)]);
+    expect(draftLink(st, 'gibt-es-nicht')).toBeNull();
   });
 });

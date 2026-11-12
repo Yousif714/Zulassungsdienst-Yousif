@@ -1,18 +1,83 @@
 'use client';
 
 import { useState } from 'react';
+import { startRegistration } from '@simplewebauthn/browser';
 
 import { DemoBadge } from '@/components/DemoBadge';
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
+import { signOut, useMode } from '@/data/mode';
 import { useAppStore } from '@/data/store';
 import { validPhone } from '@/domain/matching/messages';
 
+async function postJson(url: string, body?: unknown): Promise<{ ok: boolean; data: Record<string, unknown> }> {
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+  return { ok: res.ok, data: (await res.json().catch(() => ({}))) as Record<string, unknown> };
+}
+
+/** Konto (nur angemeldet): Demo-Schalter, weiterer Passkey, neue Wiederherstellungscodes (einmal sichtbar), Abmelden. */
+function AccountGroup({ demo, setDemo, setStatus }: { demo: boolean; setDemo(on: boolean): void; setStatus(s: string): void }) {
+  const [busy, setBusy] = useState(false);
+  const [codes, setCodes] = useState<string[] | null>(null);
+
+  const run = async (fn: () => Promise<string>, fallback: string) => {
+    setBusy(true);
+    setStatus('');
+    try {
+      setStatus(await fn());
+    } catch {
+      setStatus(fallback);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addPasskey = () => run(async () => {
+    const opts = await postJson('/api/auth/register/options');
+    if (!opts.ok) return 'Passkey konnte nicht hinzugefügt werden.';
+    const response = await startRegistration({ optionsJSON: opts.data as never });
+    const done = await postJson('/api/auth/register/verify', { response });
+    return done.ok ? 'Passkey hinzugefügt.' : 'Passkey konnte nicht hinzugefügt werden.';
+  }, 'Passkey konnte nicht hinzugefügt werden.');
+
+  const newCodes = () => run(async () => {
+    const r = await postJson('/api/auth/recovery-codes');
+    if (!r.ok) return 'Neue Codes nicht möglich.';
+    setCodes(r.data.recoveryCodes as string[]);
+    return 'Neue Codes jetzt sicher speichern: Sie werden nur einmal angezeigt. Die alten gelten nicht mehr.';
+  }, 'Neue Codes nicht möglich.');
+
+  const logout = () => run(async () => ((await signOut()) ? '' : 'Abmelden nicht möglich: Server nicht erreichbar.'), 'Abmelden nicht möglich.');
+
+  return (
+    <>
+      <ListGroup title="Konto" testId="account-group">
+        <ListRow key="demo-mode" title={<label className="wrap-text" htmlFor="set-demo">Demo-Modus</label>}
+          subtitle={<span className="wrap-text">{"Beispieldaten statt deiner echten Daten"}</span>}
+          accessory={<input id="set-demo" type="checkbox" role="switch" className="switch" checked={demo}
+            onChange={(e) => setDemo(e.target.checked)} />} />
+        <ListRow key="passkey" title={<span className="wrap-text">Passkey</span>} subtitle={<span className="wrap-text">{"Für ein weiteres Gerät"}</span>}
+          accessory={<button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={addPasskey}>Passkey hinzufügen</button>} />
+        <ListRow key="codes" title={<span className="wrap-text">Codes</span>}
+          accessory={<button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={newCodes}>Neue Wiederherstellungscodes</button>} />
+        <ListRow key="logout" title={<span className="wrap-text">Dieses Gerät</span>}
+          accessory={<button type="button" className="btn btn-secondary btn-small destructive" disabled={busy} onClick={logout}>Abmelden</button>} />
+      </ListGroup>
+      {codes && (
+        <ListGroup title="Neue Wiederherstellungscodes" testId="recovery-codes">
+          {codes.map((c) => <ListRow key={c} title={<code>{c}</code>} />)}
+        </ListGroup>
+      )}
+    </>
+  );
+}
+
 export default function EinstellungenPage() {
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode } = useAppStore();
+  const { authenticated, setDemo } = useMode();
   const { settings } = state;
-  const [resetDone, setResetDone] = useState(false);
+  const [status, setStatus] = useState('');
 
   const commitThreshold = (raw: string, el: HTMLInputElement) => {
     const n = Number(raw);
@@ -60,13 +125,17 @@ export default function EinstellungenPage() {
           </button>} />
       </ListGroup>
 
-      <ListGroup title="Demo">
-        <ListRow key="reset" title={<span className="wrap-text">Alle Demo-Daten auf den Anfang</span>} subtitle={<DemoBadge />}
-          accessory={<button type="button" className="btn btn-secondary btn-small destructive" onClick={() => { dispatch({ type: 'resetDemo' }); setResetDone(true); }}>
-            Demo zurücksetzen
-          </button>} />
-      </ListGroup>
-      <p role="status" className="settings-status">{resetDone ? 'Demo-Daten wurden zurückgesetzt.' : ''}</p>
+      {authenticated && <AccountGroup demo={mode === 'demo'} setDemo={setDemo} setStatus={setStatus} />}
+
+      {mode === 'demo' && (
+        <ListGroup title="Demo">
+          <ListRow key="reset" title={<span className="wrap-text">Alle Demo-Daten auf den Anfang</span>} subtitle={<DemoBadge />}
+            accessory={<button type="button" className="btn btn-secondary btn-small destructive" onClick={() => { dispatch({ type: 'resetDemo' }); setStatus('Demo-Daten wurden zurückgesetzt.'); }}>
+              Demo zurücksetzen
+            </button>} />
+        </ListGroup>
+      )}
+      <p role="status" className="settings-status">{status}</p>
     </>
   );
 }

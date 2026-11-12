@@ -2,7 +2,7 @@
 
 # Nexus-Assistent – Arbeitsregeln
 
-**Zuerst lesen:** `docs/PROJEKT-STAND.md` (Ziel, Architektur, Stand, nächste Schritte). Spec: `docs/superpowers/specs/2026-11-12-nexus-assistent-design.md` (verbindlich, besonders 4a). Offene Punkte: `docs/phase2-backlog.md`.
+**Zuerst lesen:** `docs/PROJEKT-STAND.md` (Ziel, Architektur, Stand, nächste Schritte). Spec: `docs/superpowers/specs/2026-11-12-nexus-assistent-design.md` (verbindlich, besonders 4a), Phase 2: `docs/superpowers/specs/2026-11-12-phase2-design.md`. Offene Punkte: `docs/phase2-backlog.md`.
 
 ## Sprache und Ton
 - Antworten an den Inhaber auf Deutsch, kurz und direkt, ohne Moralpredigt. UI-Texte Deutsch.

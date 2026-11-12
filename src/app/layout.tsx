@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 
 import { AppShell } from '@/components/AppShell';
+import { ModeProvider } from '@/data/mode';
 import { AppStoreProvider } from '@/data/store';
 
 import './globals.css';
@@ -38,9 +39,11 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="de">
       <body>
-        <AppStoreProvider>
-          <AppShell>{children}</AppShell>
-        </AppStoreProvider>
+        <ModeProvider>
+          <AppStoreProvider>
+            <AppShell>{children}</AppShell>
+          </AppStoreProvider>
+        </ModeProvider>
         {process.env.NODE_ENV === 'production' && (
           <Script id="sw-register" strategy="afterInteractive">{registerServiceWorker}</Script>
         )}

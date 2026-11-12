@@ -1,0 +1,42 @@
+import { describe, expect, test } from 'vitest';
+import { readEnv } from '@/server/env';
+
+const FULL = {
+  SUPABASE_URL: 'https://x.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'service-key',
+  SESSION_SECRET: 's'.repeat(32),
+  OWNER_SETUP_TOKEN: 'setup',
+  CRON_SECRET: 'cron',
+  APP_ORIGIN: 'https://nexus.example',
+};
+
+describe('readEnv', () => {
+  test('vollständige Umgebung wird gelesen', () => {
+    expect(readEnv(FULL)).toEqual({
+      supabaseUrl: FULL.SUPABASE_URL, supabaseServiceRoleKey: FULL.SUPABASE_SERVICE_ROLE_KEY, sessionSecret: FULL.SESSION_SECRET,
+      ownerSetupToken: 'setup', cronSecret: 'cron', appOrigin: 'https://nexus.example', testMemoryDb: false,
+    });
+  });
+
+  test('alle fehlenden Variablen werden genannt', () => {
+    expect(() => readEnv({})).toThrow('Fehlende Umgebungsvariablen: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SESSION_SECRET, OWNER_SETUP_TOKEN, CRON_SECRET, APP_ORIGIN');
+    expect(() => readEnv({ ...FULL, CRON_SECRET: '', APP_ORIGIN: undefined })).toThrow('Fehlende Umgebungsvariablen: CRON_SECRET, APP_ORIGIN');
+  });
+
+  test('ohne Supabase und ohne Testmodus → Fehler', () => {
+    const { SUPABASE_URL: _u, SUPABASE_SERVICE_ROLE_KEY: _k, ...rest } = FULL;
+    expect(() => readEnv(rest)).toThrow('Fehlende Umgebungsvariablen: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
+  });
+
+  test('Testmodus ohne Supabase ist erlaubt, aber nicht auf Vercel', () => {
+    const { SUPABASE_URL: _u, SUPABASE_SERVICE_ROLE_KEY: _k, ...rest } = FULL;
+    expect(readEnv({ ...rest, NEXUS_TEST_MEMORY_DB: '1' }).testMemoryDb).toBe(true);
+    expect(() => readEnv({ ...rest, NEXUS_TEST_MEMORY_DB: '1', VERCEL: '1' })).toThrow(/NEXUS_TEST_MEMORY_DB/);
+    expect(() => readEnv({ ...FULL, NEXUS_TEST_MEMORY_DB: '1', VERCEL: '1' })).toThrow(/NEXUS_TEST_MEMORY_DB/);
+    expect(readEnv({ ...FULL, NEXUS_TEST_MEMORY_DB: 'true' }).testMemoryDb).toBe(false);
+  });
+
+  test('SESSION_SECRET muss mindestens 32 Zeichen haben', () => {
+    expect(() => readEnv({ ...FULL, SESSION_SECRET: 's'.repeat(31) })).toThrow(/SESSION_SECRET/);
+  });
+});

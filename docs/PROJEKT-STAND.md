@@ -22,7 +22,9 @@ Kernziele:
 |---|---|
 | `docs/superpowers/specs/2026-11-12-nexus-assistent-design.md` | **Spec**: Architektur, Datenmodell, Rechenregeln (Abschnitt 4a), Abnahme (10) |
 | `docs/superpowers/plans/2026-11-12-nexus-phase1-vorschau.md` | Bauplan Phase 1 (abgeschlossen) |
+| `docs/superpowers/specs/2026-11-12-phase2-design.md` | **Spec Phase 2** (Pakete 2a–2f, Fundament-Architektur) |
 | `docs/phase2-backlog.md` | Offene Punkte und verschobene Befunde für Phase 2 |
+| `docs/setup-phase2a.md` | **Inhaber-Checkliste** Paket 2a: Supabase, Vercel, Variablen, erste Anmeldung |
 | `docs/NEXUS-Assistent-Prompt.md` | Fachliche Anforderungen (Prompt-Form) |
 | `docs/Codex-Vergleich-Prompt.md` | Zweitmeinungs-Prompt für Codex |
 | `docs/vorschau/README.md` | Anleitung für den Inhaber, Vercel/iPhone |
@@ -49,14 +51,12 @@ Kernziele:
 - Aktionen: Freigabe an Version gebunden. WhatsApp-Knopf max. 24 Std. Timeout → „Ausgang unklar“ statt Neusenden.
 
 ## Befehle
-`npm test` (Vitest, ~224) · `npx tsc --noEmit` · `npm run lint` · `npm run contrast` · `npm run e2e` (Playwright, vorher `fuser -k 3100/tcp`) · Screenshots: `SCREENSHOTS=1 npm run e2e -- tests/e2e/screenshots.spec.ts`
+`npm test` (Vitest, ~406) · `npm run test:integration` (Supabase-Testprojekt) · `npx tsc --noEmit` · `npm run lint` · `npm run contrast` · `npm run e2e` (Playwright, vorher `fuser -k 3100/tcp`) · Screenshots: `SCREENSHOTS=1 npm run e2e -- tests/e2e/screenshots.spec.ts`
 
 ## Stand & nächste Schritte
-- **Phase 1 live** (PR #1 gemergt, Vercel-Deploy läuft, Inhaber nutzt die App am iPhone).
-- **Design-Feinschliff** (PR #2): Bewegung, Wischgesten, zentrierte Titel und Karten, iMessage-Nachrichten. Vom Inhaber abgenommen, Merge durch den Inhaber.
-- Inhaber-Wünsche zum Design: flüssig und dynamisch, Titel und Texte mittig (Listen bleiben links), Apple-Stil statt KI-Look, kein Glitzer.
-- **Als Nächstes: Phase 2.** Erst Brainstorming (Reihenfolge der Verbindungen, Zugänge), dann Spec ergänzen, dann Plan.
-  - Zuerst die Architekturpunkte 1–4 aus `docs/phase2-backlog.md`.
-  - Danach lesend anbinden: Lexware ×2, Stripe, Bank-CSV, Gmail/iCloud/info@, Kalender.
-  - Dann Claude statt DemoAI, dann WhatsApp live.
-- Offen: Codex-Zweitmeinung (Prompt in `docs/Codex-Vergleich-Prompt.md`) und Gefühl der Wischgesten am echten iPhone.
+- Phase 1 + Design-Feinschliff live (PR #1, #2 gemergt).
+- **Paket 2a (Fundament) fertig** auf `claude/cool-hopper-hcnb9d`: 14 Tasks, Abschlussreview mit Fixes, 406 Unit-Tests + E2E grün, `next build` ohne Env grün. Entscheidungen in Spec Abschnitt 2, offene Punkte in `docs/phase2-backlog.md` („Offen aus Paket 2a“).
+- **Als Nächstes (Inhaber):** PR prüfen und mergen; Vercel-Team auf Pro (5-Min-Cron, sonst scheitert das Deployment); nur ein Vercel-Projekt am Repo lassen (aktuell 4); dann Supabase + Vercel nach `docs/setup-phase2a.md`.
+- **Danach (Entwickler):** `npm run test:integration` gegen Testprojekt „nexus-test“; dann Paket 2b (Verbindungen) nach Spec, Backlog-Punkte „Vor 2b/2f“ zuerst.
+- Zugänge des Inhabers: alles vorhanden außer einer zweiten WhatsApp-Nummer (erst 2e). Banken: Qonto (NEXUS, API) und Sparkasse Essen (Zulassung, CAMT-Upload). info@ beim Team, IMAP-Daten auf Anfrage. Kalender: Google und iCloud.
+- Offen: Codex-Zweitmeinung; Gefühl der Wischgesten am iPhone.
