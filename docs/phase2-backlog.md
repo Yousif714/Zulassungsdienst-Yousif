@@ -64,10 +64,28 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 ## Offen aus Paket 2a (Reviews, nicht merge-blockierend)
 
 **Vor 2b/2f fällig**
-- Auftrag und Übernahme zeigen im Echtmodus „Demo“ im Kopf.
+- ~~Auftrag und Übernahme zeigen im Echtmodus „Demo“ im Kopf.~~ (erledigt in 2b-1)
 - Antworttext „Gesendet (Demo)“ und Protokolltexte für echte Anbieter anpassen.
 - Wenn das Speichern von `actionExecuted` dreimal am Konflikt scheitert, kommt der Fehler erst nach dem Anbieter-Aufruf. Der Sweep fängt das ab. Besser wäre ein eigener Retry nur für dieses Event.
 - `recentJobRuns` und der Supabase-Client sind nur gegen Fake/Memory getestet: einmal `npm run test:integration` gegen „nexus-test“ laufen lassen.
+
+## Offen aus Paket 2b-1 (Reviews, nicht merge-blockierend)
+
+**Vor 2b-3 (Umstellung auf Stripe) fällig**
+- Stripe-Rechnungen, die mehr als 35 Tage vor der Zahlung erstellt wurden, fehlen im Import. Das ergibt einen falschen Rückstand.
+- Ein Streitfall ohne importierte Zahlung geht verloren und wird auch später nicht nachgeholt.
+- Ein natürliches Abo-Ende (`cancel_at` erreicht) löst den Hinweis „Abo gekündigt“ aus.
+
+**Vor Echtbetrieb prüfen**
+- Die Stripe-Felder (API-Version `2025-09-30.clover`, `parent.subscription_details`, `/v1/invoice_payments`) und die Lexware-Felder und -Parameter (`sort=voucherDate,ASC`, voucherlist-Felder, `updatedDate`-Filter) sind nicht gegen die Doku geprüft, weil das Netz in der Session gesperrt war. Fehler zeigen sich als Verbindungsfehler, nicht als falsche Daten.
+
+**Sonstiges**
+- Eine Erstattung, die vor ihrer Zahlung gebucht ist, wird verworfen (nur bei Datenfehlern).
+- Das Webhook-Body-Limit zählt Zeichen statt Bytes, wenn `content-length` fehlt.
+- Retry nach 429 kann die Deadline überschreiten. Livelock, wenn das Budget kürzer ist als eine Erstattungsseite. Der `get`-Wrapper ist doppelt vorhanden.
+- Ein Lexware-Statuswechsel ohne neues `updatedDate` kommt nicht an (hängt von Lexware ab).
+- `loadInitial` ergänzt alte Demo-Stände nur flach: Neue Felder in `connections`/`settings` fehlen dort.
+- E2E deckt die Ja/Nein-Frage bei reinem Namenstreffer nicht ab (nur Unit).
 
 **Vor 2e fällig**
 - Stürzt ein Tick nach `claimJobRun` ab, geht der Lauf verloren (kein Neuversuch).
