@@ -1,6 +1,7 @@
 // Prüft die Kontraste der Design-Tokens aus src/app/globals.css nach WCAG 2.x.
 // Aufruf: node scripts/contrast.mjs  → Tabelle, Exit-Code 1 bei einem Verstoß.
-// Kleine Schrift braucht 4,5:1, große (≥ 24 px oder ≥ 18,66 px fett) 3:1.
+// Kleine Schrift braucht 4,5:1, große (≥ 24 px oder ≥ 18,66 px fett) 3:1,
+// Symbole, Schalter und Fokusring (Nicht-Text) 3:1.
 
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 /** Farbe `fg` mit Deckkraft `a` über `bg` (beide RGB-Arrays). */
@@ -13,13 +14,13 @@ const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
 
 const WHITE = hex('#ffffff');
 const L = {
-  bg: hex('#f2f2f7'), elevated: hex('#ffffff'), bar: hex('#f9f9f9'), barAlpha: 0.94,
-  label2: [[60, 60, 67], 0.78], gray: hex('#6c6c70'), tint: hex('#0062c4'), tintFill: hex('#0062c4'),
+  bg: hex('#f2f2f7'), elevated: hex('#ffffff'), bar: hex('#f9f9f9'), barAlpha: 1,
+  label2: [[60, 60, 67], 0.78], gray: hex('#6c6c70'), tint: hex('#0062c4'), tintGraphic: hex('#007aff'), tintFill: hex('#006edb'),
   red: hex('#c4000f'), orange: hex('#b02e00'), demoFg: hex('#9a3c00'), green: hex('#1a6e30'),
 };
 const D = {
-  bg: hex('#000000'), elevated: hex('#1c1c1e'), bar: hex('#161617'), barAlpha: 0.94,
-  label2: [[235, 235, 245], 0.6], gray: hex('#aeaeb2'), tint: hex('#4da3ff'), tintFill: hex('#0a64d8'),
+  bg: hex('#000000'), elevated: hex('#1c1c1e'), bar: hex('#161617'), barAlpha: 1,
+  label2: [[235, 235, 245], 0.6], gray: hex('#aeaeb2'), tint: hex('#4da3ff'), tintGraphic: hex('#0a84ff'), tintFill: hex('#006edb'),
   red: hex('#ff6961'), orange: hex('#ffb340'), demoFg: hex('#ffb340'), green: hex('#30db5b'),
 };
 const fill = (t, base) => over([120, 120, 128], t === L ? 0.12 : 0.24, base);
@@ -32,15 +33,18 @@ for (const [mode, t] of [['hell', L], ['dunkel', D]]) {
   for (const [sn, s] of Object.entries(surfaces)) {
     check(`${mode}: label-2 auf ${sn}`, over(t.label2[0], t.label2[1], s), s);
     for (const k of ['tint', 'red', 'orange', 'green']) check(`${mode}: ${k} auf ${sn}`, t[k], s);
+    check(`${mode}: tint-graphic (Symbol/Fokusring) auf ${sn}`, t.tintGraphic, s, 3);
   }
   // Tab-Leiste: halbtransparent; schlimmster Fall = blaue Fläche (tint-fill) dahinter.
   for (const [behind, c] of [['bg', t.bg], ['tint-fill', t.tintFill]]) {
     const bar = over(t.bar, t.barAlpha, c);
     check(`${mode}: Tab inaktiv (gray, 10px) auf Leiste über ${behind}`, t.gray, bar);
     check(`${mode}: Tab aktiv (tint, 10px) auf Leiste über ${behind}`, t.tint, bar);
+    check(`${mode}: Tab-Symbol aktiv (tint-graphic) auf Leiste über ${behind}`, t.tintGraphic, bar, 3);
   }
-  check(`${mode}: Weiß auf tint-fill (Primärknopf, aktive Seitenleiste, eigene Blase)`, WHITE, t.tintFill);
-  check(`${mode}: Blasen-Uhrzeit (Weiß 0,9) auf tint-fill`, over(WHITE, 0.9, t.tintFill), t.tintFill);
+  check(`${mode}: Weiß auf tint-fill (Primärknopf, aktive Seitenleiste, eigene Blase, Assistenten-Knopf)`, WHITE, t.tintFill);
+  check(`${mode}: Blasen-Uhrzeit (Weiß 0,95) auf tint-fill`, over(WHITE, 0.95, t.tintFill), t.tintFill);
+  check(`${mode}: tint-fill-Fläche (Knopf) gegen bg`, t.tintFill, t.bg, 3);
   check(`${mode}: Demo-Etikett im Primärknopf (Weiß auf Schwarz 0,2 über tint-fill)`, WHITE, over(hex('#000000'), 0.2, t.tintFill));
   for (const [sn, s] of [['elevated', t.elevated], ['bg', t.bg]]) {
     check(`${mode}: Demo-Etikett (demo-fg auf orange 14 %) über ${sn}`, t.demoFg, over(t.orange, 0.14, s));

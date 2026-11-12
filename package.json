@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "e2e": "playwright test --trace off"
+    "e2e": "playwright test --trace off",
+    "contrast": "node scripts/contrast.mjs"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

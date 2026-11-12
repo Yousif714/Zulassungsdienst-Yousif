@@ -36,7 +36,7 @@ Deine Klicks werden nur in deinem Browser gespeichert.
 1. Auf **Heute** den Hinweis „Autohaus Schmidt wartet seit 3 Std.“ antippen und die Antwort **Senden**. Danach ist der Hinweis weg und steht im **Protokoll**.
 2. **NEXUS** → **Mehmet Kaya** antippen → Rechenweg ansehen → **Erinnerung vorbereiten**.
 3. Bei Mehmet Kaya **Übernahme** öffnen und zwischen den beiden Nachzahl-Arten umschalten.
-4. **NEXUS** → **Zuordnen**: die Zahlung von S. Yilmaz **bestätigen**. Dann **Überweisung simulieren** mit derselben IBAN und 300 € – sie wird automatisch zugeordnet.
+4. **NEXUS** → **Zuordnen**: zuerst beim Vorschlag für die Zahlung von S. Yilmaz auf **Bestätigen** tippen. Dann **Überweisung simulieren** öffnen und eintragen: IBAN `DE02120300000000202051`, Name `Selin Yilmaz`, Betrag `300` → **Buchen**. Die App ordnet die Zahlung jetzt selbst zu („Automatisch zugeordnet: Selin Yilmaz“).
 5. **SEELE-Call** öffnen → **Folientexte vorbereiten** → **Für Gamma kopieren**.
 6. **Zulassungsdienst** → Auftrag von Müller → passende Rechnung **zuordnen**.
 7. Unten rechts auf den Assistenten-Knopf tippen und **„Wer ist bei NEXUS überfällig?“** fragen.
@@ -49,11 +49,13 @@ oder **Einstellungen → Demo zurücksetzen**.
 
 1. Auf [vercel.com](https://vercel.com) anmelden (am einfachsten mit deinem GitHub-Konto).
 2. **Add New Project** wählen.
-3. Das GitHub-Repo **Zulassungsdienst-Yousif** auswählen (**Import**).
-4. Als Branch **`claude/cool-hopper-hcnb9d`** einstellen. Alle anderen Einstellungen so lassen.
-5. **Deploy** tippen und etwa zwei Minuten warten.
-6. Den Link, den Vercel anzeigt, auf dem iPhone in **Safari** öffnen.
-7. Unten auf **Teilen** (Quadrat mit Pfeil) tippen → **Zum Home-Bildschirm**.
+3. Das GitHub-Repo **Zulassungsdienst-Yousif** auswählen → **Import** → **Deploy**. Alle Einstellungen so lassen.
+   Achtung: Vercel nimmt dabei den Haupt-Branch (`main`). Dort ist die App noch nicht drin – die Vorschau liegt im Branch **`claude/cool-hopper-hcnb9d`**. Darum noch einer dieser zwei Wege:
+   - **Weg A (fester Link):** Im Projekt **Settings → Git → Production Branch** auf `claude/cool-hopper-hcnb9d` stellen und speichern. Dann unter **Deployments** beim obersten Eintrag **⋯ → Redeploy** tippen.
+   - **Weg B (schneller):** Im Projekt **Deployments** öffnen und den Eintrag mit dem Branch `claude/cool-hopper-hcnb9d` antippen (steht als „Preview“ da). Oben auf **Visit** tippen. Steht dort noch kein solcher Eintrag, nimm Weg A.
+4. Etwa zwei Minuten warten, bis der Eintrag „Ready“ zeigt.
+5. Den Link auf dem iPhone in **Safari** öffnen.
+6. Unten auf **Teilen** (Quadrat mit Pfeil) tippen → **Zum Home-Bildschirm**.
 
 Jetzt liegt die App wie eine normale App auf deinem Home-Bildschirm.
 

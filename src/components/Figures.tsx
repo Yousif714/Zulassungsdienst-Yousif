@@ -12,10 +12,10 @@ export function Figures({ title, children, columns }: { title: string; children:
   );
 }
 
-/** Eine Kennzahl: Bezeichnung und Betrag (`testId` am Betrag). */
-export function Figure({ label, cents, testId, strong }: { label: string; cents: number; testId: string; strong?: boolean }) {
+/** Eine Kennzahl: Bezeichnung und Betrag (`testId` am Betrag). `arrears`: rot, wenn > 0, sonst neutral. */
+export function Figure({ label, cents, testId, strong, arrears }: { label: string; cents: number; testId: string; strong?: boolean; arrears?: boolean }) {
   return (
-    <div className="figure" data-strong={strong}>
+    <div className="figure" data-strong={strong} data-tone={arrears ? (cents > 0 ? 'alert' : 'neutral') : undefined}>
       <dt>{label}</dt>
       <dd className="amount" data-testid={testId}>{formatEuro(cents)}</dd>
     </div>

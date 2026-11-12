@@ -92,7 +92,7 @@ export default function TakeoverPage() {
       </ListGroup>
 
       <Figures title="Stand">
-        <Figure label="Rückstand" cents={plan.arrearsCents} testId="arrears" strong />
+        <Figure label="Rückstand" cents={plan.arrearsCents} testId="arrears" strong arrears />
         <Figure label="Künftige Raten" cents={plan.futureCents} testId="future" />
         <Figure label="Offen gesamt" cents={plan.openCents} testId="open-total" strong />
       </Figures>

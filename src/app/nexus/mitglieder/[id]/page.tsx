@@ -118,7 +118,7 @@ export default function MemberPage() {
       <Figures title="Kennzahlen">
         <Figure label="Fällig bis heute" cents={status.dueCents} testId="due" />
         <Figure label="Gezahlt" cents={status.paidCents} testId="paid" />
-        <Figure label="Rückstand" cents={status.arrearsCents} testId="arrears" strong />
+        <Figure label="Rückstand" cents={status.arrearsCents} testId="arrears" strong arrears />
         <Figure label="Künftige Raten" cents={status.futureCents} testId="future" />
         <Figure label="Offen gesamt" cents={status.openCents} testId="open-total" strong />
       </Figures>
