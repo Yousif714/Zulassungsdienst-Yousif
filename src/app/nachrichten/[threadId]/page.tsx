@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 import { demoAI } from '@/ai/demo-ai';
 import { ActionSheet } from '@/components/ActionSheet';
 import { IconChevron } from '@/components/Icons';
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
+import { Bubble, RichText, TimeStamp, placeMessages } from '@/components/Messages';
 import { PageHeader } from '@/components/PageHeader';
 import { useAppStore } from '@/data/store';
 import { formatBerlin, now, todayBerlin } from '@/domain/clock';
@@ -110,7 +111,7 @@ export default function ThreadPage() {
 
   const time = (m: Message) => {
     const d = new Date(m.sentAt);
-    return todayBerlin(d) === today ? formatBerlin(d, 'HH:mm') : formatBerlin(d, 'dd.MM. HH:mm');
+    return todayBerlin(d) === today ? `Heute ${formatBerlin(d, 'HH:mm')}` : formatBerlin(d, 'dd.MM. HH:mm');
   };
   const contactLink = contact && contactHref(state, contact);
 
@@ -118,12 +119,14 @@ export default function ThreadPage() {
     <>
       <PageHeader title={name} subtitle={CHANNEL_LABEL[channel]} trailing={<BackLink />} />
 
-      <ol className="bubbles" data-testid="thread-messages">
-        {messages.map((m) => (
-          <li key={m.id} className="bubble" data-direction={m.direction}>
-            <div className="bubble-body">{m.body}</div>
-            <time className="bubble-time" dateTime={m.sentAt}>{time(m)}</time>
-          </li>
+      <ol className="imsg-list" data-testid="thread-messages">
+        {placeMessages(messages, (m) => m.direction, (m) => m.sentAt).map((p) => (
+          <Fragment key={p.item.id}>
+            {p.stamp && <TimeStamp dateTime={p.item.sentAt}>{time(p.item)}</TimeStamp>}
+            <li className="imsg-row" data-side={p.side} data-first={p.first}>
+              <Bubble side={p.side} tail={p.tail}><RichText text={p.item.body} /></Bubble>
+            </li>
+          </Fragment>
         ))}
       </ol>
 

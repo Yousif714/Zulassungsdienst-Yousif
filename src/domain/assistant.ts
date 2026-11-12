@@ -8,6 +8,7 @@ import { normalizePhone, validPhone } from './matching/messages';
 import type { Action, AppState, AssistantMessage, Contact, MemberContract } from './types';
 
 type Button = NonNullable<AssistantMessage['buttons']>[number];
+type LinkRef = NonNullable<AssistantMessage['links']>[number];
 
 const words = (t: string) => t.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
@@ -27,13 +28,17 @@ const isReminderCommand = (text: string) => {
 };
 
 /** Die Antwort wird über `assistantOutbound` zugestellt; sie ist das letzte Ereignis. Die Id entspricht der, die der Store vergibt. */
-function deliver(s: AppState, events: StoreEvent[], text: string, at: Date, buttons?: Button[]): { events: StoreEvent[]; reply: AssistantMessage } {
+/** Links reisen strukturiert an der Nachricht (die Oberfläche zeigt sie als Karten), nicht als Text. */
+function deliver(
+  s: AppState, events: StoreEvent[], text: string, at: Date, extra: { buttons?: Button[]; links?: LinkRef[] } = {},
+): { events: StoreEvent[]; reply: AssistantMessage } {
   const chatEvents = events.filter((e) => e.type === 'assistantInbound' || e.type === 'assistantOutbound').length;
+  const { buttons, links } = extra;
+  const more = { ...(buttons ? { buttons } : {}), ...(links?.length ? { links } : {}) };
   const reply: AssistantMessage = {
-    id: `am-${s.assistantChat.length + chatEvents + 1}`, direction: 'to_owner', from: 'Nexus Assistent', text, at: at.toISOString(),
-    ...(buttons ? { buttons } : {}),
+    id: `am-${s.assistantChat.length + chatEvents + 1}`, direction: 'to_owner', from: 'Nexus Assistent', text, at: at.toISOString(), ...more,
   };
-  return { events: [...events, { type: 'assistantOutbound', text, ...(buttons ? { buttons } : {}) }], reply };
+  return { events: [...events, { type: 'assistantOutbound', text, ...more }], reply };
 }
 
 export async function handleInbound(
@@ -52,7 +57,9 @@ export async function handleInbound(
     const id = `reminder-${contract.id}-${status.oldestUnpaidDue ?? 'none'}`;
     const stored = s.actions.find((a) => a.id === id);
     if (stored && stored.status !== 'draft') {
-      return deliver(s, [inbound], `Die Erinnerung an ${contact.name} ist schon freigegeben. Details: /nexus/mitglieder/${contract.id}`, now);
+      return deliver(s, [inbound], `Die Erinnerung an ${contact.name} ist schon freigegeben.`, now, {
+        links: [{ label: contact.name, href: `/nexus/mitglieder/${contract.id}` }],
+      });
     }
     const action: Action = stored ?? {
       id, type: 'send_reminder', company: 'nexus', title: `Erinnerung an ${contact.name}`,
@@ -64,12 +71,11 @@ export async function handleInbound(
     };
     const buttons: Button[] = (['Senden', 'Ändern', 'Später'] as const).map((label) => ({ label, actionId: id, version: action.version, issuedAt: now.toISOString() }));
     const events: StoreEvent[] = stored ? [inbound] : [inbound, { type: 'createAction', action }];
-    return deliver(s, events, `Entwurf: ${action.title}\n\n${String(action.payload.text ?? '')}`, now, buttons);
+    return deliver(s, events, `Entwurf: ${action.title}\n\n${String(action.payload.text ?? '')}`, now, { buttons });
   }
 
   const ans = await ai.answer(text, s, now);
-  const body = [ans.text, ...ans.links.map((l) => `${l.label}: ${l.href}`)].join('\n');
-  return deliver(s, [inbound], body, now);
+  return deliver(s, [inbound], ans.text, now, { links: ans.links });
 }
 
 /** Bearbeiten-Ziel einer Aktion in der App. */
@@ -87,7 +93,9 @@ export function handleButton(s: AppState, b: Button, now: Date): { events: Store
   if (!a) return deliver(s, [], invalid('Die Aktion gibt es nicht mehr.'), now);
 
   if (b.label === 'Später') return deliver(s, [], 'Okay, ich erinnere dich später.', now);
-  if (b.label === 'Ändern') return deliver(s, [], `Zum Ändern öffne den Entwurf in der App: ${editHref(s, a)}`, now);
+  if (b.label === 'Ändern') {
+    return deliver(s, [], 'Zum Ändern öffne den Entwurf in der App.', now, { links: [{ label: 'Entwurf öffnen', href: editHref(s, a) }] });
+  }
 
   const approveEvent: StoreEvent = { type: 'approveAction', id: a.id, version: b.version, via: 'whatsapp', buttonIssuedAt: b.issuedAt };
   const r = approve(a, { version: b.version, via: 'whatsapp', buttonIssuedAt: b.issuedAt }, now);

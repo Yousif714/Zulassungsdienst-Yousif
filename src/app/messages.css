@@ -1,0 +1,263 @@
+/* Nachrichten im Stil von iMessage (Chat, WhatsApp-Assistent, Nachrichtenverlauf). */
+
+:root {
+  --imsg-in: #e9e9eb;       /* systemGray5 */
+  --imsg-out: var(--tint-fill);
+  --imsg-surface: var(--bg); /* Hintergrund hinter den Blasen – für die Aussparung am Schwänzchen */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --imsg-in: #3a3a3c;     /* systemGray4 */
+  }
+}
+
+.imsg-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.imsg-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 2px;
+}
+
+.imsg-row[data-side="out"] {
+  align-items: flex-end;
+}
+
+/* Neue Gruppe: etwas mehr Luft (wie iMessage) */
+.imsg-row[data-first="true"],
+.chat-turn > .imsg-row {
+  margin-top: 10px;
+}
+
+.imsg-bubble {
+  position: relative;
+  max-width: min(78%, 34em);
+  padding: 7px 13px 8px;
+  border-radius: 18px;
+  background: var(--imsg-in);
+  color: var(--label);
+  font-size: 17px;
+  line-height: 22px;
+  letter-spacing: -0.41px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.imsg-bubble[data-side="out"] {
+  background: var(--imsg-out);
+  color: #fff;
+}
+
+/* Schwänzchen am letzten Bubble einer Gruppe: Fläche + Aussparung in Hintergrundfarbe */
+.imsg-bubble[data-tail="true"]::before,
+.imsg-bubble[data-tail="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  height: 20px;
+}
+
+.imsg-bubble[data-side="in"][data-tail="true"]::before {
+  left: -7px;
+  width: 20px;
+  background: var(--imsg-in);
+  border-bottom-right-radius: 16px 14px;
+}
+
+.imsg-bubble[data-side="in"][data-tail="true"]::after {
+  left: -26px;
+  width: 26px;
+  background: var(--imsg-surface);
+  border-bottom-right-radius: 10px;
+}
+
+.imsg-bubble[data-side="out"][data-tail="true"]::before {
+  right: -7px;
+  width: 20px;
+  background: var(--imsg-out);
+  border-bottom-left-radius: 16px 14px;
+}
+
+.imsg-bubble[data-side="out"][data-tail="true"]::after {
+  right: -26px;
+  width: 26px;
+  background: var(--imsg-surface);
+  border-bottom-left-radius: 10px;
+}
+
+/* Inhalt über dem Schwänzchen halten */
+.imsg-bubble > * {
+  position: relative;
+  z-index: 1;
+}
+
+.imsg-amount {
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.imsg-inline-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.imsg-typing {
+  padding: 10px 14px;
+  color: var(--label-2);
+}
+
+/* Zeitstempel zwischen Gruppen */
+.imsg-stamp {
+  margin: 14px 0 4px;
+  color: var(--label-2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.imsg-list > .imsg-stamp:first-child {
+  margin-top: 4px;
+}
+
+/* Links als kleine Karten unter der Blase */
+.imsg-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 85%;
+  margin-top: 6px;
+}
+
+.imsg-row[data-side="out"] .imsg-links {
+  justify-content: flex-end;
+}
+
+.link-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px 0 14px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  color: var(--tint);
+  box-shadow: 0 0 0 0.5px var(--separator);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.24px;
+}
+
+.link-card-chevron {
+  flex: none;
+  color: var(--label-3);
+}
+
+.link-card:active {
+  background: var(--bg-pressed);
+}
+
+/* Aktionsknöpfe als iOS-Pillen unter der Blase */
+.imsg-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 6px;
+}
+
+.imsg-pill {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--fill);
+  color: var(--tint);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.24px;
+  cursor: pointer;
+}
+
+.imsg-pill[data-kind="primary"] {
+  background: var(--tint-fill);
+  color: #fff;
+}
+
+/* Kopf wie in iMessage */
+.contact-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: calc(var(--safe-top) + 20px) 0 8px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.contact-avatar {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #7c8190, #626673); /* iOS-Kontaktbild ohne Foto, Weiß ≥ 3:1 (große Schrift) */
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.contact-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.41px;
+}
+
+.contact-note {
+  color: var(--label-2);
+  font-size: 13px;
+}
+
+@media (min-width: 768px) {
+  .contact-header {
+    padding-top: calc(var(--safe-top) + 36px);
+  }
+}
+
+/* WhatsApp-Assistent: ruhiger Verlauf ohne eigene Fläche */
+.wa-chat {
+  margin: 0 0 16px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.wa-ignored {
+  margin: 10px 0 2px;
+}
+
+/* Ende des Verlaufs: beim Mitscrollen über Eingabezeile und Tab-Leiste bleiben */
+.imsg-end {
+  scroll-margin-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 84px);
+}
+
+@media (min-width: 768px) {
+  .imsg-end {
+    scroll-margin-bottom: 84px;
+  }
+}

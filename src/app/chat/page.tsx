@@ -1,13 +1,13 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { demoAI } from '@/ai/demo-ai';
 import type { ChatAnswer } from '@/ai/provider';
+import { Bubble, LinkCards, RichText, TimeStamp, TypingBubble } from '@/components/Messages';
 import { PageHeader } from '@/components/PageHeader';
 import { useAppStore } from '@/data/store';
-import { now } from '@/domain/clock';
+import { formatBerlin, now } from '@/domain/clock';
 
 const QUESTIONS = [
   'Wer ist bei NEXUS überfällig?',
@@ -18,6 +18,10 @@ const QUESTIONS = [
 ];
 
 type Turn = { id: number; question: string; answer: ChatAnswer | null };
+
+/** Kurze Denkpause mit Tipp-Indikator, damit die Antwort nicht hart hereinspringt. */
+const TYPING_MS = 750;
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export default function ChatPage() {
   const { state } = useAppStore();
@@ -35,7 +39,7 @@ export default function ChatPage() {
     if (!q) return;
     const id = nextId.current++;
     setTurns((t) => [...t, { id, question: q, answer: null }]);
-    const answer = await demoAI.answer(q, state, now());
+    const [answer] = await Promise.all([demoAI.answer(q, state, now()), pause(TYPING_MS)]);
     setTurns((t) => t.map((x) => (x.id === id ? { ...x, answer } : x)));
   };
 
@@ -58,28 +62,27 @@ export default function ChatPage() {
         </div>
       </section>
 
-      <ol className="bubbles chat-log" aria-live="polite">
+      <ol className="imsg-list chat-log" aria-live="polite">
+        {turns.length > 0 && <TimeStamp>Heute {formatBerlin(now(), 'HH:mm')}</TimeStamp>}
         {turns.map((t) => (
           <li key={t.id} className="chat-turn">
-            <div className="bubble" data-direction="out"><div className="bubble-body">{t.question}</div></div>
-            <div className="bubble" data-testid="chat-answer">
+            <div className="imsg-row" data-side="out">
+              <Bubble side="out" tail enter>{t.question}</Bubble>
+            </div>
+            <div className="imsg-row" data-side="in" data-testid="chat-answer">
               {t.answer ? (
                 <>
-                  <div className="bubble-body">{t.answer.text}</div>
-                  {t.answer.links.length > 0 && (
-                    <div className="link-chips">
-                      {t.answer.links.map((l) => <Link key={l.href + l.label} href={l.href} className="link-chip">{l.label}</Link>)}
-                    </div>
-                  )}
+                  <Bubble side="in" tail enter><RichText text={t.answer.text} /></Bubble>
+                  <LinkCards links={t.answer.links} />
                 </>
               ) : (
-                <div className="bubble-body">…</div>
+                <TypingBubble />
               )}
             </div>
           </li>
         ))}
       </ol>
-      <div ref={endRef} />
+      <div ref={endRef} className="imsg-end" />
 
       <form className="composer" onSubmit={submit}>
         <label className="visually-hidden" htmlFor="chat-input">Frage</label>

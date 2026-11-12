@@ -1,4 +1,4 @@
-import { IconSparkles } from './Icons';
+import { IconLog } from './Icons';
 import { PageHeader } from './PageHeader';
 
 /** Platzhalterseite mit großem Titel, bis der Bereich gebaut ist. */
@@ -7,7 +7,7 @@ export function Placeholder({ title }: { title: string }) {
     <>
       <PageHeader title={title} />
       <div className="empty-state">
-        <IconSparkles size={40} />
+        <IconLog size={40} />
         <div>Dieser Bereich folgt in Kürze.</div>
       </div>
     </>

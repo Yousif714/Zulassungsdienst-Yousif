@@ -54,7 +54,8 @@ export default function HeutePage() {
       <ListGroup title="Wichtig heute" testId="top-insights">
         {briefing.top.length === 0
           ? <ListRow key="empty" title="Alles erledigt." />
-          : briefing.top.map((i) => <TaskRow key={i.dedupeKey} insight={i} onDone={() => dispatch({ type: 'dismissInsight', key: i.dedupeKey })} />)}
+          : briefing.top.map((i) => <TaskRow key={i.dedupeKey} insight={i} onDone={() => dispatch({ type: 'dismissInsight', key: i.dedupeKey })}
+              onLater={() => dispatch({ type: 'snoozeInsight', key: i.dedupeKey })} />)}
         <ListRow key="all" href="/hinweise" title={`Alle Hinweise (${allOpen.length})`} testId="all-insights-link" />
       </ListGroup>
 

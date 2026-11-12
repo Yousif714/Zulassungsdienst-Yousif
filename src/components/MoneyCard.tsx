@@ -1,7 +1,10 @@
+'use client';
+
 import { formatEuro } from '@/domain/money';
 import type { Company, ConnectionId } from '@/domain/types';
 
 import { StaleNotice } from './StaleNotice';
+import { CountUp } from './CountUp';
 
 export const COMPANY_LABEL: Record<Company, string> = { nexus: 'NEXUS', zulassung: 'Zulassungsdienst' };
 
@@ -16,7 +19,7 @@ export function MoneyCard({ company, openCents, overdueCents, stale }: Props) {
         <span>{COMPANY_LABEL[company]}</span>
       </div>
       <div className="money-card-label">Offen</div>
-      <div className="money-card-amount">{formatEuro(openCents)}</div>
+      <div className="money-card-amount"><CountUp value={openCents} format={formatEuro} /></div>
       {isStale ? (
         <StaleNotice sources={stale} />
       ) : (

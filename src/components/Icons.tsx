@@ -36,9 +36,6 @@ export const IconLog = (p: IconProps) => (
 export const IconGear = (p: IconProps) => (
   <Svg {...p} strokeWidth={1.6}><path d="M12.00 4.80 L13.81 2.88 L15.56 3.41 L16.00 6.01 L17.09 6.91 L19.73 6.83 L20.59 8.44 L19.06 10.60 L19.20 12.00 L21.12 13.81 L20.59 15.56 L17.99 16.00 L17.09 17.09 L17.17 19.73 L15.56 20.59 L13.40 19.06 L12.00 19.20 L10.19 21.12 L8.44 20.59 L8.00 17.99 L6.91 17.09 L4.27 17.17 L3.41 15.56 L4.94 13.40 L4.80 12.00 L2.88 10.19 L3.41 8.44 L6.01 8.00 L6.91 6.91 L6.83 4.27 L8.44 3.41 L10.60 4.94z" /><circle cx="12" cy="12" r="3" /></Svg>
 );
-export const IconSparkles = (p: IconProps) => (
-  <Svg {...p} strokeWidth={1.6}><path d="M10 3.5l1.6 4.4a2 2 0 0 0 1.2 1.2L17.2 10.7l-4.4 1.6a2 2 0 0 0-1.2 1.2L10 17.9l-1.6-4.4a2 2 0 0 0-1.2-1.2L2.8 10.7l4.4-1.6a2 2 0 0 0 1.2-1.2z" fill="currentColor" /><path d="M18 14.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" fill="currentColor" /></Svg>
-);
 export const IconChevron = (p: IconProps) => (
   <Svg size={14} strokeWidth={2.4} {...p}><path d="M9 5l7 7-7 7" /></Svg>
 );

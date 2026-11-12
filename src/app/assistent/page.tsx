@@ -1,31 +1,32 @@
 'use client';
 
-import Link from 'next/link';
-import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { demoAI } from '@/ai/demo-ai';
 import { DemoBadge } from '@/components/DemoBadge';
-import { PageHeader } from '@/components/PageHeader';
+import { Bubble, ContactHeader, LinkCards, RichText, TimeStamp, TypingBubble, placeMessages, type Placed } from '@/components/Messages';
 import { useAppStore } from '@/data/store';
 import { handleInbound } from '@/domain/assistant';
 import { buildBriefing, renderBriefingText } from '@/domain/briefing';
-import { formatBerlin, now } from '@/domain/clock';
+import { formatBerlin, now, todayBerlin } from '@/domain/clock';
 import { chooseDelivery } from '@/domain/scheduler';
 import type { AssistantMessage } from '@/domain/types';
 
 const FOREIGN_NUMBER = '+4917099999';
 const DELIVERY_LABEL = { whatsapp_freeform: 'WhatsApp', whatsapp_template: 'WhatsApp-Vorlage', push: 'Push' } as const;
 const WINDOW_MS = 24 * 3_600_000;
+/** So lange „schreibt“ der Assistent, bevor eine neue Antwort erscheint. */
+const TYPING_MS = 750;
 
-/** Interne Pfade („/nexus/…“) im Text werden antippbare Links. */
-function linkify(text: string): ReactNode[] {
-  return text.split(/((?<=^|\s)\/[a-z][\w\-/]*)/gi).map((part, i) =>
-    /^\/[a-z]/i.test(part) ? <Link key={i} href={part}>{part}</Link> : <Fragment key={i}>{part}</Fragment>,
-  );
+type Button = NonNullable<AssistantMessage['buttons']>[number];
+
+function stampLabel(iso: string): string {
+  const d = new Date(iso);
+  return todayBerlin(d) === todayBerlin(now()) ? `Heute ${formatBerlin(d, 'HH:mm')}` : formatBerlin(d, 'dd.MM. HH:mm');
 }
 
-function Bubble({ m, onButton }: { m: AssistantMessage; onButton: (b: NonNullable<AssistantMessage['buttons']>[number]) => void }) {
-  const time = formatBerlin(new Date(m.at), 'HH:mm');
+function Message({ p, fresh, onButton }: { p: Placed<AssistantMessage>; fresh: boolean; onButton: (b: Button) => void }) {
+  const m = p.item;
   if (m.direction === 'ignored') {
     return (
       <li className="wa-ignored" data-testid="wa-ignored">
@@ -34,18 +35,44 @@ function Bubble({ m, onButton }: { m: AssistantMessage; onButton: (b: NonNullabl
     );
   }
   return (
-    <li className="wa-bubble" data-direction={m.direction} data-testid="wa-msg">
-      <div className="bubble-body">{linkify(m.text)}</div>
-      <span className="bubble-time">{time}</span>
+    <li className="imsg-row" data-side={p.side} data-first={p.first} data-testid="wa-msg">
+      <Bubble side={p.side} tail={p.tail} enter={fresh}><RichText text={m.text} /></Bubble>
+      {m.links && <LinkCards links={m.links} />}
       {m.buttons && (
-        <div className="wa-buttons">
+        <div className="imsg-pills">
           {m.buttons.map((b) => (
-            <button key={b.label} type="button" className="wa-button" onClick={() => onButton(b)}>{b.label}</button>
+            <button key={b.label} type="button" className="imsg-pill" data-kind={b.label === 'Senden' ? 'primary' : undefined} onClick={() => onButton(b)}>{b.label}</button>
           ))}
         </div>
       )}
     </li>
   );
+}
+
+/**
+ * Wie viele Nachrichten sichtbar sind. Neue Antworten des Assistenten erscheinen erst nach kurzem
+ * Tipp-Indikator; eigene und ignorierte Nachrichten sofort. Beim Öffnen ist alles sofort da.
+ */
+function useReveal(chat: AssistantMessage[]) {
+  const [shown, setShown] = useState(chat.length);
+  const [fresh, setFresh] = useState<Set<string>>(() => new Set());
+  const length = chat.length;
+  const nextIsReply = shown < length && chat[shown].direction === 'to_owner';
+
+  // Demo zurückgesetzt: Zähler während des Renderns anpassen (React-Muster für abgeleiteten Zustand).
+  if (shown > length) setShown(length);
+
+  useEffect(() => {
+    if (shown >= length) return;
+    const id = chat[shown].id;
+    const t = setTimeout(() => {
+      setFresh((f) => new Set(f).add(id));
+      setShown((n) => n + 1);
+    }, nextIsReply ? TYPING_MS : 0);
+    return () => clearTimeout(t);
+  }, [chat, shown, length, nextIsReply]);
+
+  return { visible: chat.slice(0, Math.min(shown, length)), typing: nextIsReply, fresh };
 }
 
 export default function AssistentPage() {
@@ -54,10 +81,11 @@ export default function AssistentPage() {
   const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const chat = state.assistantChat;
+  const { visible, typing, fresh } = useReveal(chat);
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: 'end' });
-  }, [chat.length]);
+  }, [visible.length, typing]);
 
   const inbound = async (from: string, text: string) => {
     setBusy(true);
@@ -91,7 +119,7 @@ export default function AssistentPage() {
 
   return (
     <>
-      <PageHeader title="Nexus Assistent" subtitle="WhatsApp, simuliert" badge={<DemoBadge />} />
+      <ContactHeader name="Nexus Assistent" initials="NA" note={<DemoBadge />} />
 
       <section className="list-group" aria-labelledby="wa-tools">
         <h2 id="wa-tools" className="list-group-title">Demo-Werkzeuge</h2>
@@ -108,13 +136,17 @@ export default function AssistentPage() {
         {chat.length === 0 ? (
           <p className="wa-empty">Noch keine Nachrichten. Schreib dem Assistenten oder löse ein Briefing aus.</p>
         ) : (
-          <ol className="wa-list" aria-live="polite">
-            {chat.map((m) => (
-              <Bubble key={m.id} m={m} onButton={(button) => dispatch({ type: 'assistantButton', button })} />
+          <ol className="imsg-list" aria-live="polite">
+            {placeMessages(visible, (m) => (m.direction === 'ignored' ? null : m.direction === 'from_owner' ? 'out' : 'in'), (m) => m.at).map((p) => (
+              <Fragment key={p.item.id}>
+                {p.stamp && <TimeStamp dateTime={p.item.at}>{stampLabel(p.item.at)}</TimeStamp>}
+                <Message p={p} fresh={fresh.has(p.item.id)} onButton={(button) => dispatch({ type: 'assistantButton', button })} />
+              </Fragment>
             ))}
+            {typing && <li className="imsg-row" data-side="in"><TypingBubble /></li>}
           </ol>
         )}
-        <div ref={endRef} />
+        <div ref={endRef} className="imsg-end" />
       </div>
 
       <form className="composer" onSubmit={submit}>

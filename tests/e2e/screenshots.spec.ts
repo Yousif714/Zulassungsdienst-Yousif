@@ -35,6 +35,9 @@ const SHOTS: Shot[] = [
     prepare: async (page) => {
       await page.getByRole('button', { name: 'Morgenbriefing auslösen' }).click();
       await expect(page.getByTestId('wa-msg').last()).toContainText('Guten Morgen');
+      await page.getByTestId('wa-input').fill('Wer ist überfällig?');
+      await page.getByTestId('wa-send').click();
+      await expect(page.getByTestId('wa-msg').last().getByRole('link', { name: 'Mehmet Kaya' })).toBeVisible();
     },
   },
 ];
@@ -42,6 +45,7 @@ const SHOTS: Shot[] = [
 async function shoot(page: Page, project: string, shot: Shot) {
   await page.goto(`${shot.path}?reset=1`);
   await shot.prepare?.(page);
+  await expect(page.locator('[data-shown]')).toHaveCount(0); // Hochzählen der Beträge abgeschlossen
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `docs/vorschau/screenshots/${project}-${shot.name}.png`, animations: 'disabled' });
 }

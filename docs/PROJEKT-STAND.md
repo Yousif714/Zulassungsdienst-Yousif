@@ -52,6 +52,11 @@ Kernziele:
 `npm test` (Vitest, ~224) · `npx tsc --noEmit` · `npm run lint` · `npm run contrast` · `npm run e2e` (Playwright, vorher `fuser -k 3100/tcp`) · Screenshots: `SCREENSHOTS=1 npm run e2e -- tests/e2e/screenshots.spec.ts`
 
 ## Stand & nächste Schritte
-- **Phase 1 fertig** (Branch `claude/cool-hopper-hcnb9d`, letzter Stand siehe `git log`). Alle 11 Abnahmen grün, Gesamtreview bestanden.
-- **Offen:** Entscheidung des Inhabers zum Branch (Merge in `main` / PR / so lassen); Vercel-Deploy durch den Inhaber; Codex-Zweitmeinung abwarten und auswerten.
-- **Phase 2 (nächster Bau):** zuerst die Architekturpunkte 1–4 aus `docs/phase2-backlog.md`. Dann lesende Anbindung: Lexware ×2, Stripe, Bank-CSV, Gmail/iCloud/info@, Kalender. Dann Claude statt DemoAI, dann WhatsApp live. Vorher Brainstorming und Spec-Ergänzung.
+- **Phase 1 live** (PR #1 gemergt, Vercel-Deploy läuft, Inhaber nutzt die App am iPhone).
+- **Design-Feinschliff** (PR #2): Bewegung, Wischgesten, zentrierte Titel und Karten, iMessage-Nachrichten. Vom Inhaber abgenommen, Merge durch den Inhaber.
+- Inhaber-Wünsche zum Design: flüssig und dynamisch, Titel und Texte mittig (Listen bleiben links), Apple-Stil statt KI-Look, kein Glitzer.
+- **Als Nächstes: Phase 2.** Erst Brainstorming (Reihenfolge der Verbindungen, Zugänge), dann Spec ergänzen, dann Plan.
+  - Zuerst die Architekturpunkte 1–4 aus `docs/phase2-backlog.md`.
+  - Danach lesend anbinden: Lexware ×2, Stripe, Bank-CSV, Gmail/iCloud/info@, Kalender.
+  - Dann Claude statt DemoAI, dann WhatsApp live.
+- Offen: Codex-Zweitmeinung (Prompt in `docs/Codex-Vergleich-Prompt.md`) und Gefühl der Wischgesten am echten iPhone.

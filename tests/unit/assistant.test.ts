@@ -58,14 +58,16 @@ describe('handleInbound', () => {
     expect(st.assistantChat[1].buttons).toEqual(r.reply!.buttons);
   });
 
-  test('Frage geht an ai.answer, Links als „Label: href“', async () => {
+  test('Frage geht an ai.answer, Links strukturiert an der Nachricht', async () => {
     const r = await handleInbound(s, OWNER, 'Wer ist überfällig?', NOW, demoAI);
     const ans = await demoAI.answer('Wer ist überfällig?', s, NOW);
-    expect(r.reply!.text).toContain(ans.text);
-    expect(r.reply!.text).toContain(`${ans.links[0].label}: ${ans.links[0].href}`);
+    expect(ans.links.length).toBeGreaterThan(0);
+    expect(r.reply!.text).toBe(ans.text);
+    expect(r.reply!.links).toEqual(ans.links);
     expect(r.reply!.buttons).toBeUndefined();
     const st = apply(s, r.events);
     expect(st.assistantChat.map((m) => [m.direction, m.text])).toEqual([['from_owner', 'Wer ist überfällig?'], ['to_owner', r.reply!.text]]);
+    expect(st.assistantChat[1].links).toEqual(ans.links);
   });
 });
 
@@ -90,6 +92,15 @@ describe('handleButton', () => {
     expect(after.assistantChat.filter((m) => m.direction === 'from_owner')).toHaveLength(1);
   });
 
+  test('schon freigegebene Erinnerung → Hinweis mit Link zur Mitgliedsseite', async () => {
+    const { st, buttons } = await withDraft();
+    const sent = apply(st, handleButton(st, buttons[0], NOW).events);
+    const r = await handleInbound(sent, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI);
+    expect(r.reply!.text).toBe('Die Erinnerung an Mehmet Kaya ist schon freigegeben.');
+    expect(r.reply!.links).toEqual([{ label: 'Mehmet Kaya', href: '/nexus/mitglieder/mc-kaya' }]);
+    expect(apply(sent, r.events).assistantChat.at(-1)!.links).toEqual(r.reply!.links);
+  });
+
   test('derselbe Knopf zweimal → nicht mehr gültig, nichts gesendet', async () => {
     const { st, buttons } = await withDraft();
     const once = apply(st, handleButton(st, buttons[0], NOW).events);
@@ -108,7 +119,9 @@ describe('handleButton', () => {
 
   test('Ändern → Link zur Mitgliedsseite; Später → später erinnern', async () => {
     const { st, buttons } = await withDraft();
-    expect(handleButton(st, buttons[1], NOW).reply.text).toContain('/nexus/mitglieder/mc-kaya');
+    const edit = handleButton(st, buttons[1], NOW).reply;
+    expect(edit.text).toBe('Zum Ändern öffne den Entwurf in der App.');
+    expect(edit.links).toEqual([{ label: 'Entwurf öffnen', href: '/nexus/mitglieder/mc-kaya' }]);
     const later = handleButton(st, buttons[2], NOW);
     expect(later.reply.text).toBe('Okay, ich erinnere dich später.');
     expect(apply(st, later.events).actions.find((a) => a.id === buttons[0].actionId)!.status).toBe('draft');

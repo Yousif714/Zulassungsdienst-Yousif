@@ -31,7 +31,7 @@
   --bar: rgb(249, 249, 249);   /* Tab-Leiste / Seitenleiste: deckend, damit nichts durch die kleine Beschriftung scheint */
   --sidebar: #f2f2f7;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.08);
-  --shadow-float: 0 2px 6px rgba(0, 0, 0, 0.12), 0 10px 30px rgba(0, 122, 255, 0.28);
+  --shadow-float: 0 2px 6px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.16);
 
   /* Wallet-Karten */
   /* Enden so dunkel, dass weiße Schrift überall ≥ 4,5:1 erreicht */
@@ -78,7 +78,7 @@
     --bar: rgb(22, 22, 23);
     --sidebar: #1c1c1e;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
-    --shadow-float: 0 2px 6px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(10, 132, 255, 0.3);
+    --shadow-float: 0 2px 6px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -304,22 +304,44 @@ a {
 }
 
 /* ------------------------------------------------------------------ Kopfzeile mit großem Titel */
+/* Großer Titel und Untertitel mittig; die Navigationszeile darüber bleibt beim Scrollen stehen
+   und zeigt dann den Titel kompakt (siehe motion.css). */
+/* display: contents – so klebt die Navigationszeile über die ganze Seite, nicht nur über den Kopf. */
 .page-header {
-  padding-top: calc(var(--safe-top) + 8px);
+  display: contents;
+}
+
+.page-header > :last-child {
   margin-bottom: 24px;
 }
 
 .page-header-bar {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) minmax(0, max-content) minmax(72px, 1fr);
   align-items: center;
   min-height: 44px;
+  text-align: left;
+}
+
+.page-header-compact {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.page-header-slot {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  display: flex;
+  align-items: center;
 }
 
 .page-header-row {
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
 }
 
 .large-title {
@@ -329,18 +351,21 @@ a {
   line-height: 41px;
   font-weight: 700;
   letter-spacing: 0.37px;
+  text-wrap: balance;
 }
 
 .page-subtitle {
-  margin: 2px 0 0;
+  margin: 4px auto 0;
+  text-align: center;
+  max-width: 34em;
   color: var(--label-2);
   font-size: 15px;
   letter-spacing: -0.24px;
+  text-wrap: balance;
 }
 
 @media (min-width: 768px) {
-  .page-header {
-    padding-top: calc(var(--safe-top) + 32px);
+  .page-header > :last-child {
     margin-bottom: 28px;
   }
 }
@@ -540,12 +565,7 @@ button.list-row:active {
 }
 
 /* ------------------------------------------------------------------ Aufgaben (Erinnerungen) */
-.task-row {
-  display: flex;
-  align-items: flex-start;
-  min-height: var(--row-min);
-}
-
+/* .task-row (Zeile, Wischen, Einklappen): siehe motion.css */
 .task-check {
   flex: none;
   display: grid;
@@ -932,8 +952,9 @@ a.task-body:active {
 }
 
 /* ------------------------------------------------------------------ Nachrichten-Verlauf */
-.page-header-bar:has(.back-button) {
-  justify-content: flex-start;
+.page-header-bar:has(.back-button) .page-header-slot {
+  grid-column: 1;
+  justify-self: start;
 }
 
 .back-button {
@@ -942,47 +963,6 @@ a.task-body:active {
 
 .back-chevron {
   transform: rotate(180deg);
-}
-
-.bubbles {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0 0 28px;
-  padding: 0;
-  list-style: none;
-}
-
-.bubble {
-  max-width: 80%;
-  padding: 8px 12px 6px;
-  border-radius: 18px;
-  background: var(--bg-elevated);
-  color: var(--label);
-  align-self: flex-start;
-  border-bottom-left-radius: 6px;
-}
-
-.bubble[data-direction="out"] {
-  align-self: flex-end;
-  background: var(--tint-fill);
-  color: #fff;
-  border-bottom-left-radius: 18px;
-  border-bottom-right-radius: 6px;
-}
-
-.bubble-body {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.bubble-time {
-  display: block;
-  margin-top: 2px;
-  font-size: 11px;
-  text-align: right;
-  opacity: 0.95;
-  font-variant-numeric: tabular-nums;
 }
 
 /* ------------------------------------------------------------------ Aktionsblatt (Entwurf + Senden) */
@@ -1530,30 +1510,6 @@ a.task-body:active {
   display: contents;
 }
 
-.link-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 8px 0 4px;
-}
-
-.link-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 22px;
-  background: var(--fill);
-  color: var(--tint);
-  font-size: 15px;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.link-chip:active {
-  background: var(--bg-pressed);
-}
-
 .composer {
   position: sticky;
   bottom: calc(var(--tabbar-h) + var(--safe-bottom, 0px) + 8px);
@@ -1596,73 +1552,10 @@ a.task-body:active {
   gap: 8px;
 }
 
-.wa-chat {
-  margin: 0 0 16px;
-  padding: 12px 10px;
-  border-radius: var(--radius-card);
-  background: color-mix(in srgb, var(--teal) 8%, var(--bg));
-}
-
 .wa-empty {
   margin: 24px 8px;
   color: var(--label-2);
   text-align: center;
-}
-
-.wa-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wa-bubble {
-  max-width: 85%;
-  padding: 8px 12px 6px;
-  border-radius: 14px;
-  border-top-left-radius: 4px;
-  background: var(--bg-elevated);
-  color: var(--label);
-  align-self: flex-start;
-  box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
-}
-
-.wa-bubble[data-direction="from_owner"] {
-  align-self: flex-end;
-  border-top-left-radius: 14px;
-  border-top-right-radius: 4px;
-  background: color-mix(in srgb, var(--green) 22%, var(--bg-elevated));
-}
-
-.wa-bubble a {
-  color: var(--tint);
-}
-
-.wa-buttons {
-  display: grid;
-  margin: 8px -12px -6px;
-  border-top: 0.5px solid var(--separator);
-}
-
-.wa-button {
-  min-height: 44px;
-  border: 0;
-  background: none;
-  color: var(--tint);
-  font: inherit;
-  font-size: 16px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.wa-button + .wa-button {
-  border-top: 0.5px solid var(--separator);
-}
-
-.wa-button:active {
-  background: var(--bg-pressed);
 }
 
 .wa-ignored {
@@ -1760,4 +1653,66 @@ a.task-body:active {
   margin: 0 16px;
   color: var(--label-2);
   font-size: 13px;
+}
+
+/* ------------------------------------------------------------------ Zentrierung */
+/* Mittig: Köpfe, Abschnittsüberschriften, Geldkarten, Kennzahlen, Briefing, leere Zustände, Meldungen.
+   Linksbündig bleiben Listen, Formulare und Chatverläufe. */
+.list-group-title {
+  text-align: center;
+}
+
+.list-group-headline {
+  flex-direction: column;
+  justify-content: center;
+}
+
+.money-card {
+  text-align: center;
+}
+
+.money-card-head {
+  justify-content: center;
+}
+
+.money-card .stale-notice,
+.briefing .stale-notice {
+  justify-content: center;
+  text-align: left;
+}
+
+.figure {
+  text-align: center;
+}
+
+.briefing {
+  text-align: center;
+}
+
+.briefing-panel {
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.coach-card {
+  text-align: center;
+}
+
+.coach-buttons {
+  justify-content: center;
+}
+
+.confirm-line,
+.settings-status,
+.empty-card {
+  text-align: center;
+}
+
+.action-sheet-result {
+  justify-content: center;
+}
+
+.chat-suggestions,
+.wa-tools {
+  justify-content: center;
 }
