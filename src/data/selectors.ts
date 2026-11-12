@@ -1,6 +1,6 @@
 import { memberView } from '@/domain/detectors';
 import { monthForecast } from '@/domain/ledger/forecast';
-import type { AppState, IsoDate, MemberContract, StoredInsight } from '@/domain/types';
+import type { AppState, Invoice, IsoDate, MemberContract, Payment, StoredInsight } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
 
 export const openInsights = (s: AppState): StoredInsight[] => s.insights.filter((i) => i.status === 'open');
@@ -50,4 +50,21 @@ export function nexusForecast(s: AppState, today: IsoDate): { expectedCents: num
     return { status: v.status, states: v.states };
   });
   return monthForecast(members, today.slice(0, 7), today);
+}
+
+/** Eingehende NEXUS-Bankzahlungen ohne Zuordnung (Stripe-Auszahlungen gehören keinem Mitglied). */
+export const unallocatedBankPayments = (s: AppState): Payment[] =>
+  s.payments.filter(
+    (p) => p.source === 'bank' && p.kind === 'incoming' && p.company === 'nexus' && !s.allocations.some((a) => a.paymentId === p.id),
+  );
+
+/** Offene Fälle „Stripe bezahlt, Lexware offen“: Rechnung und Stripe-Zahlung aus dem Hinweis. */
+export function stripeLexCases(s: AppState): { key: string; invoice: Invoice; payment: Payment }[] {
+  return openInsights(s)
+    .filter((i) => i.type === 'stripe_paid_lexware_open')
+    .flatMap((i) => {
+      const invoice = s.invoices.find((x) => x.id === i.refs.find((r) => r.kind === 'invoice')?.id);
+      const payment = s.payments.find((x) => x.id === i.refs.find((r) => r.kind === 'payment')?.id);
+      return invoice && payment ? [{ key: i.dedupeKey, invoice, payment }] : [];
+    });
 }

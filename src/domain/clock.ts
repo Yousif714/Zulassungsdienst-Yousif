@@ -68,3 +68,9 @@ export function addDaysIso(d: IsoDate, n: number): IsoDate {
 export function daysBetween(a: IsoDate, b: IsoDate): number {
   return differenceInCalendarDays(utcDay(b), utcDay(a));
 }
+
+/** Kalendertag 'YYYY-MM-DD' als 'dd.MM.yyyy' (ohne Zeitzonenumrechnung). */
+export function formatIsoDe(d: IsoDate): string {
+  const [y, m, day] = d.split('-');
+  return `${day}.${m}.${y}`;
+}
