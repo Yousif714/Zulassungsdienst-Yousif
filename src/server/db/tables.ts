@@ -70,6 +70,10 @@ export function fromRows(input: Partial<Record<TableName, Row[]>>): AppState {
   if (r.audit) s.audit = r.audit.map((x) => x.data as AppState['audit'][number]);
   const settings = r.settings?.find((x) => x.id === 'owner');
   if (settings) s.settings = settings.data as AppState['settings'];
+  // Frische Datenbank oder neuer Katalog-Eintrag: jede bekannte Verbindung existiert immer (sonst fehlen
+  // Einrichtungs-Checkliste und „Noch nichts verbunden“).
+  const known = new Set(s.connections.map((c) => c.id));
+  for (const c of createEmptyState().connections) if (!known.has(c.id)) s.connections.push(c);
   return s;
 }
 

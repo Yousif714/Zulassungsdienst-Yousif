@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createDemoState } from '@/data/seed';
 import { applyEvent, refresh } from '@/data/engine';
 import { toRows, fromRows, diffState, TABLES } from '@/server/db/tables';
+import { createEmptyState } from '@/data/empty-state';
 
 import { NOW_0930 as NOW } from './helpers';
 
@@ -29,6 +30,18 @@ describe('tables', () => {
     const s = fromRows({});
     expect(s.contracts).toEqual([]);
     expect(s.settings.replyThresholdHours).toBe(2);
+  });
+  it('leere Tabellen (frische Datenbank) liefern trotzdem alle Verbindungen des Katalogs als „missing“', () => {
+    const s = fromRows({ connections: [], settings: [] });
+    expect(s.connections.map((c) => c.id)).toEqual(createEmptyState().connections.map((c) => c.id));
+    expect(s.connections.every((c) => c.status === 'missing')).toBe(true);
+  });
+  it('gespeicherte Verbindungen bleiben, fehlende Katalog-Einträge werden ergänzt', () => {
+    const [first] = createEmptyState().connections;
+    const stored = { ...first, status: 'connected' as const };
+    const s = fromRows({ connections: [{ id: stored.id, ord: 0, data: stored }] });
+    expect(s.connections[0]).toEqual(stored);
+    expect(s.connections).toHaveLength(createEmptyState().connections.length);
   });
   it('Schlüsselspalten', () => {
     const s = demo();
