@@ -56,7 +56,7 @@ export function mapLexwareInvoice(detail: unknown, conn: LexwareConnection): Imp
     externalId: d.id,
     number: d.voucherNumber,
     totalCents,
-    openCents: status === 'open' || status === 'overdue' ? totalCents : 0,
+    openCents: status === 'open' || status === 'overdue' ? (d.openAmount != null ? euroToCents(d.openAmount) : totalCents) : 0,
     issuedOn,
     dueDate: d.dueDate ? day(d.dueDate) : issuedOn,
     status,
@@ -66,8 +66,8 @@ export function mapLexwareInvoice(detail: unknown, conn: LexwareConnection): Imp
   };
 }
 
-const flat = (groups: unknown): string[] =>
-  Object.values((groups as Obj | undefined) ?? {}).flatMap((v) => (Array.isArray(v) ? v : [])).filter((s): s is string => typeof s === 'string' && s !== '');
+const flat = (groups: unknown, skip: string[] = []): string[] =>
+  Object.entries((groups as Obj | undefined) ?? {}).filter(([k]) => !skip.includes(k)).map(([, v]) => v).flatMap((v) => (Array.isArray(v) ? v : [])).filter((s): s is string => typeof s === 'string' && s !== '');
 
 export function mapLexwareContacts(json: unknown[], conn: LexwareConnection): ImportedContact[] {
   const company = lexwareCompany[conn];
@@ -80,7 +80,7 @@ export function mapLexwareContacts(json: unknown[], conn: LexwareConnection): Im
       company,
       kind: company === 'nexus' ? 'member' : isCompany ? 'dealer' : 'private',
       name,
-      phones: flat(c.phoneNumbers),
+      phones: flat(c.phoneNumbers, ['fax']),
       emails: [...new Set(flat(c.emailAddresses).map((e) => e.toLowerCase()))],
       externalRefs: [{ connectionId: conn, externalId: c.id }],
     };

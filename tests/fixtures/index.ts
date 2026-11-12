@@ -30,8 +30,9 @@ export const stripeRaw: StripeRaw = {
   disputes: disputes.data,
 };
 
-/** Pfad (ohne Query) → Stripe-Antwort-JSON. Erstattungen und Streitfälle tragen hier schon `invoiceId`. */
+/** Pfad (ohne Query) → Stripe-Antwort-JSON. Erstattungen und Streitfälle tragen hier schon `invoiceId`. Einzelrechnungen unter `/v1/invoices/{id}`. */
 export const stripeRoutes: Record<string, unknown> = {
+  ...Object.fromEntries(invoices.data.map((i) => [`/v1/invoices/${i.id}`, i])),
   '/v1/subscriptions': subscriptions,
   '/v1/products': products,
   '/v1/invoices': invoices,
@@ -68,4 +69,26 @@ export const lexwareRoutesZulassung: Record<string, unknown> = {
   '/v1/voucherlist': voucherlistZulassung,
   '/v1/contacts': contactsZulassung,
   [`/v1/invoices/${idOf('RZ-500')}`]: lexDetail('RZ-500'),
+};
+
+/** Query-String der Stripe-Anfragen (muss zur Anfrage des Connectors passen; Reihenfolge fest). */
+const stripeQuery = (extra: Record<string, string>, startingAfter?: string): string =>
+  `?${new URLSearchParams({ ...extra, limit: '100', ...(startingAfter ? { starting_after: startingAfter } : {}) }).toString()}`;
+const stripeSince = Date.parse('2026-08-01T00:00:00Z') / 1000 - 7200;
+const invoiceQuery = (after?: string) => `/v1/invoices${stripeQuery({ status: 'paid', 'created[gte]': String(stripeSince) }, after)}`;
+
+/** Stripe mit Mehrseiten-Rechnungen (Seite 1: A1, A2 mit has_more; Seite 2: A3, B1, D1). Exakte Query pro Seite. */
+export const stripeRoutesPaged: Record<string, unknown> = {
+  ...Object.fromEntries(Object.entries(stripeRoutes).filter(([k]) => k !== '/v1/invoices')),
+  [invoiceQuery()]: { object: 'list', data: invoices.data.slice(0, 2), has_more: true },
+  [invoiceQuery('in_A2')]: { object: 'list', data: invoices.data.slice(2), has_more: false },
+};
+
+const vl = (page: number) =>
+  `/v1/voucherlist?${new URLSearchParams({ voucherType: 'invoice', voucherStatus: 'open,paid,paidoff,voided,overdue', voucherDateFrom: '2026-08-01', sort: 'voucherDate,ASC', size: '100', page: String(page) }).toString()}`;
+/** Lexware (NEXUS) mit zwei Voucherlist-Seiten: Seite 0 = RE-1043…RE-1100, Seite 1 = RE-1101…RE-1110. */
+export const lexwareRoutesPaged: Record<string, unknown> = {
+  ...Object.fromEntries(Object.entries(lexwareRoutes).filter(([k]) => k !== '/v1/voucherlist')),
+  [vl(0)]: { ...voucherlistNexus, content: voucherlistNexus.content.slice(0, 4), first: true, last: false, totalPages: 2, number: 0 },
+  [vl(1)]: { ...voucherlistNexus, content: voucherlistNexus.content.slice(4), first: false, last: true, totalPages: 2, number: 1 },
 };

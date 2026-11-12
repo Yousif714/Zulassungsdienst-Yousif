@@ -43,3 +43,12 @@ test('Zulassung: Person → private', () => {
 });
 test('sourceUpdatedAt aus updatedDate', () => expect(inv('RE-1043').sourceUpdatedAt).toBe(updatedOf('RE-1043')));
 test('lexwareCompany', () => expect(lexwareCompany).toEqual({ lexware_nexus: 'nexus', lexware_zulassung: 'zulassung' }));
+test('Teilzahlung: openAmount (aus der Voucherlist) bestimmt openCents', () => {
+  const d = { ...withStatus(lexDetail('RE-1043'), 'open'), openAmount: 120.5 };
+  expect(mapLexwareInvoice(d, 'lexware_nexus')).toMatchObject({ totalCents: 30000, openCents: 12050, status: 'open' });
+  expect(mapLexwareInvoice({ ...withStatus(lexDetail('RE-1043'), 'paid'), openAmount: 0 }, 'lexware_nexus').openCents).toBe(0);
+});
+test('Fax ist keine Telefonnummer', () => {
+  const c = mapLexwareContacts([{ id: 'x', person: { lastName: 'A' }, phoneNumbers: { business: ['089 1'], mobile: ['0170 2'], fax: ['089 99'] } }], 'lexware_nexus')[0];
+  expect(c.phones).toEqual(['089 1', '0170 2']);
+});
