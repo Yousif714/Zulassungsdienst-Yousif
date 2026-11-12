@@ -9,6 +9,9 @@ import { NOW_0930 as NOW } from './helpers';
 const apply = (st: AppState, events: StoreEvent[]) => events.reduce(reducer, st);
 const s = refresh(createDemoState(), NOW);
 const OWNER = '+491510000000';
+/** Ausgehende Nachricht mit dem Text der Aktion (IDs sind UUIDs und tragen keine Aktions-ID mehr). */
+const isSentOf = (st: AppState, actionId: string, m: AppState['messages'][number]) =>
+  m.direction === 'out' && m.body === String(st.actions.find((a) => a.id === actionId)!.payload.text);
 
 describe('handleInbound', () => {
   test('Brief: fremde Nummer → kein Reply; Erinnerung mit Knöpfen; alter Knopf ungültig', async () => {
@@ -107,7 +110,7 @@ describe('handleButton', () => {
     const r = handleButton(once, buttons[0], NOW);
     expect(r.reply.text).toBe('Dieser Knopf ist nicht mehr gültig (Die Aktion wurde bereits freigegeben). Ich habe nichts gesendet.');
     const after = apply(once, r.events);
-    expect(after.messages.filter((m) => m.id.startsWith(`m-out-${buttons[0].actionId}`))).toHaveLength(1);
+    expect(after.messages.filter((m) => isSentOf(after, buttons[0].actionId, m))).toHaveLength(1);
   });
 
   test('abgelaufener Knopf → Grund auf Deutsch', async () => {
@@ -147,7 +150,7 @@ describe('Fix-Runde 1', () => {
     const replies = after.assistantChat.filter((m) => m.direction === 'to_owner').map((m) => m.text);
     expect(replies.filter((t) => t.startsWith('Gesendet (Demo)'))).toHaveLength(1);
     expect(replies.at(-1)).toBe('Dieser Knopf ist nicht mehr gültig (Die Aktion wurde bereits freigegeben). Ich habe nichts gesendet.');
-    expect(after.messages.filter((m) => m.id.startsWith(`m-out-${btn.actionId}`))).toHaveLength(1);
+    expect(after.messages.filter((m) => isSentOf(after, btn.actionId, m))).toHaveLength(1);
     expect(after.assistantChat.filter((m) => m.direction === 'from_owner')).toHaveLength(1);
   });
 

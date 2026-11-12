@@ -76,7 +76,7 @@ function SimulateTransfer() {
   const [error, setError] = useState('');
   const [simId, setSimId] = useState<string | null>(null);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const amountCents = parseEuroInput(amount);
     if (!iban.trim() || !payerName.trim() || amountCents === null) {
@@ -84,9 +84,8 @@ function SimulateTransfer() {
       return;
     }
     setError('');
-    // Der Store vergibt fortlaufende IDs für simulierte Zahlungen.
-    setSimId(`p-sim-${state.payments.filter((p) => p.id.startsWith('p-sim-')).length + 1}`);
-    dispatch({ type: 'simulateTransfer', iban: iban.replace(/\s/g, '').toUpperCase(), payerName: payerName.trim(), amountCents });
+    const { created } = await dispatch({ type: 'simulateTransfer', iban: iban.replace(/\s/g, '').toUpperCase(), payerName: payerName.trim(), amountCents });
+    setSimId(created[0] ?? null);
   };
 
   const alloc = simId ? state.allocations.find((a) => a.paymentId === simId) : undefined;

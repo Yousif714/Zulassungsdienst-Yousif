@@ -1,5 +1,6 @@
 import { demoPaymentLink } from '@/ai/demo-ai';
 import type { AIProvider } from '@/ai/provider';
+import { newId } from './ids';
 import { REJECT_REASON_DE, approve } from './actions/machine';
 import { todayBerlin } from './clock';
 import { memberView } from './detectors';
@@ -27,18 +28,17 @@ const isReminderCommand = (text: string) => {
   return t.includes('schick') && t.includes('erinnerung');
 };
 
-/** Die Antwort wird über `assistantOutbound` zugestellt; sie ist das letzte Ereignis. Die Id entspricht der, die der Store vergibt. */
+/** Die Antwort wird über `assistantOutbound` zugestellt; sie ist das letzte Ereignis. Die Id wird hier vergeben und im Ereignis mitgegeben. */
 /** Links reisen strukturiert an der Nachricht (die Oberfläche zeigt sie als Karten), nicht als Text. */
 function deliver(
   s: AppState, events: StoreEvent[], text: string, at: Date, extra: { buttons?: Button[]; links?: LinkRef[] } = {},
 ): { events: StoreEvent[]; reply: AssistantMessage } {
-  const chatEvents = events.filter((e) => e.type === 'assistantInbound' || e.type === 'assistantOutbound').length;
   const { buttons, links } = extra;
   const more = { ...(buttons ? { buttons } : {}), ...(links?.length ? { links } : {}) };
   const reply: AssistantMessage = {
-    id: `am-${s.assistantChat.length + chatEvents + 1}`, direction: 'to_owner', from: 'Nexus Assistent', text, at: at.toISOString(), ...more,
+    id: newId(), direction: 'to_owner', from: 'Nexus Assistent', text, at: at.toISOString(), ...more,
   };
-  return { events: [...events, { type: 'assistantOutbound', text, ...more }], reply };
+  return { events: [...events, { type: 'assistantOutbound', id: reply.id, text, ...more }], reply };
 }
 
 export async function handleInbound(

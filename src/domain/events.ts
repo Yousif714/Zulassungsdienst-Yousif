@@ -17,7 +17,7 @@ export type StoreEvent =
   | { type: 'setSlides'; callId: string; slides: Call['slides']; status: Call['slidesStatus'] }
   | { type: 'setConnectionStatus'; id: ConnectionId; status: Connection['status'] }
   | { type: 'assistantInbound'; from: string; text: string }
-  | { type: 'assistantOutbound'; text: string; buttons?: AssistantMessage['buttons']; links?: AssistantMessage['links'] }
+  | { type: 'assistantOutbound'; id?: string; text: string; buttons?: AssistantMessage['buttons']; links?: AssistantMessage['links'] }
   | { type: 'updateSettings'; patch: Partial<Settings> }
   | { type: 'assistantButton'; button: NonNullable<AssistantMessage['buttons']>[number] }
   | { type: 'resetDemo' };
