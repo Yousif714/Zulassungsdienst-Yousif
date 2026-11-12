@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  addDaysIso, berlinLocalToUtc, berlinParts, daysBetween, formatBerlin, formatBerlinDe, formatIsoDe, now, setNowForTests, todayBerlin,
+  addDaysIso, berlinLocalToUtc, berlinParts, daysBetween, formatBerlin, formatBerlinDe, formatIsoDe, now, setClockMode, setNowForTests, todayBerlin, DEMO_NOW,
 } from '@/domain/clock';
 
-afterEach(() => setNowForTests(null));
+afterEach(() => { setNowForTests(null); setClockMode('demo'); });
 
 describe('clock', () => {
   it('formatBerlinDe nutzt deutsche Namen und Berliner Datum', () => {
@@ -35,5 +35,13 @@ describe('clock', () => {
     expect(now().toISOString()).toBe('2026-11-12T08:30:00.000Z');
     setNowForTests(new Date('2026-01-01T00:00:00Z'));
     expect(now().toISOString()).toBe('2026-01-01T00:00:00.000Z');
+  });
+  it('Echtmodus nutzt die echte Uhr und ignoriert ?now=', () => {
+    setClockMode('real');
+    expect(Math.abs(now().getTime() - Date.now())).toBeLessThan(1000);
+  });
+  it('Demomodus liefert DEMO_NOW', () => {
+    setClockMode('demo');
+    expect(now().getTime()).toBe(DEMO_NOW.getTime());
   });
 });

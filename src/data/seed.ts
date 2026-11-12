@@ -1,3 +1,4 @@
+import { CONNECTION_CATALOG } from '@/domain/connections';
 import { addDaysIso, berlinLocalToUtc } from '@/domain/clock';
 import { buildSchedule } from '@/domain/ledger/schedule';
 import type {
@@ -35,19 +36,6 @@ function slug(name: string): string {
     .replace(/^-|-$/g, '');
 }
 
-const CONNECTIONS: [ConnectionId, Connection['company'], string][] = [
-  ['lexware_nexus', 'nexus', 'Lexware NEXUS'],
-  ['lexware_zulassung', 'zulassung', 'Lexware Zulassungsdienst'],
-  ['stripe_nexus', 'nexus', 'Stripe NEXUS'],
-  ['bank', null, 'Bankkonto'],
-  ['gmail', null, 'Gmail'],
-  ['icloud', null, 'iCloud-Mail'],
-  ['info_mail', 'zulassung', 'info@-Postfach'],
-  ['calendar', null, 'Kalender'],
-  ['whatsapp_kunden', 'zulassung', 'WhatsApp Kunden'],
-  ['whatsapp_assistent', null, 'WhatsApp Assistent'],
-];
-
 const MEMBER_NAMES = [
   'Ahmet Öztürk', 'Laura Hoffmann', 'Murat Aydın', 'Julia Bauer', 'Emine Şahin', 'Lukas Schneider', 'Fatma Arslan', 'Sophie Fischer',
   'Burak Doğan', 'Katharina Weber', 'Elif Koç', 'Maximilian Meyer', 'Hakan Kılıç', 'Lena Schäfer', 'Zeynep Kaplan', 'Felix Richter',
@@ -71,7 +59,7 @@ export function createDemoState(): AppState {
   const pick = <T,>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
   const digits = (n: number) => Array.from({ length: n }, () => Math.floor(rnd() * 10)).join('');
 
-  const connections: Connection[] = CONNECTIONS.map(([id, company, label]) => ({ id, company, label, status: 'connected', lastSuccessAt: SYNCED_AT }));
+  const connections: Connection[] = CONNECTION_CATALOG.map(({ id, company, label }) => ({ id, company, label, status: 'connected', lastSuccessAt: SYNCED_AT }));
   const contacts: Contact[] = [];
   const contracts: MemberContract[] = [];
   const payments: Payment[] = [];
