@@ -119,6 +119,26 @@ Der Assistent bereitet Aktionen fertig vor. Ich prüfe und tippe auf **Senden/An
 
 Die Architektur muss einen **Hintergrunddienst** haben, der auch bei geschlossener App synchronisiert, Hinweise erzeugt und Push verschickt.
 
+### 3.6 Der Assistent schreibt mir per WhatsApp (Hauptkanal)
+Ich bin den ganzen Tag in WhatsApp. Deshalb meldet sich der Assistent **wie ein Mitarbeiter per WhatsApp bei mir**, und ich kann ihm dort auch antworten und Aufträge geben.
+
+- **Eigene Nummer für den Assistenten:** Der Assistent bekommt eine **separate WhatsApp-Business-Nummer** (Cloud API), zum Beispiel als Kontakt „Nexus Assistent“. Meine Kunden-Nummer bleibt davon getrennt.
+- **Was er schickt:** Morgenbriefing (7:00), Abendrückblick (19:00), dringende Hinweise sofort, Coach-Tipps. Kurz und klar, mit Link in die App für Details.
+- **Interaktive Knöpfe:** Bei vorbereiteten Aktionen gibt es WhatsApp-Antwortknöpfe, z. B. **Senden · Ändern · Später**. Beispiel:
+  > „Autohaus Schmidt wartet seit 3 Std. Entwurf: ‚Hallo Herr Schmidt, die Unterlagen sind da, Zulassung läuft heute.‘“ [Senden] [Ändern] [Später]
+- **Ich kann ihm schreiben**, wie im Chat in der App:
+  - „Wer ist überfällig?“
+  - „Schick Kaya die Erinnerung.“
+  - „Erinnere mich morgen um 9 an Müller.“
+  - „Mach die SEELE-Folien fertig.“
+- **Sprachnachrichten:** Ich will ihm auch Sprachnachrichten schicken können. Dafür braucht es einen Speech-to-Text-Dienst. Schlag einen passenden vor (EU-Datenschutz beachten).
+- **Sicherheit:**
+  - Der Assistent nimmt Befehle **nur von meiner eigenen Nummer** an. Alles andere wird ignoriert und protokolliert.
+  - Aktionen, die etwas an Kunden oder Mitglieder verschicken oder anlegen, brauchen **immer eine ausdrückliche Bestätigung** (Knopf oder „Ja“). Ausnahme sind nur Abläufe, die ich in der App ausdrücklich auf automatisch gestellt habe.
+  - Jede Aktion steht im Protokoll in der App.
+- **WhatsApp-Regeln beachten:** Frei formulierte Nachrichten sind nur innerhalb von 24 Stunden nach meiner letzten Nachricht an den Assistenten erlaubt. Außerhalb dieses Fensters, etwa beim Morgenbriefing nach einem ruhigen Tag, muss eine **freigegebene Vorlagen-Nachricht (Kategorie Utility)** genutzt werden, z. B. „Dein Briefing für heute ist da“ mit den wichtigsten Punkten als Variablen. Lege die nötigen Vorlagen an und beschreibe den Freigabeprozess bei Meta.
+- **Fallback:** Wenn WhatsApp nicht erreichbar ist, kommt dieselbe Meldung als Push in der App.
+
 ---
 
 ## 4. NEXUS: Mitgliedsbeiträge (wichtigste Datenlogik)
@@ -192,7 +212,8 @@ Eine Seite **„Verbindungen“** zeigt pro Verbindung: Firma, Status, letzter e
 
 | Verbindung | Weg | Priorität |
 |---|---|---|
-| WhatsApp Business | WhatsApp Business Platform (Cloud API), bevorzugt im **Coexistence-Modus**, damit ich die Business-App am Handy weiter normal nutze. Prüfen, ob das mit meiner Nummer geht und über welchen Anbieter. | **hoch** |
+| WhatsApp Assistent (an mich) | **eigene, zweite Nummer** über die WhatsApp Cloud API. Der Assistent schreibt mir und nimmt meine Befehle entgegen (siehe 3.6). Vorlagen-Nachrichten bei Meta freigeben lassen. | **hoch** |
+| WhatsApp Business (Kunden) | WhatsApp Business Platform (Cloud API), bevorzugt im **Coexistence-Modus**, damit ich die Business-App am Handy weiter normal nutze. Prüfen, ob das mit meiner Nummer geht und über welchen Anbieter. | **hoch** |
 | E-Mail | Gmail API; iCloud über IMAP (App-Passwort); info@nexusnetzwerk.de: Anbieter ermitteln | **hoch** |
 | Stripe NEXUS | Stripe API + Webhooks (zunächst lesender Restricted Key) | **hoch** |
 | Lexware NEXUS | Lexware Office Public API (prüfen, ob der API-Zugang im Tarif enthalten ist) | **hoch** |
@@ -242,6 +263,7 @@ Automatisiert (Playwright) auf **iPhone-Breite** und **Desktop**:
 7. **Zulassungsdienst** → erledigter, nicht abgerechneter Auftrag → Rechnungsentwurf vorbereitet.
 8. **Chat:** die 5 Fragen aus 3.3 liefern korrekte, verlinkte Antworten.
 9. **Gebrochene Zusage** aus dem Chatverlauf wird als Hinweis erkannt.
+10. **WhatsApp-Assistent (simuliert):** Morgenbriefing kommt an. Ich antworte „Wer ist überfällig?“ und bekomme die korrekte Liste. Ich tippe bei einer Erinnerung auf [Senden], und sie ist im Protokoll als Demo-Aktion erfasst. Eine Nachricht von einer fremden Nummer wird ignoriert.
 
 **Unit-Tests** für: Ratenplan (Soll, Ist, Rückstand, künftige Raten, Sonderkonditionen, Stundung), Teilzahlungsverteilung (älteste Rate zuerst), Übernahmeberechnung, Zahlungszuordnung.
 
