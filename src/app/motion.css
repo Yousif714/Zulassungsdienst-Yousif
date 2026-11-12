@@ -1,0 +1,345 @@
+/*
+ * Bewegung: Seitenübergang, gestaffeltes Erscheinen, Druck-Effekt, Wischgesten, kompakte Kopfzeile.
+ * Nur transform und opacity (Ausnahme: Einklappen einer erledigten Zeile über grid-template-rows).
+ * Bei prefers-reduced-motion: keine Bewegung, nur kurze Überblendungen (unten).
+ */
+
+:root {
+  /* Feder wie UIKit (Dämpfung ~0.85): schnell los, weich aus, kaum Überschwingen */
+  --spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.4%, 1.051 22.2%, 1.055 24.7%, 1.043 28.1%, 1.012 35.4%, 0.998 42.1%, 0.996 49.8%, 1 70%);
+  --spring-soft: linear(0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%, 0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%, 1.001 85.6%, 1);
+  --dur-enter: 360ms;
+  --stagger: 40ms;
+}
+
+/* ------------------------------------------------------------------ Seitenübergang + Staffelung */
+/* Jede Seite blendet beim Erscheinen gestaffelt ein. Next hält besuchte Seiten versteckt im DOM
+   (display: none); beim Wiederanzeigen läuft die Animation erneut – ein weiches Zurück. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.99);
+  }
+}
+
+.shell-content > * {
+  animation: rise-in var(--dur-enter) var(--spring-soft) both;
+}
+
+.shell-content > :nth-child(2 of :not([style*="display: none"])) { animation-delay: calc(var(--stagger) * 1); }
+.shell-content > :nth-child(3 of :not([style*="display: none"])) { animation-delay: calc(var(--stagger) * 2); }
+.shell-content > :nth-child(4 of :not([style*="display: none"])) { animation-delay: calc(var(--stagger) * 3); }
+.shell-content > :nth-child(5 of :not([style*="display: none"])) { animation-delay: calc(var(--stagger) * 4); }
+.shell-content > :nth-child(6 of :not([style*="display: none"])) { animation-delay: calc(var(--stagger) * 5); }
+.shell-content > :nth-child(n + 7 of :not([style*="display: none"])) { animation-delay: calc(var(--stagger) * 6); }
+
+/* Die Kopfzeile erscheint sofort (nur weich), damit der Titel nie springt. */
+.page-header > * {
+  animation: fade-in 220ms var(--ease-out) both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ Druck-Effekt */
+.btn,
+.link-chip,
+.link-card,
+.imsg-pill,
+.chat-suggestion,
+.nav-button,
+.assistant-button,
+.more-item {
+  transition-property: opacity, transform, background-color;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-out);
+}
+
+.btn:active,
+.link-chip:active,
+.link-card:active,
+.imsg-pill:active {
+  transform: scale(0.97);
+}
+
+a.list-row,
+button.list-row,
+a.task-body {
+  transition: background-color 260ms ease;
+}
+
+/* ------------------------------------------------------------------ Große Titel → kompakte Kopfzeile */
+.page-header-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  margin: 8px -16px 0;
+  padding: var(--safe-top) 16px 0;
+  background: transparent;
+  box-shadow: inset 0 -0.5px 0 transparent;
+  transition: background-color 200ms ease, box-shadow 200ms ease;
+}
+
+@media (min-width: 768px) {
+  .page-header-bar {
+    margin: 32px -32px 0;
+    padding: var(--safe-top) 32px 0;
+  }
+}
+
+.page-header[data-compact="true"] .page-header-bar {
+  background: var(--bar);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: inset 0 -0.5px 0 var(--separator);
+}
+
+/* Titel in der kompakten Zeile: per CSS aus data-title, damit er nicht doppelt im Text steht. */
+.page-header-compact {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.41px;
+  text-align: center;
+  opacity: 0;
+  transform: translate3d(0, 6px, 0);
+  transition: opacity 180ms var(--ease-out), transform 260ms var(--spring);
+}
+
+.page-header-compact::before {
+  content: attr(data-title);
+}
+
+.page-header[data-compact="true"] .page-header-compact {
+  opacity: 1;
+  transform: none;
+}
+
+.large-title,
+.page-header .demo-badge {
+  transform-origin: center bottom;
+  transition: opacity 180ms var(--ease-out), transform 260ms var(--spring);
+}
+
+.page-header[data-compact="true"] .large-title,
+.page-header[data-compact="true"] .page-header-row .demo-badge {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* ------------------------------------------------------------------ Hinweis-Zeile: Wischen + Einklappen */
+.task-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 280ms var(--ease-out), opacity 220ms var(--ease-out);
+}
+
+.task-row-inner {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.task-row-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  min-height: var(--row-min);
+  background: var(--bg-elevated);
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+.task-row[data-swiping="true"] .task-row-content {
+  transition: none;
+}
+
+/* Beim Wischen keine Druck-Hervorhebung der Zeile */
+.task-row[data-swiping="true"] a.task-body:active {
+  background: none;
+}
+
+.task-row[data-settling="true"] .task-row-content {
+  transition: transform 420ms var(--spring);
+}
+
+.task-row[data-leaving="true"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.task-row[data-leaving="true"] .task-row-content {
+  transition: transform 260ms var(--ease-out);
+}
+
+/* Aktionen hinter der Zeile (wie Mail): rechts „Erledigt“, links „Später“ */
+.task-swipe-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.24px;
+}
+
+.task-swipe-bg > span {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 20px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.task-swipe-later {
+  flex: 1;
+  background: var(--indigo);
+}
+
+.task-swipe-done {
+  flex: 1;
+  justify-content: flex-end;
+  background: var(--tint-fill);
+}
+
+.task-row[data-swipe-dir="right"] .task-swipe-later,
+.task-row[data-swipe-dir="left"] .task-swipe-done {
+  opacity: 1;
+}
+
+.task-row[data-swipe-dir="right"] .task-swipe-done,
+.task-row[data-swipe-dir="left"] .task-swipe-later {
+  display: none;
+}
+
+/* Tastatur: „Zurückstellen“ ist erst bei Fokus sichtbar (Wischen ist nur die Abkürzung). */
+.task-later-key {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  z-index: 2;
+  transform: translateY(-50%);
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--indigo);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.task-later-key:not(:focus-visible) {
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ Tipp-Indikator */
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 2px;
+}
+
+.typing > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.35;
+  animation: typing-dot 1.2s ease-in-out infinite;
+}
+
+.typing > span:nth-child(2) { animation-delay: 0.16s; }
+.typing > span:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes typing-dot {
+  0%, 60%, 100% {
+    opacity: 0.35;
+    transform: translate3d(0, 0, 0);
+  }
+  30% {
+    opacity: 0.9;
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+/* Neue Blase: kommt weich aus ihrer Ecke */
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.96);
+  }
+}
+
+.imsg-enter {
+  animation: bubble-in 320ms var(--spring) both;
+}
+
+.imsg-row[data-side="out"] .imsg-enter { transform-origin: right bottom; }
+.imsg-row[data-side="in"] .imsg-enter { transform-origin: left bottom; }
+
+/* ------------------------------------------------------------------ Weniger Bewegung */
+@media (prefers-reduced-motion: reduce) {
+  .shell-content > *,
+  .page-header > *,
+  .imsg-enter {
+    animation: fade-in 120ms ease both !important;
+    animation-delay: 0ms !important;
+  }
+
+  .typing > span {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .btn:active,
+    .link-card:active,
+  .imsg-pill:active {
+    transform: none;
+  }
+
+  .page-header-compact,
+  .large-title,
+  .page-header .demo-badge {
+    transform: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ Hochzählen (CountUp) */
+.count-up {
+  display: inline-block;
+}
+
+.count-up[data-shown] {
+  position: relative;
+  -webkit-text-fill-color: transparent;
+}
+
+.count-up[data-shown]::after {
+  content: attr(data-shown);
+  position: absolute;
+  inset: 0;
+  -webkit-text-fill-color: currentColor;
+  text-align: inherit;
+  white-space: nowrap;
+}

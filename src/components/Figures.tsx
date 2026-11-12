@@ -1,6 +1,10 @@
+'use client';
+
 import type { ReactNode } from 'react';
 
 import { formatEuro } from '@/domain/money';
+
+import { CountUp } from './CountUp';
 
 /** Kennzahlen-Raster (Wallet-Stil) mit Abschnittsüberschrift. */
 export function Figures({ title, children, columns }: { title: string; children: ReactNode; columns?: 4 }) {
@@ -17,7 +21,7 @@ export function Figure({ label, cents, testId, strong, arrears }: { label: strin
   return (
     <div className="figure" data-strong={strong} data-tone={arrears ? (cents > 0 ? 'alert' : 'neutral') : undefined}>
       <dt>{label}</dt>
-      <dd className="amount" data-testid={testId}>{formatEuro(cents)}</dd>
+      <dd className="amount" data-testid={testId}><CountUp value={cents} format={formatEuro} /></dd>
     </div>
   );
 }
@@ -27,7 +31,7 @@ export function CountFigure({ label, value, testId }: { label: string; value: nu
   return (
     <div className="figure">
       <dt>{label}</dt>
-      <dd data-testid={testId}>{value}</dd>
+      <dd data-testid={testId}>{typeof value === 'number' ? <CountUp value={value} format={String} duration={500} /> : value}</dd>
     </div>
   );
 }

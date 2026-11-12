@@ -5,6 +5,7 @@ import { AppShell } from '@/components/AppShell';
 import { AppStoreProvider } from '@/data/store';
 
 import './globals.css';
+import './motion.css';
 
 export const metadata: Metadata = {
   title: 'Nexus Assistent',

@@ -29,7 +29,8 @@ export default function HinweisePage() {
         if (list.length === 0) return null;
         return (
           <ListGroup key={priority} title={`${title} (${list.length})`} testId={`insights-${priority}`}>
-            {list.map((i) => <TaskRow key={i.dedupeKey} insight={i} onDone={() => dispatch({ type: 'dismissInsight', key: i.dedupeKey })} />)}
+            {list.map((i) => <TaskRow key={i.dedupeKey} insight={i} onDone={() => dispatch({ type: 'dismissInsight', key: i.dedupeKey })}
+              onLater={() => dispatch({ type: 'snoozeInsight', key: i.dedupeKey })} />)}
           </ListGroup>
         );
       })}

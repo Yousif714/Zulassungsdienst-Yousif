@@ -37,3 +37,44 @@ test('Antwort-Hinweis abhaken → Kunde verschwindet auch aus „Nachrichten“'
   await expect(row).toHaveCount(0);
   await expect(replies.getByText('Autohaus Schmidt')).toHaveCount(0);
 });
+
+/** Wischt eine Zeile waagerecht von `from` nach `to` (Anteile der Breite). */
+async function swipe(page: import('@playwright/test').Page, row: import('@playwright/test').Locator, from: number, to: number) {
+  const box = (await row.boundingBox())!;
+  const y = box.y + Math.min(30, box.height / 2);
+  await page.mouse.move(box.x + box.width * from, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * to, y + 2, { steps: 8 });
+  await page.mouse.up();
+}
+
+test('Hinweis wischen: nach links erledigt, nach rechts später – beides im Protokoll', async ({ page }) => {
+  await page.goto('/?reset=1');
+  const done = page.locator('[data-key="reply:m-schmidt-in-1"]');
+  await swipe(page, done, 0.85, 0.15);
+  await expect(done).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/); // Wischen öffnet den Link nicht
+
+  const row = page.getByTestId('top-insights').getByTestId('insight-row').first();
+  const key = await row.getAttribute('data-key');
+  await swipe(page, row, 0.3, 0.95);
+  await expect(page.locator(`[data-key="${key}"]`)).toHaveCount(0);
+
+  await page.goto('/protokoll');
+  await expect(page.getByTestId('audit-row').nth(1)).toContainText('Hinweis erledigt: Autohaus Schmidt');
+  await expect(page.getByTestId('audit-row').first()).toContainText('Hinweis zurückgestellt');
+});
+
+test('Hinweis: kurzes Wischen springt zurück; „Zurückstellen“ per Tastatur', async ({ page }) => {
+  await page.goto('/?reset=1');
+  const row = page.locator('[data-key="reply:m-schmidt-in-1"]');
+  await swipe(page, row, 0.6, 0.5);
+  await expect(row).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+
+  const later = row.getByRole('button', { name: /^Zurückstellen/ });
+  await later.focus();
+  await expect(later).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(row).toHaveCount(0);
+});
