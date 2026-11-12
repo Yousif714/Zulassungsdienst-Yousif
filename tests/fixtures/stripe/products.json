@@ -1,0 +1,36 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "prod_4",
+      "object": "product",
+      "name": "NEXUS-Mitgliedschaft 4 Monate",
+      "active": true
+    },
+    {
+      "id": "prod_m",
+      "object": "product",
+      "name": "NEXUS Mitgliedschaft",
+      "active": true
+    },
+    {
+      "id": "prod_6",
+      "object": "product",
+      "name": "NEXUS-Mitgliedschaft 6 Monate",
+      "active": true
+    },
+    {
+      "id": "prod_c",
+      "object": "product",
+      "name": "Coaching Einzelstunde",
+      "active": true
+    },
+    {
+      "id": "prod_3",
+      "object": "product",
+      "name": "NEXUS-Mitgliedschaft 3 Monate",
+      "active": true
+    }
+  ],
+  "has_more": false
+}

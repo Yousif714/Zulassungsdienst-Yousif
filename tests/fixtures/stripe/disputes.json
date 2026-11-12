@@ -1,0 +1,14 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "dp_1",
+      "object": "dispute",
+      "amount": 30000,
+      "currency": "eur",
+      "created": 1793880000,
+      "invoiceId": "in_A3"
+    }
+  ],
+  "has_more": false
+}
