@@ -1,5 +1,6 @@
-import { addDaysIso, berlinLocalToUtc, formatBerlin, todayBerlin } from '@/domain/clock';
+import { formatBerlin, todayBerlin } from '@/domain/clock';
 import { openInsights, nexusForecast, overdueMembers } from '@/data/selectors';
+import { detectCommitment } from '@/domain/commitments';
 import { selectTop } from '@/domain/detectors';
 import { extractPlates, openReplies } from '@/domain/matching/messages';
 import { formatEuro } from '@/domain/money';
@@ -103,14 +104,6 @@ function answerMoney(s: AppState, today: string): ChatAnswer {
   };
 }
 
-function dueAtFor(text: string, sentAt: string): string {
-  const day = todayBerlin(new Date(sentAt));
-  const t = norm(text);
-  if (/\bheute\b/.test(t)) return berlinLocalToUtc(day, '18:00').toISOString();
-  if (/\bmorgen\b/.test(t)) return berlinLocalToUtc(addDaysIso(day, 1), '18:00').toISOString();
-  return new Date(Date.parse(sentAt) + 48 * 3_600_000).toISOString();
-}
-
 const STEPS = ['Ausgangslage', 'Das Problem', 'Die Grundidee', 'Schritt für Schritt', 'Ein Beispiel aus der Praxis', 'Typische Stolpersteine', 'Übung für die Woche', 'Fragen und Austausch', 'Zusammenfassung', 'Nächste Schritte'];
 
 export const demoAI: AIProvider = {
@@ -158,9 +151,6 @@ export const demoAI: AIProvider = {
   },
 
   detectCommitment(text, sentAt) {
-    let kind: 'invoice' | 'callback' | null = null;
-    if (/(schick|send)\w*.*rechnung|rechnung.*(schick|send)/i.test(text)) kind = 'invoice';
-    else if (/(ruf\w* .*zurück|melde mich)/i.test(text)) kind = 'callback';
-    return kind ? { kind, dueAt: dueAtFor(text, sentAt) } : null;
+    return detectCommitment(text, sentAt);
   },
 };

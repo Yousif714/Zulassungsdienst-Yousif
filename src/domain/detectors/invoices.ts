@@ -1,4 +1,4 @@
-import { daysBetween, todayBerlin } from '../clock';
+import { daysBetween, formatIsoDe, todayBerlin } from '../clock';
 import { formatEuro } from '../money';
 import type { AppState, ConnectionId, Insight, Invoice } from '../types';
 import { invoiceRef, paymentRef } from './refs';
@@ -17,7 +17,7 @@ export function detectStripePaidLexwareOpen(s: AppState): Insight[] {
       company: inv.company,
       priority: 'today',
       title: `Rechnung ${inv.number} wurde per Stripe bezahlt, ist in Lexware aber noch offen`,
-      body: `Stripe-Zahlung über ${formatEuro(pay.amountCents)} am ${pay.bookedOn}, Rechnung über ${formatEuro(inv.totalCents)}.`,
+      body: `Stripe-Zahlung über ${formatEuro(pay.amountCents)} am ${formatIsoDe(pay.bookedOn)}, Rechnung über ${formatEuro(inv.totalCents)}.`,
       amountCents: inv.openCents,
       refs: [invoiceRef(inv, inv.number), paymentRef(pay.id, pay.payerName ?? pay.externalId)],
       nextStep: 'Rechnung zuordnen',
@@ -71,7 +71,7 @@ export function detectInvoiceOverdue(s: AppState, now: Date): Insight[] {
       company: list[0].company,
       priority: 'info',
       title: `${name}: ${list.length} ${list.length === 1 ? 'Rechnung' : 'Rechnungen'} überfällig, zusammen ${formatEuro(sum)}`,
-      body: `Älteste Fälligkeit ${oldest.dueDate} (${daysBetween(oldest.dueDate, today)} Tage überfällig).`,
+      body: `Älteste Fälligkeit ${formatIsoDe(oldest.dueDate)} (${daysBetween(oldest.dueDate, today)} Tage überfällig).`,
       amountCents: sum,
       refs: list.map((i) => invoiceRef(i, i.number)),
       nextStep: 'Erinnerung vorbereiten',

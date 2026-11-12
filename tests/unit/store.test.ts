@@ -3,6 +3,7 @@ import { createDemoState } from '@/data/seed';
 import { STORE_KEY, loadInitial, reducer, refresh } from '@/data/store';
 import type { AppState, Invoice } from '@/domain/types';
 import type { Action } from '@/domain/types';
+import { openReplies } from '@/domain/matching/messages';
 import { NOW_0930 as NOW, contractOf, isOpen } from './helpers';
 
 const s = refresh(createDemoState(), NOW);
@@ -99,6 +100,15 @@ describe('Hinweise, Coach und Rest', () => {
     expect(reducer(s, { type: 'dismissInsight', key: 'slides:call-seele' }).insights.find((i) => i.dedupeKey === 'slides:call-seele')!.status).toBe('dismissed');
     expect(reducer(s, { type: 'snoozeInsight', key: 'slides:call-seele' }).insights.find((i) => i.dedupeKey === 'slides:call-seele')!.status).toBe('snoozed');
   });
+  test('Antwort-Hinweis abhaken markiert die Nachricht als manuell erledigt', () => {
+    expect(openReplies(s.messages, NOW, s.settings.replyThresholdHours).some((r) => r.message.id === 'm-schmidt-in-1')).toBe(true);
+    const r = reducer(s, { type: 'dismissInsight', key: 'reply:m-schmidt-in-1' });
+    expect(r.messages.find((m) => m.id === 'm-schmidt-in-1')!.doneManually).toBe(true);
+    expect(openReplies(r.messages, NOW, r.settings.replyThresholdHours).some((x) => x.message.id === 'm-schmidt-in-1')).toBe(false);
+    expect(isOpen(r, 'reply:m-schmidt-in-1')).toBe(false);
+    // andere Hinweise ändern keine Nachricht
+    expect(reducer(s, { type: 'dismissInsight', key: 'slides:call-seele' }).messages).toEqual(s.messages);
+  });
   test('Coach unterdrücken', () => {
     const key = s.insights.find((i) => i.type === 'coach_quick_reply')!.dedupeKey;
     const r = reducer(s, { type: 'suppressCoach', key });
@@ -146,6 +156,29 @@ describe('Zusagen', () => {
     const r = refresh({ ...s, invoices: [...s.invoices, demirInv('2026-11-12')] }, NOW);
     expect(r.commitments.find((c) => c.id === 'c-demir')!.status).toBe('kept');
     expect(isOpen(r, 'commit:c-demir')).toBe(false);
+  });
+});
+
+describe('Zusagen erkennen', () => {
+  test('gesendete Zusage wird erfasst und nach Ablauf ohne Rechnung gebrochen', () => {
+    let r = reducer(s, { type: 'createAction', action: draft({ payload: { contactId: 'd-schmidt', threadId: 't-schmidt', channel: 'whatsapp', text: 'Die Rechnung schicke ich Ihnen morgen.' } }) });
+    r = reducer(r, { type: 'approveAction', id: 'a-1', version: 1, via: 'app' });
+    r = reducer(r, { type: 'actionExecuted', id: 'a-1', result: 'ok' });
+    const msg = r.messages.at(-1)!;
+    expect(r.commitments.find((c) => c.id === `c-${msg.id}`)).toEqual({
+      id: `c-${msg.id}`, messageId: msg.id, contactId: 'd-schmidt', kind: 'invoice', text: 'Die Rechnung schicke ich Ihnen morgen.', dueAt: '2026-11-13T17:00:00.000Z', status: 'open',
+    });
+    const later = new Date('2026-11-14T08:00:00Z');
+    const fresh = { ...r, connections: r.connections.map((c) => (c.lastSuccessAt ? { ...c, lastSuccessAt: later.toISOString() } : c)) };
+    const after = refresh(fresh, later);
+    expect(after.commitments.find((c) => c.id === `c-${msg.id}`)!.status).toBe('broken');
+    expect(isOpen(after, `commit:c-${msg.id}`)).toBe(true);
+  });
+  test('Nachricht ohne Zusage legt nichts an', () => {
+    let r = reducer(s, { type: 'createAction', action: draft() });
+    r = reducer(r, { type: 'approveAction', id: 'a-1', version: 1, via: 'app' });
+    r = reducer(r, { type: 'actionExecuted', id: 'a-1', result: 'ok' });
+    expect(r.commitments).toEqual(s.commitments);
   });
 });
 

@@ -29,6 +29,14 @@ describe('handleInbound', () => {
     expect(st.actions).toHaveLength(0);
   });
 
+  test('Erinnerung ohne Rückstand: keine Aktion, kurze Antwort', async () => {
+    const r = await handleInbound(s, OWNER, 'Schick Anna Schulz die Erinnerung', NOW, demoAI);
+    expect(r.reply!.text).toBe('Anna Schulz hat keinen Rückstand – keine Erinnerung nötig.');
+    expect(r.reply!.buttons).toBeUndefined();
+    expect(r.events.some((e) => e.type === 'createAction')).toBe(false);
+    expect(apply(s, r.events).actions).toHaveLength(0);
+  });
+
   test('Inhaber mit anderer Schreibweise der Nummer wird erkannt', async () => {
     const r = await handleInbound(s, '0151 0000000', 'Wer ist überfällig?', NOW, demoAI);
     expect(r.reply).not.toBeNull();

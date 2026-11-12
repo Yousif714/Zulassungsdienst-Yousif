@@ -48,6 +48,7 @@ export async function handleInbound(
   if (member) {
     const { contract, contact } = member;
     const status = memberView(s, contract.id, todayBerlin(now)).status;
+    if (status.arrearsCents === 0) return deliver(s, [inbound], `${contact.name} hat keinen Rückstand – keine Erinnerung nötig.`, now);
     const id = `reminder-${contract.id}-${status.oldestUnpaidDue ?? 'none'}`;
     const stored = s.actions.find((a) => a.id === id);
     if (stored && stored.status !== 'draft') {

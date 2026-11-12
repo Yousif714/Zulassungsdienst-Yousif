@@ -65,6 +65,15 @@ describe('Detektoren', () => {
     expect(find(run({ invoices: [a, b] }), 'double_invoice').dedupeKey).toBe('double:l1:s1');
     expect(types(run({ invoices: [a, { ...b, issuedOn: '2026-11-30' }] }))).not.toContain('double_invoice');
   });
+  test('Datumsangaben in Hinweistexten sind deutsch formatiert', () => {
+    const stripe = { invoices: [inv('l1', 5000, { company: 'nexus', connectionId: 'lexware_nexus', number: 'RE-100', contactId: 'm-kaya' })], payments: [tx({ source: 'stripe', connectionId: 'stripe_nexus', reference: 'RE-100' })] };
+    expect(find(run(stripe), 'stripe_paid_lexware_open').body).toContain('am 12.11.2026,');
+    expect(find(run({ invoices: [inv('a', 1000, { dueDate: '2026-11-01' })] }), 'invoice_overdue').body).toBe('Älteste Fälligkeit 01.11.2026 (11 Tage überfällig).');
+    const c = { id: 'k1', messageId: 'm-schmidt-1', contactId: 'd-schmidt', kind: 'invoice' as const, text: 'Rechnung schicken', dueAt: '2026-11-11T17:00:00.000Z', status: 'open' as const };
+    const body = find(run({ messages: [schmidtIn], commitments: [c] }), 'commitment_broken').body;
+    expect(body).toBe('„Rechnung schicken“, zugesagt bis 11.11.2026, 18:00 Uhr.');
+    for (const i of run({ ...stripe, messages: [schmidtIn], commitments: [c] })) expect(`${i.title} ${i.body}`).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
   test('invoice_overdue fasst pro Kontakt zusammen', () => {
     const r = run({ invoices: [inv('a', 1000, { dueDate: '2026-11-01' }), inv('b', 2000, { dueDate: '2026-11-05' })] }).filter((i) => i.type === 'invoice_overdue');
     expect(r).toHaveLength(1);
@@ -96,8 +105,18 @@ describe('Lebenszyklus', () => {
     expect(r2[0].status).toBe('done');
     expect(r2[0].resolvedAt).toBeDefined();
     expect(reconcileInsights([{ ...r1[0], status: 'dismissed' }], [ins('k1')], NOW_0930)[0].status).toBe('dismissed');
-    expect(reconcileInsights([{ ...r1[0], status: 'dismissed' }], [], NOW_0930)[0].status).toBe('dismissed');
+    expect(reconcileInsights([{ ...r1[0], status: 'dismissed' }], [], NOW_0930)[0].status).toBe('done');
     expect(reconcileInsights(r1, [ins('k1'), ins('k1')], NOW_0930)).toHaveLength(1);
+  });
+  test('dismissed: gleiche Episode bleibt weg, nach Lücke kehrt der Hinweis zurück', () => {
+    const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank'] })], NOW_0930);
+    const dismissed: StoredInsight[] = [{ ...r1[0], status: 'dismissed' }];
+    expect(reconcileInsights(dismissed, [ins('k1', { needsSources: ['bank'] })], NOW_0930)[0].status).toBe('dismissed');
+    const gap = reconcileInsights(dismissed, [], NOW_0930);
+    expect(gap[0].status).toBe('done');
+    expect(reconcileInsights(gap, [ins('k1', { needsSources: ['bank'] })], NOW_0930)[0].status).toBe('open');
+    // Quelle veraltet: unklar, ob die Episode vorbei ist → bleibt dismissed
+    expect(reconcileInsights(dismissed, [], NOW_0930, ['bank'])[0].status).toBe('dismissed');
   });
   test('offen + Quelle veraltet → stale statt done', () => {
     const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank'] })], NOW_0930);

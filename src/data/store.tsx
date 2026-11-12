@@ -7,6 +7,7 @@ import { handleButton } from '@/domain/assistant';
 import { jobBilling } from '@/domain/billing';
 import { berlinParts, now, todayBerlin } from '@/domain/clock';
 import { runCoach } from '@/domain/coach';
+import { detectCommitment } from '@/domain/commitments';
 import { reconcileInsights, runDetectors } from '@/domain/detectors';
 import { expectedAmounts } from '@/domain/detectors/payments';
 import type { StoreEvent } from '@/domain/events';
@@ -67,7 +68,7 @@ function settleCommitments(s: AppState, at: Date): AppState {
 export function refresh(s: AppState, at: Date): AppState {
   const st = settleCommitments(autoAllocate(s, at), at);
   const stale = areaStale(st.connections.map((c) => c.id), st.connections, at);
-  return { ...st, insights: reconcileInsights(st.insights, [...runDetectors(st, at), ...runCoach(st, at)], at, stale) };
+  return { ...st, insights: reconcileInsights(st.insights, [...runDetectors(st, at), ...runCoach(st, at)], at, stale, st.settings.suppressedCoachKeys) };
 }
 
 // ---------- Mutationen ----------
@@ -131,8 +132,13 @@ function sendMessage(s: AppState, a: Action, at: Date): Mutation {
     jobId: p.jobId ?? null,
     needsReply: false,
   };
+  // Zusage des Inhabers in der Nachricht („Die Rechnung schicke ich morgen“) wird zur offenen Zusage.
+  const promise = msg.contactId ? detectCommitment(msg.body, msg.sentAt) : null;
+  const commitments = promise && msg.contactId
+    ? [...s.commitments, { id: `c-${msg.id}`, messageId: msg.id, contactId: msg.contactId, kind: promise.kind, text: msg.body, dueAt: promise.dueAt, status: 'open' as const }]
+    : s.commitments;
   return {
-    state: { ...s, messages: [...s.messages, msg] },
+    state: { ...s, messages: [...s.messages, msg], commitments },
     text: `Gesendet (Demo): ${channel === 'email' ? 'E-Mail' : 'WhatsApp'} an ${contact?.name ?? 'Unbekannt'}`,
   };
 }
@@ -153,6 +159,14 @@ function applyEffects(s: AppState, a: Action, at: Date): Mutation {
     default:
       return { state: s, text: `Ausgeführt (Demo): ${a.title}` };
   }
+}
+
+/** Ein abgehakter Antwort-Hinweis gilt als manuell beantwortet: die Nachricht wartet dann nicht mehr. */
+function dismissInsight(s: AppState, key: string, at: Date): AppState {
+  const st = setStatus(s, key, 'dismissed', at);
+  if (!key.startsWith('reply:')) return st;
+  const messageId = key.slice('reply:'.length);
+  return { ...st, messages: st.messages.map((m) => (m.id === messageId ? { ...m, doneManually: true } : m)) };
 }
 
 const setStatus = (s: AppState, key: string, status: 'dismissed' | 'snoozed', at: Date): AppState => ({
@@ -216,7 +230,7 @@ function mutate(s: AppState, e: StoreEvent, at: Date): { state: AppState; audit?
       return owner({ state: st, text }, a.id);
     }
     case 'dismissInsight':
-      return owner({ state: setStatus(s, e.key, 'dismissed', at), text: `Hinweis erledigt: ${s.insights.find((i) => i.dedupeKey === e.key)?.title ?? e.key}` });
+      return owner({ state: dismissInsight(s, e.key, at), text: `Hinweis erledigt: ${s.insights.find((i) => i.dedupeKey === e.key)?.title ?? e.key}` });
     case 'snoozeInsight':
       return owner({ state: setStatus(s, e.key, 'snoozed', at), text: `Hinweis zurückgestellt: ${s.insights.find((i) => i.dedupeKey === e.key)?.title ?? e.key}` });
     case 'suppressCoach': {

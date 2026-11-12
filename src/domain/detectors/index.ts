@@ -46,6 +46,7 @@ export function reconcileInsights(
   fresh: Insight[],
   now: Date,
   staleSources: ConnectionId[] = [],
+  suppressedKeys: string[] = [],
 ): StoredInsight[] {
   const stamp = now.toISOString();
   const freshByKey = new Map<string, Insight>();
@@ -62,11 +63,11 @@ export function reconcileInsights(
       }
       return { ...e, ...f, status: e.status };
     }
-    if (e.status === 'open') {
-      return e.needsSources.some((x) => staleSources.includes(x))
-        ? { ...e, status: 'stale' }
-        : { ...e, status: 'done', resolvedAt: stamp };
-    }
+    const sourceStale = e.needsSources.some((x) => staleSources.includes(x));
+    if (e.status === 'open') return sourceStale ? { ...e, status: 'stale' } : { ...e, status: 'done', resolvedAt: stamp };
+    // Abgehakt und Anlass weg: Episode vorbei. Kommt der Anlass später wieder, öffnet sich der Hinweis neu.
+    // Bei veralteter Quelle ist unklar, ob der Anlass weg ist; unterdrückte Coach-Tipps fehlen absichtlich: beide bleiben abgehakt.
+    if (e.status === 'dismissed' && !sourceStale && !suppressedKeys.includes(e.dedupeKey)) return { ...e, status: 'done', resolvedAt: stamp };
     return e;
   });
   const known = new Set(existing.map((e) => e.dedupeKey));

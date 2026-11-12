@@ -1,3 +1,4 @@
+import { formatBerlin } from '../clock';
 import type { AppState, Insight } from '../types';
 import { threadRef } from './refs';
 
@@ -16,7 +17,7 @@ export function detectCommitments(s: AppState, now: Date): Insight[] {
       company: contact?.company ?? null,
       priority: 'today',
       title: `Zusage an ${name} ist überfällig`,
-      body: `„${c.text}“, zugesagt bis ${c.dueAt}.`,
+      body: `„${c.text}“, zugesagt bis ${formatBerlin(new Date(c.dueAt), 'dd.MM.yyyy, HH:mm')} Uhr.`,
       refs: [threadRef(m.threadId, name)],
       nextStep: 'Zusage einlösen oder Kunden informieren',
       needsSources: [m.connectionId],

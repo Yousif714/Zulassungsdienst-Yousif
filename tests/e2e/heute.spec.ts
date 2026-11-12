@@ -27,3 +27,13 @@ test('ActionSheet: Fokus beim Ändern und Live-Region nach dem Senden', async ({
   await expect(status).toContainText('Gesendet (Demo)');
   await expect(status).toBeFocused();
 });
+
+test('Antwort-Hinweis abhaken → Kunde verschwindet auch aus „Nachrichten“', async ({ page }) => {
+  await page.goto('/?reset=1');
+  const row = page.locator('[data-key="reply:m-schmidt-in-1"]');
+  const replies = page.getByTestId('replies');
+  await expect(replies.getByText('Autohaus Schmidt')).toBeVisible();
+  await row.getByRole('button', { name: /^Erledigt:/ }).click();
+  await expect(row).toHaveCount(0);
+  await expect(replies.getByText('Autohaus Schmidt')).toHaveCount(0);
+});
