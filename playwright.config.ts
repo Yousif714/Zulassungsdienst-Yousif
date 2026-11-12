@@ -1,0 +1,39 @@
+import { defineConfig, devices } from '@playwright/test';
+import { existsSync } from 'node:fs';
+
+const chromiumPath = '/opt/pw-browsers/chromium';
+const executablePath = existsSync(chromiumPath) ? chromiumPath : undefined;
+const clipboard = ['clipboard-read', 'clipboard-write'];
+
+export default defineConfig({
+  testDir: 'tests/e2e',
+  webServer: {
+    command: 'npm run build && npm run start -- -p 3100',
+    port: 3100,
+    reuseExistingServer: true,
+    timeout: 300_000,
+  },
+  use: { baseURL: 'http://localhost:3100' },
+  projects: [
+    {
+      name: 'iphone',
+      use: {
+        ...devices['iPhone 15'],
+        browserName: 'chromium',
+        permissions: clipboard,
+        launchOptions: executablePath ? { executablePath } : {},
+      },
+    },
+    {
+      name: 'desktop',
+      use: {
+        ...devices['Desktop Chrome'],
+        permissions: clipboard,
+        launchOptions: executablePath ? { executablePath } : {},
+      },
+    },
+    ...(process.env.E2E_WEBKIT === '1'
+      ? [{ name: 'iphone-webkit', use: { ...devices['iPhone 15'] } }]
+      : []),
+  ],
+});
