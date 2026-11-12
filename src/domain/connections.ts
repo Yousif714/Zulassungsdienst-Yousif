@@ -13,6 +13,20 @@ export const CONNECTION_CATALOG: readonly { id: ConnectionId; company: Company |
   { id: 'whatsapp_assistent', company: null, label: 'WhatsApp Assistent' },
 ];
 
+/** Kurzanleitung für die echte Anbindung in Phase 2. */
+export const HOW_TO: Record<ConnectionId, string> = {
+  lexware_nexus: 'API-Schlüssel im Lexware-Konto erstellen und hier eintragen.',
+  lexware_zulassung: 'API-Schlüssel im Lexware-Konto erstellen und hier eintragen.',
+  stripe_nexus: 'In Stripe einen eingeschränkten Lese-Schlüssel anlegen.',
+  bank: 'CSV- oder CAMT-Export seit 1. August hochladen, später PSD2-Freigabe bei der Bank.',
+  gmail: 'Mit dem Google-Login freigeben.',
+  icloud: 'App-spezifisches Passwort in der Apple-ID erstellen.',
+  info_mail: 'Anbieter des info@-Postfachs klären (Zugangsart und Zugangsdaten).',
+  calendar: 'Google- oder iCloud-Kalender freigeben.',
+  whatsapp_kunden: 'Coexistence über einen Anbieter: Die WhatsApp-Business-App bleibt nutzbar.',
+  whatsapp_assistent: 'Zweite Nummer einrichten und Meta-Vorlagen für Briefings freigeben lassen.',
+};
+
 /** True, wenn alle genannten Quellen noch nicht verbunden sind (Status 'missing'). */
 export function notConnected(sources: ConnectionId[], connections: Connection[]): boolean {
   return sources.length > 0 && sources.every((id) => connections.find((c) => c.id === id)?.status === 'missing');

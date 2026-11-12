@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useId, useState } from 'react';
 
-import { DemoBadge } from '@/components/DemoBadge';
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { MoneyCard } from '@/components/MoneyCard';
@@ -14,6 +13,7 @@ import { openInsights } from '@/data/selectors';
 import { useAppStore } from '@/data/store';
 import { MONEY_SOURCES, buildBriefing, renderBriefingText } from '@/domain/briefing';
 import { formatBerlin, formatBerlinDe, now } from '@/domain/clock';
+import { notConnected } from '@/domain/connections';
 import { areaStale } from '@/domain/freshness';
 import { openReplies } from '@/domain/matching/messages';
 import type { StoredInsight } from '@/domain/types';
@@ -37,7 +37,7 @@ function CoachTip({ tip, onTake, onLater, onNever }: { tip: StoredInsight; onTak
 }
 
 export default function HeutePage() {
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode } = useAppStore();
   const [showBriefing, setShowBriefing] = useState(false);
   const briefingId = useId();
   const at = now();
@@ -46,10 +46,24 @@ export default function HeutePage() {
   const allOpen = openInsights(state);
   const coachTip = briefing.coach[0];
   const replies = openReplies(state.messages, at, state.settings.replyThresholdHours);
+  const header = <PageHeader title="Heute" subtitle={formatBerlinDe(at, 'EEEE, d. MMMM')} trailing={<MoreMenu />} />;
+
+  // Echtmodus ohne eine einzige Verbindung: Weg zur Einrichtung statt leerer Karten.
+  if (mode === 'real' && notConnected(state.connections.map((c) => c.id), state.connections)) {
+    return (
+      <>
+        {header}
+        <ListGroup title="Einrichtung" testId="setup-hint">
+          <ListRow key="setup" href="/verbindungen" title={<span className="wrap-text">Noch nichts verbunden – zur Einrichtung</span>}
+            subtitle={<span className="wrap-text">Verbinde deine Quellen, dann erscheinen hier Aufgaben, Termine und Zahlen.</span>} />
+        </ListGroup>
+      </>
+    );
+  }
 
   return (
     <>
-      <PageHeader title="Heute" subtitle={formatBerlinDe(at, 'EEEE, d. MMMM')} badge={<DemoBadge />} trailing={<MoreMenu />} />
+      {header}
 
       <ListGroup title="Wichtig heute" testId="top-insights">
         {briefing.top.length === 0

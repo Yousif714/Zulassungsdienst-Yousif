@@ -1588,6 +1588,42 @@ a.task-body:active {
   margin: 0 0 6px;
 }
 
+/* Einrichtungs-Liste (Echtmodus): offener Kreis, verbunden mit grünem Häkchen */
+.setup-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--gray);
+  border-radius: 50%;
+}
+
+.setup-mark[data-done="true"] {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* Modus-Etikett oben im Inhalt (nur Demo) */
+.mode-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px 16px 0;
+  font-size: 13px;
+}
+
+.mode-bar a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--tint);
+  text-decoration: none;
+}
+
 /* ------------------------------------------------------------------ Einstellungen */
 .switch {
   appearance: none;

@@ -20,6 +20,19 @@ export function reloadTo(path: '/' | '/anmelden'): void {
   window.location.assign(path);
 }
 
+/**
+ * Abmelden: Sitzung am Server beenden, Geräte-Merker und Demo-Schalter löschen, neu zur Anmeldung.
+ * Ohne Server bleibt das Sitzungs-Cookie bestehen, deshalb dann `false` und nichts gelöscht.
+ */
+export async function signOut(): Promise<boolean> {
+  const ok = await fetch('/api/auth/logout', { method: 'POST' }).then((r) => r.ok, () => false);
+  if (!ok) return false;
+  window.localStorage.removeItem(AUTH_HINT_KEY);
+  window.localStorage.removeItem(DEMO_FLAG_KEY);
+  reloadTo('/anmelden');
+  return true;
+}
+
 export function resolveMode(i: { authenticated: boolean; demoFlag: string | null; reachable: boolean }): AppMode {
   if (!i.authenticated || i.demoFlag === '1') return 'demo';
   return i.reachable ? 'real' : 'offline';
