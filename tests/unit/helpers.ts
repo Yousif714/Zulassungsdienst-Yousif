@@ -2,6 +2,9 @@ import type { MemberContract } from '@/domain/types';
 
 export const base: MemberContract = { id:'c1', contactId:'m1', totalCents:120000, installments:4, installmentCents:30000, dueDay:1, startDate:'2026-10-01', billing:'legacy', catchUpMode:'first_rate' };
 
+import { applyEvent } from '@/data/engine';
+import { executeApproved } from '@/data/executor';
+import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { AppState, Connection, Contact, IbanLink, Insight, Invoice, Job, Message, Payment, Vehicle } from '@/domain/types';
 
 export const IBAN_KAYA = 'DE89370400440532013000';
@@ -69,3 +72,13 @@ export function contractOf(s: AppState, contactId: string): string {
 }
 export const open = (s: AppState) => s.insights.filter((i) => i.status === 'open');
 export const isOpen = (s: AppState, key: string) => s.insights.some((i) => i.dedupeKey === key && i.status === 'open');
+
+/** Lässt den gemeinsamen Ausführer (Demo-Anbieter) alle freigegebenen Aktionen ausführen. */
+export async function drain(state: AppState, at: Date = NOW_0930): Promise<AppState> {
+  let st = state;
+  await executeApproved({
+    current: () => st,
+    async apply(e) { st = applyEvent(st, e, { at, isDemo: true, newId: () => crypto.randomUUID() }).state; return st; },
+  }, new DemoProvider());
+  return st;
+}

@@ -5,7 +5,7 @@ import { createDemoState } from '@/data/seed';
 import { reducer, refresh, type StoreEvent } from '@/data/store';
 import { handleButton, handleInbound } from '@/domain/assistant';
 import type { AppState } from '@/domain/types';
-import { NOW_0930 as NOW } from './helpers';
+import { NOW_0930 as NOW, drain } from './helpers';
 
 const apply = (st: AppState, events: StoreEvent[]) => events.reduce(reducer, st);
 const s = refresh(createDemoState(), NOW);
@@ -84,12 +84,11 @@ describe('handleButton', () => {
   test('Senden → freigegeben über WhatsApp, ausgeführt, „Gesendet (Demo)“', async () => {
     const { st, buttons } = await withDraft();
     const r = handleButton(st, buttons[0], NOW);
-    expect(r.events.slice(0, 2)).toEqual([
+    expect(r.events.slice(0, 1)).toEqual([
       { type: 'approveAction', id: buttons[0].actionId, version: 1, via: 'whatsapp', buttonIssuedAt: buttons[0].issuedAt },
-      { type: 'actionExecuted', id: buttons[0].actionId, result: 'ok' },
     ]);
     expect(r.reply.text).toBe('Gesendet (Demo): Mehmet Kaya');
-    const after = apply(st, r.events);
+    const after = await drain(apply(st, r.events));
     expect(after.actions.find((a) => a.id === buttons[0].actionId)).toMatchObject({ status: 'executed', approvedVia: 'whatsapp' });
     expect(after.assistantChat.at(-1)).toMatchObject({ direction: 'to_owner', text: 'Gesendet (Demo): Mehmet Kaya' });
     // Knopfdruck erzeugt keine Inhaber-Nachricht
@@ -98,7 +97,7 @@ describe('handleButton', () => {
 
   test('schon freigegebene Erinnerung → Hinweis mit Link zur Mitgliedsseite', async () => {
     const { st, buttons } = await withDraft();
-    const sent = apply(st, handleButton(st, buttons[0], NOW).events);
+    const sent = await drain(apply(st, handleButton(st, buttons[0], NOW).events));
     const r = await handleInbound(sent, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI);
     expect(r.reply!.text).toBe('Die Erinnerung an Mehmet Kaya ist schon freigegeben.');
     expect(r.reply!.links).toEqual([{ label: 'Mehmet Kaya', href: '/nexus/mitglieder/mc-kaya' }]);
@@ -107,10 +106,10 @@ describe('handleButton', () => {
 
   test('derselbe Knopf zweimal → nicht mehr gültig, nichts gesendet', async () => {
     const { st, buttons } = await withDraft();
-    const once = apply(st, handleButton(st, buttons[0], NOW).events);
+    const once = await drain(apply(st, handleButton(st, buttons[0], NOW).events));
     const r = handleButton(once, buttons[0], NOW);
     expect(r.reply.text).toBe('Dieser Knopf ist nicht mehr gültig (Die Aktion wurde bereits freigegeben). Ich habe nichts gesendet.');
-    const after = apply(once, r.events);
+    const after = await drain(apply(once, r.events));
     expect(after.messages.filter((m) => isSentOf(after, buttons[0].actionId, m))).toHaveLength(1);
   });
 
@@ -147,7 +146,7 @@ describe('Fix-Runde 1', () => {
     const st = apply(s, r.events);
     const btn = r.reply!.buttons![0];
     // Beide Klicks entstehen aus demselben (veralteten) Seitenstand.
-    const after = apply(st, [{ type: 'assistantButton', button: btn }, { type: 'assistantButton', button: btn }]);
+    const after = await drain(apply(st, [{ type: 'assistantButton', button: btn }, { type: 'assistantButton', button: btn }]));
     const replies = after.assistantChat.filter((m) => m.direction === 'to_owner').map((m) => m.text);
     expect(replies.filter((t) => t.startsWith('Gesendet (Demo)'))).toHaveLength(1);
     expect(replies.at(-1)).toBe('Dieser Knopf ist nicht mehr gültig (Die Aktion wurde bereits freigegeben). Ich habe nichts gesendet.');

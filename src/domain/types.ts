@@ -29,7 +29,7 @@ export interface Settings { replyThresholdHours: number; briefingsEnabled: boole
 
 export type ActionType = 'send_whatsapp'|'send_email'|'send_reminder'|'create_invoice_draft'|'create_calendar_event'|'mark_invoice_settled'|'link_invoice_to_job'|'confirm_payment_match';
 export type ActionStatus = 'draft'|'approved'|'executing'|'executed'|'failed'|'uncertain'|'cancelled';
-export interface Action { id: string; type: ActionType; company: Company | null; title: string; payload: Record<string, unknown>; version: number; status: ActionStatus; createdAt: string; approvedVia?: 'app'|'whatsapp'|'auto'; approvedAt?: string; executedAt?: string; error?: string; isDemo: boolean; insightKey?: string }
+export interface Action { id: string; type: ActionType; company: Company | null; title: string; payload: Record<string, unknown>; version: number; status: ActionStatus; createdAt: string; approvedVia?: 'app'|'whatsapp'|'auto'; approvedAt?: string; executedAt?: string; executingSince?: string; error?: string; isDemo: boolean; insightKey?: string }
 export interface AuditEntry { at: string; actor: 'owner'|'assistant'|'system'; text: string; actionId?: string; isDemo: boolean }
 export interface AssistantMessage { id: string; direction: 'to_owner'|'from_owner'|'ignored'; from: string; text: string; at: string; buttons?: { label: 'Senden'|'Ändern'|'Später'; actionId: string; version: number; issuedAt: string }[]; links?: { label: string; href: string }[] }
 

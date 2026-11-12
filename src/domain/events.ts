@@ -10,7 +10,11 @@ export type StoreEvent =
   | { type: 'createAction'; action: Action }
   | { type: 'editAction'; id: string; payload: Record<string, unknown> }
   | { type: 'approveAction'; id: string; version: number; via: 'app' | 'whatsapp'; buttonIssuedAt?: string }
-  | { type: 'actionExecuted'; id: string; result: 'ok' | 'error' | 'timeout'; error?: string }
+  | { type: 'actionStarted'; id: string }
+  | { type: 'actionExecuted'; id: string; result: 'ok' | 'error' | 'timeout'; error?: string; simulated?: boolean }
+  | { type: 'actionReconciled'; id: string; found: boolean; simulated?: boolean }
+  | { type: 'retryAction'; id: string }
+  | { type: 'checkAction'; id: string }
   | { type: 'dismissInsight'; key: string }
   | { type: 'snoozeInsight'; key: string }
   | { type: 'suppressCoach'; key: string }

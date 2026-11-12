@@ -2,12 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { DemoProvider } from '@/domain/actions/demo-provider';
 import { REJECT_REASON_DE } from '@/domain/actions/machine';
 import { now } from '@/domain/clock';
 import type { StoreEvent } from '@/domain/events';
 import { newId } from '@/domain/ids';
 import type { AppState } from '@/domain/types';
 import { applyEvent, refresh, type EngineContext } from './engine';
+import { checkAction, executeApproved, sweepStaleExecutions, type EventSink } from './executor';
 import { createDemoState } from './seed';
 
 export const STORE_KEY = 'nexus-demo-v1';
@@ -17,6 +19,9 @@ export { REJECT_REASON_DE, refresh };
 
 /** Kontext der lokalen Demo: Demo-Uhr, Demo-Protokoll, UUIDs. */
 export const demoContext = (): EngineContext => ({ at: now(), isDemo: true, newId });
+
+/** Ausführer der lokalen Demo: führt nie extern aus. */
+const provider = new DemoProvider();
 
 export function reducer(s: AppState, e: StoreEvent): AppState {
   return applyEvent(s, e, demoContext()).state;
@@ -54,6 +59,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const loaded = useRef(false);
   // Aktueller Stand synchron: schnell aufeinanderfolgende Dispatches (createAction + approveAction) sehen den neuen Stand sofort.
   const ref = useRef<AppState | null>(null);
+  // Der Ausführer schreibt über denselben Weg wie `dispatch` in den Zustand.
+  const sink = useRef<EventSink>({
+    current: () => ref.current as AppState,
+    async apply(e) {
+      const r = applyEvent(ref.current as AppState, e, demoContext());
+      ref.current = r.state;
+      setState(r.state);
+      return r.state;
+    },
+  }).current;
 
   useEffect(() => {
     // Erst nach der Hydrierung laden: localStorage und URL gibt es nur im Browser. Der Ref verhindert doppeltes Laden (StrictMode).
@@ -67,7 +82,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }
     ref.current = initial;
     setState(initial);
-  }, []);
+    // Liegengebliebene Ausführungen (Seite war zu) → „Ausgang unklar“; noch nicht ausgeführte Freigaben nachholen.
+    void sweepStaleExecutions(sink, now()).then(() => executeApproved(sink, provider));
+  }, [sink]);
 
   useEffect(() => {
     if (state) window.localStorage.setItem(STORE_KEY, JSON.stringify(state));
@@ -78,8 +95,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     const r = applyEvent(ref.current, e, demoContext());
     ref.current = r.state;
     setState(r.state);
+    // Danach führt der Ausführer freigegebene Aktionen aus; erst dann ist der Aufruf fertig.
+    await executeApproved(sink, provider);
+    if (e.type === 'checkAction') await checkAction(sink, provider, e.id);
     return { created: r.created };
-  }, []);
+  }, [sink]);
 
   if (!state) return null;
   return <StoreContext.Provider value={{ state, dispatch }}>{children}</StoreContext.Provider>;

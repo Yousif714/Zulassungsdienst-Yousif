@@ -99,5 +99,5 @@ export function handleButton(s: AppState, b: Button, now: Date): { events: Store
   // Auch die Ablehnung läuft durch den Store, damit sie im Protokoll steht.
   if (!r.ok) return deliver(s, [approveEvent], invalid(REJECT_REASON_DE[r.reason]), now);
   const contact = s.contacts.find((c) => c.id === (a.payload as { contactId?: string }).contactId);
-  return deliver(s, [approveEvent, { type: 'actionExecuted', id: a.id, result: 'ok' }], `Gesendet (Demo): ${contact?.name ?? a.title}`, now);
+  return deliver(s, [approveEvent], `Gesendet (Demo): ${contact?.name ?? a.title}`, now);
 }

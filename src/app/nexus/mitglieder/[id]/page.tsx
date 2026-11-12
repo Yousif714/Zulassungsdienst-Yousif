@@ -92,7 +92,6 @@ export default function MemberPage() {
   const send = (a: Action) => {
     ensureStored(a);
     dispatch({ type: 'approveAction', id: a.id, version: a.version, via: 'app' });
-    dispatch({ type: 'actionExecuted', id: a.id, result: 'ok' });
   };
   const edit = (a: Action, text: string) => {
     ensureStored(a);
@@ -139,7 +138,8 @@ export default function MemberPage() {
               options={[{ value: 'freundlich', label: 'Freundlich' }, { value: 'bestimmt', label: 'Bestimmt' }]} />
           )}
           {action ? (
-            <ActionSheet action={action} onSend={() => send(action)} onEdit={(text) => edit(action, text)} onLater={() => setOpen(false)} />
+            <ActionSheet action={action} onSend={() => send(action)} onEdit={(text) => edit(action, text)} onLater={() => setOpen(false)}
+            onRetry={() => dispatch({ type: 'retryAction', id: action.id })} onCheck={() => dispatch({ type: 'checkAction', id: action.id })} />
           ) : (
             <div className="action-sheet action-sheet-loading" role="status">Entwurf wird vorbereitet …</div>
           )}

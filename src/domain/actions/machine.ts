@@ -1,6 +1,15 @@
 import type { Action, ActionStatus } from '../types';
 
 const BUTTON_TTL_MS = 24 * 3_600_000;
+/** Eine Ausführung, die so lange läuft, gilt als abgebrochen: Ausgang unklar. */
+export const STALE_EXECUTING_MS = 5 * 60_000;
+/** So lange wartet der Ausführer auf den Anbieter. */
+export const EXECUTE_TIMEOUT_MS = 10_000;
+
+function settled(a: Action): Action {
+  const { executingSince: _since, ...rest } = a;
+  return rest;
+}
 
 function fail(from: ActionStatus, to: ActionStatus): never {
   throw new Error(`Ungültiger Übergang: ${from} → ${to}`);
@@ -46,9 +55,10 @@ export function startExecution(a: Action): Action {
 
 export function finishExecution(a: Action, result: 'ok' | 'error' | 'timeout', now: Date, error?: string): Action {
   if (a.status !== 'executing') fail(a.status, result === 'ok' ? 'executed' : result === 'error' ? 'failed' : 'uncertain');
-  if (result === 'ok') return { ...a, status: 'executed', executedAt: now.toISOString() };
-  if (result === 'timeout') return { ...a, status: 'uncertain' };
-  return { ...a, status: 'failed', error };
+  const base = settled(a);
+  if (result === 'ok') return { ...base, status: 'executed', executedAt: now.toISOString() };
+  if (result === 'timeout') return { ...base, status: 'uncertain' };
+  return { ...base, status: 'failed', error };
 }
 
 export function reconcileUncertain(a: Action, foundAtProvider: boolean, now: Date): Action {
@@ -65,6 +75,8 @@ export function retry(a: Action): Action {
 }
 
 export interface ActionProvider {
+  /** true: führt nichts wirklich aus (Demo-Ausführer). */
+  readonly simulated: boolean;
   execute(a: Action, key: string): Promise<'ok' | 'error' | 'timeout'>;
   lookup(key: string): Promise<boolean>;
 }

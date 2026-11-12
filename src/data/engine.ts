@@ -1,4 +1,4 @@
-import { REJECT_REASON_DE, approve, editDraft, finishExecution, startExecution } from '@/domain/actions/machine';
+import { REJECT_REASON_DE, approve, editDraft, finishExecution, reconcileUncertain, retry, startExecution } from '@/domain/actions/machine';
 import { handleButton } from '@/domain/assistant';
 import { jobBilling } from '@/domain/billing';
 import { berlinParts, todayBerlin } from '@/domain/clock';
@@ -138,7 +138,11 @@ function sendMessage(s: AppState, a: Action, ctx: EngineContext): Mutation {
   };
 }
 
-function applyEffects(s: AppState, a: Action, ctx: EngineContext): Mutation {
+const EXTERNAL_SEND = new Set<Action['type']>(['send_whatsapp', 'send_email', 'send_reminder']);
+
+/** `simulated`: Der Ausführer hat nichts wirklich gesendet. Im Echtmodus entsteht dann keine ausgehende Nachricht. */
+function applyEffects(s: AppState, a: Action, ctx: EngineContext, simulated = false): Mutation {
+  if (simulated && !ctx.isDemo && EXTERNAL_SEND.has(a.type)) return { state: s, text: `Nicht gesendet (Demo-Ausführer): ${a.title}` };
   const p = a.payload as Record<string, string>;
   switch (a.type) {
     case 'send_whatsapp':
@@ -215,15 +219,36 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       if (!r.ok) return owner({ state: s, text: `Abgelehnt: ${REJECT_REASON_DE[r.reason]}` }, a.id);
       return owner({ state: replaceAction(s, r.action), text: `Freigegeben (${e.via === 'app' ? 'App' : 'WhatsApp'}): ${a.title}` }, a.id);
     }
-    case 'actionExecuted': {
+    case 'actionStarted': {
       const a = s.actions.find((x) => x.id === e.id);
       if (!a || a.status !== 'approved') return { state: s };
-      const done = finishExecution(startExecution(a), e.result, at, e.error);
+      const started = { ...startExecution(a), executingSince: at.toISOString() };
+      return owner({ state: replaceAction(s, started), text: `Ausführung gestartet: ${a.title}` }, a.id);
+    }
+    case 'actionExecuted': {
+      const a = s.actions.find((x) => x.id === e.id);
+      if (!a || (a.status !== 'approved' && a.status !== 'executing')) return { state: s };
+      const done = finishExecution(a.status === 'approved' ? startExecution(a) : a, e.result, at, e.error);
       const st = replaceAction(s, done);
-      if (e.result === 'ok') return owner(applyEffects(st, done, ctx), a.id);
+      if (e.result === 'ok') return owner(applyEffects(st, done, ctx, e.simulated), a.id);
       const text = e.result === 'error' ? `Fehlgeschlagen: ${a.title}${e.error ? ` (${e.error})` : ''}` : `Ausgang unklar: ${a.title}`;
       return owner({ state: st, text }, a.id);
     }
+    case 'actionReconciled': {
+      const a = s.actions.find((x) => x.id === e.id);
+      if (!a || a.status !== 'uncertain') return { state: s };
+      const done = reconcileUncertain(a, e.found, at);
+      const st = replaceAction(s, done);
+      if (e.found) return owner(applyEffects(st, done, ctx, e.simulated), a.id);
+      return owner({ state: st, text: `Fehlgeschlagen: ${a.title} (beim Anbieter nicht gefunden)` }, a.id);
+    }
+    case 'retryAction': {
+      const a = s.actions.find((x) => x.id === e.id);
+      if (!a || a.status !== 'failed') return { state: s };
+      return owner({ state: replaceAction(s, retry(a)), text: `Erneut versucht: ${a.title}` }, a.id);
+    }
+    case 'checkAction':
+      return { state: s }; // nur Auslöser für den Ausführer
     case 'dismissInsight':
       return owner({ state: dismissInsight(s, e.key, at), text: `Hinweis erledigt: ${s.insights.find((i) => i.dedupeKey === e.key)?.title ?? e.key}` });
     case 'snoozeInsight':

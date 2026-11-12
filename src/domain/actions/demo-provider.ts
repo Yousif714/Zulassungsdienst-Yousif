@@ -3,6 +3,7 @@ import type { ActionProvider } from './machine';
 
 /** Merkt sich ausgeführte Schlüssel, führt nie extern aus. */
 export class DemoProvider implements ActionProvider {
+  readonly simulated = true;
   private done = new Map<string, number>();
 
   async execute(_a: Action, key: string): Promise<'ok' | 'error' | 'timeout'> {
