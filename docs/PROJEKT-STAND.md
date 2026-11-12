@@ -53,11 +53,9 @@ Kernziele:
 `npm test` (Vitest, ~224) · `npx tsc --noEmit` · `npm run lint` · `npm run contrast` · `npm run e2e` (Playwright, vorher `fuser -k 3100/tcp`) · Screenshots: `SCREENSHOTS=1 npm run e2e -- tests/e2e/screenshots.spec.ts`
 
 ## Stand & nächste Schritte
-- **Phase 1 live** (PR #1 gemergt, Vercel-Deploy läuft, Inhaber nutzt die App am iPhone).
-- **Design-Feinschliff** (PR #2): Bewegung, Wischgesten, zentrierte Titel und Karten, iMessage-Nachrichten. Vom Inhaber abgenommen, Merge durch den Inhaber.
-- Inhaber-Wünsche zum Design: flüssig und dynamisch, Titel und Texte mittig (Listen bleiben links), Apple-Stil statt KI-Look, kein Glitzer.
-- **Als Nächstes: Phase 2.** Erst Brainstorming (Reihenfolge der Verbindungen, Zugänge), dann Spec ergänzen, dann Plan.
-  - Zuerst die Architekturpunkte 1–4 aus `docs/phase2-backlog.md`.
-  - Danach lesend anbinden: Lexware ×2, Stripe, Bank-CSV, Gmail/iCloud/info@, Kalender.
-  - Dann Claude statt DemoAI, dann WhatsApp live.
-- Offen: Codex-Zweitmeinung (Prompt in `docs/Codex-Vergleich-Prompt.md`) und Gefühl der Wischgesten am echten iPhone.
+- Phase 1 + Design-Feinschliff live (PR #1, #2 gemergt).
+- **Phase 2 geplant:** Spec `docs/superpowers/specs/2026-11-12-phase2-design.md`, Pakete 2a–2f.
+- **Als Nächstes: Paket 2a (Fundament) bauen** nach `docs/superpowers/plans/2026-11-12-phase2a-fundament.md` (14 Tasks), mit `superpowers:subagent-driven-development`. Danach ein PR, dann richtet der Inhaber Supabase und Vercel nach `docs/setup-phase2a.md` ein.
+- Zugänge des Inhabers: alles vorhanden außer einer zweiten WhatsApp-Nummer (erst 2e). Banken: Qonto (NEXUS, API) und Sparkasse Essen (Zulassung, CAMT-Upload). info@ liegt beim Team des Inhabers, IMAP-Daten auf Anfrage. Kalender: Google und iCloud.
+- Inhaber bereitet vor: Vercel Pro und ein Supabase-Projekt in Frankfurt.
+- Offen: Codex-Zweitmeinung; Gefühl der Wischgesten am iPhone.
