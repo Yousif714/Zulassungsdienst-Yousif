@@ -50,8 +50,8 @@ export function mapStripe(raw: StripeRaw): ImportBatch {
   const productNames = new Map<string, string>();
   for (const p of raw.products as Obj[]) productNames.set(p.id, p.name);
 
-  // F9: nur bezahlte Rechnungen mit Abo-Bezug
-  const invoices = (raw.invoices as Obj[]).filter((i) => i.status === 'paid' && subscriptionOfInvoice(i));
+  // F9: nur bezahlte Rechnungen mit Abo-Bezug; nur EUR (Cent-Beträge ohne Umrechnung)
+  const invoices = (raw.invoices as Obj[]).filter((i) => i.status === 'paid' && i.currency === 'eur' && subscriptionOfInvoice(i));
 
   const payments: ImportedPayment[] = invoices.map((inv) => ({
     company: 'nexus',
@@ -69,6 +69,8 @@ export function mapStripe(raw: StripeRaw): ImportBatch {
   const invById = new Map(invoices.map((i) => [i.id as string, i]));
   for (const r of raw.refunds as Obj[]) {
     const inv = r.invoiceId ? invById.get(r.invoiceId) : undefined;
+    // nur erfolgreiche EUR-Erstattungen zu importierten Abo-Rechnungen
+    if (!inv || r.status !== 'succeeded' || r.currency !== 'eur') continue;
     payments.push({
       company: 'nexus',
       source: 'stripe',
@@ -76,11 +78,11 @@ export function mapStripe(raw: StripeRaw): ImportBatch {
       externalId: r.id,
       amountCents: -r.amount,
       bookedOn: date(r.created),
-      payerName: inv?.customer_name ?? undefined,
-      reference: `Erstattung${inv?.number ? ` ${inv.number}` : ''}`,
+      payerName: inv.customer_name ?? undefined,
+      reference: `Erstattung${inv.number ? ` ${inv.number}` : ''}`,
       kind: 'incoming',
-      subscriptionExternalId: inv ? subscriptionOfInvoice(inv) ?? undefined : undefined,
-      refundOf: r.invoiceId ?? undefined,
+      subscriptionExternalId: subscriptionOfInvoice(inv) ?? undefined,
+      refundOf: inv.id,
     });
   }
 

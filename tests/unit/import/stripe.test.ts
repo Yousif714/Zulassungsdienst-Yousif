@@ -30,3 +30,20 @@ test('Rechnung ohne Abo-Bezug wird nicht importiert', () => {
   expect(mapStripe(raw).payments.some((p) => p.externalId === 'in_X')).toBe(false);
 });
 test('keine Rechnungen und Kontakte aus Stripe', () => { expect(b.invoices).toEqual([]); expect(b.contacts).toEqual([]); });
+
+const withRaw = (extra: Partial<typeof stripeRaw>) => mapStripe({ ...stripeRaw, ...extra });
+const refund = (o: object) => ({ id: 're_X', amount: 100, currency: 'eur', created: 1, status: 'succeeded', invoiceId: 'in_B1', ...o });
+test('nicht erfolgreiche Erstattung → keine Zahlung', () => {
+  for (const status of ['pending', 'failed', 'canceled']) {
+    expect(withRaw({ refunds: [refund({ status })] }).payments.some((p) => p.externalId === 're_X')).toBe(false);
+  }
+});
+test('Erstattung zu Rechnung ohne Abo-Bezug → keine Zahlung', () => {
+  expect(withRaw({ refunds: [refund({ invoiceId: 'in_unbekannt' })] }).payments.some((p) => p.externalId === 're_X')).toBe(false);
+  expect(withRaw({ refunds: [refund({ invoiceId: null })] }).payments.some((p) => p.externalId === 're_X')).toBe(false);
+});
+test('nur EUR wird Zahlung', () => {
+  const usdInv = { ...(stripeRaw.invoices[0] as object), id: 'in_USD', currency: 'usd' };
+  expect(withRaw({ invoices: [...stripeRaw.invoices, usdInv] }).payments.some((p) => p.externalId === 'in_USD')).toBe(false);
+  expect(withRaw({ refunds: [refund({ currency: 'usd' })] }).payments.some((p) => p.externalId === 're_X')).toBe(false);
+});
