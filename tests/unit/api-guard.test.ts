@@ -13,7 +13,7 @@ function routes(dir: string): string[] {
 }
 
 // Eigene Prüfung bzw. bewusst offen.
-const EXEMPT = [/^auth\/session$/, /^auth\/register\//, /^auth\/login\//, /^auth\/recover$/, /^auth\/logout$/, /^cron\/tick$/, /^test\/reset$/, /^test\/import$/];
+const EXEMPT = [/^auth\/session$/, /^auth\/register\//, /^auth\/login\//, /^auth\/recover$/, /^auth\/logout$/, /^cron\/tick$/, /^test\/reset$/, /^test\/import$/, /^webhooks\/stripe$/];
 
 describe('API-Schutz', () => {
   const files = routes(API);
@@ -38,6 +38,8 @@ describe('API-Schutz', () => {
       if (env >= 0) expect(dyn, path.relative(API, f)).toBeLessThan(env);
     }
   });
+  it('Stripe-Webhook prüft die Signatur', () =>
+    expect(readFileSync(path.join(API, 'webhooks/stripe/route.ts'), 'utf8')).toContain('verifyStripeSignature('));
   it('keine Route setzt runtime', () => {
     for (const f of files) expect(readFileSync(f, 'utf8')).not.toMatch(/export const runtime/);
   });
