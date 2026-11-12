@@ -87,6 +87,10 @@
 - Echt- und Demo-Daten mischen sich nie.
 - Ohne Login sieht man nur die Demo, mit dem Hinweis „Anmelden für echte Daten“.
 
+**Uhr:**
+- Im Echtmodus liefert `now()` die echte Zeit. Die Demo-Uhr (12.11.2026, 09:30) und `?now=` gelten nur im Demo-Modus.
+- Der Server nutzt immer die echte Uhr; Tests setzen sie über `setNowForTests`.
+
 **Leerer Echt-Start:**
 - Ohne Verbindungen zeigt die App einen Einrichtungs-Zustand: „Verbindungen“ mit Checkliste und Klickanleitungen, statt leerer Karten.
 - Die Bereiche zeigen „Noch nicht verbunden“ (die Regel „Datenstand zu alt“ gilt weiter).
