@@ -31,7 +31,7 @@ export default function ProposalsPage() {
       ))}
       {waiting > 0 && (
         <ListGroup title="Stripe">
-          <ListRow key="waiting" title={`${waiting} Stripe-Zahlungen warten auf einen Vorschlag`} />
+          <ListRow key="waiting" title={waiting === 1 ? '1 Stripe-Zahlung wartet auf einen Vorschlag' : `${waiting} Stripe-Zahlungen warten auf einen Vorschlag`} />
         </ListGroup>
       )}
     </>

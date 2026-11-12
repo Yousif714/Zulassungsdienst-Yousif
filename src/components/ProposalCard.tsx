@@ -29,6 +29,12 @@ export function proposalSummary(p: ProposalValues): string {
   ].join(' · ');
 }
 
+/** Grund, warum „Übernehmen“ gesperrt ist; `null` = frei. Bei reinem Namenstreffer muss „Ist das …?“ beantwortet sein. */
+export function confirmBlocker(errors: string[], match: 'ref' | 'email' | 'name' | 'none', same: boolean | null, name: string | null): string | null {
+  if (match === 'name' && same === null) return `Bitte zuerst beantworten: Ist das ${name}?`;
+  return errors.length > 0 ? 'Bitte die Angaben ergänzen oder korrigieren.' : null;
+}
+
 const money = (c: number | undefined) => (c === undefined ? '' : formatEuro(c));
 const num = (n: number | undefined) => (n === undefined ? '' : String(n));
 const whole = (s: string) => (/^\d+$/.test(s.trim()) ? Number(s) : 0);
@@ -55,16 +61,19 @@ export function ProposalCard({ proposal: p, contacts, onConfirm, onDismiss }: {
     dueDay: whole(day), startDate: start, catchUpMode: mode,
   };
   const errors = validateContractDraft(draft);
-  const shown: ProposalValues = editing
-    ? { totalCents: draft.totalCents || null, installments: draft.installments || null, installmentCents: draft.installmentCents || null, dueDay: draft.dueDay || null, startDate: start || null }
-    : p;
+  // Eine Quelle der Wahrheit: Anzeige und Senden kommen aus demselben Entwurf.
+  const shown: ProposalValues = {
+    totalCents: draft.totalCents || null, installments: draft.installments || null, installmentCents: draft.installmentCents || null,
+    dueDay: draft.dueDay || null, startDate: start || null,
+  };
+  const blocker = confirmBlocker(errors, found.match, same, found.name);
   const id = p.id;
 
   return (
     <article className="list-group" data-testid={`proposal-${id}`}>
       <div className="note-card">
         <h3 className="list-row-title">{p.name} <span className="chip">{p.sourceLabel}</span></h3>
-        <p className="amount-line">{proposalSummary(shown)}</p>
+        <p className="list-row-title amount">{proposalSummary(shown)}</p>
         <p className="list-row-subtitle">Quelle: {p.references.join(', ')}</p>
         <p className="list-row-subtitle">
           <span className="chip" data-confidence={p.complete ? 'high' : 'low'}>{p.complete ? 'vollständig' : 'bitte ergänzen'}</span>
@@ -90,10 +99,11 @@ export function ProposalCard({ proposal: p, contacts, onConfirm, onDismiss }: {
         {errors.length > 0 && (editing || p.complete) && (
           <ul className="form-error" role="alert">{errors.map((e) => <li key={e}>{e}</li>)}</ul>
         )}
+        {blocker && <p className="list-row-subtitle" data-testid={`proposal-${id}-blocker`}>{blocker}{!editing && errors.length > 0 && ' Zum Ergänzen auf „Bearbeiten“ tippen.'}</p>}
         <div className="member-actions">
           <button type="button" className="btn btn-secondary" onClick={() => setEditing((v) => !v)}>Bearbeiten</button>
           <button type="button" className="btn btn-secondary" onClick={onDismiss}>Verwerfen</button>
-          <button type="button" className="btn btn-primary" disabled={errors.length > 0}
+          <button type="button" className="btn btn-primary" disabled={blocker !== null}
             onClick={() => onConfirm(draft, found.match === 'name' && same === true ? found.contactId : null)}>Übernehmen</button>
         </div>
       </div>
