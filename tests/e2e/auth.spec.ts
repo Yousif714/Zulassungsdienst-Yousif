@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { lexwareRoutes, stripeRoutes } from '../fixtures';
 
 // Erstanmeldung mit virtuellem Passkey: Einrichtung, Echtmodus, Demo-Schalter, Abmelden, erneute Anmeldung.
 test.describe.configure({ mode: 'serial' });
@@ -88,4 +89,43 @@ test('Abmelden und mit demselben Passkey wieder anmelden', async () => {
 test('zweite Einrichtung ohne Sitzung wird abgewiesen', async ({ request }) => {
   const r = await request.post('/api/auth/register/options', { data: { setupToken: 'e2e-setup-token' } });
   expect(r.status()).toBe(401);
+});
+
+// Paket 2b-1: Echtmodus mit Import aus den Test-Fixtures (Memory-DB, gefälschter fetch). Nach „Noch nichts verbunden“-Tests, daher am Ende.
+test('Echtmodus: Import, Vorschläge, Übernehmen führt zur Übernahme ohne Demo-Kopf', async () => {
+  const r = await page.request.post('/api/test/import', { data: { routes: { ...stripeRoutes, ...lexwareRoutes } } });
+  expect(r.ok()).toBe(true);
+  await page.goto('/verbindungen');
+  await expect(page.getByTestId('setup-stripe_nexus')).toContainText(/Verbunden · Stand vor \d+ Min/);
+  await page.goto('/nexus');
+  await expect(page.getByTestId('proposals-card')).toContainText('Verträge zum Bestätigen');
+  await page.getByTestId('proposals-card').click();
+  const card = page.getByTestId('proposal-stripe_nexus:sub_A');
+  await expect(card).toContainText('1.200,00 € · 4 × 300,00 € · am 1. · ab 01.09.2026');
+  await expect(card).toContainText('vollständig');
+  await card.getByRole('button', { name: 'Übernehmen' }).click();
+  await expect(page).toHaveURL(/\/nexus\/mitglieder\/[^/]+\/uebernahme$/);
+  await expect(page.getByTestId('demo-badge')).toHaveCount(0);
+  await expect(page.getByTestId('previous-payments').locator('li')).toHaveCount(3);
+});
+
+test('Echtmodus: Verwerfen bleibt verworfen, Lexware-Vertrag zeigt „Bank nicht verbunden“', async () => {
+  await page.goto('/nexus/mitglieder/vorschlaege');
+  await page.getByTestId('proposal-stripe_nexus:sub_E').getByRole('button', { name: 'Verwerfen' }).click();
+  await page.reload();
+  await expect(page.getByTestId('proposal-stripe_nexus:sub_E')).toHaveCount(0);
+  await page.getByTestId('proposal-lexware_nexus:c-77').getByRole('button', { name: 'Übernehmen' }).click();
+  await expect(page.getByTestId('bank-missing')).toHaveText(/Bank nicht verbunden/);
+  await page.goto('/nexus');
+  await expect(page.getByText('Überweisung · Bank nicht verbunden')).toBeVisible();
+});
+
+test('Echtmodus: unvollständiger Vorschlag lässt sich erst nach Ergänzen übernehmen', async () => {
+  await page.goto('/nexus/mitglieder/vorschlaege');
+  const card = page.getByTestId('proposal-lexware_nexus:c-83'); // Gesamtrechnung ohne Fälligkeitstag
+  await expect(card).toContainText('bitte ergänzen');
+  await expect(card.getByRole('button', { name: 'Übernehmen' })).toBeDisabled();
+  await card.getByRole('button', { name: 'Bearbeiten' }).click();
+  await card.getByLabel('Fälligkeitstag').fill('15');
+  await expect(card.getByRole('button', { name: 'Übernehmen' })).toBeEnabled();
 });
