@@ -4,7 +4,7 @@ import { applyEvent, applyEvents, refresh, type EngineContext } from '@/data/eng
 import { reducer } from '@/data/store';
 import type { StoreEvent } from '@/domain/events';
 import { NOW_0930 as NOW } from './helpers';
-import { stripeBatch } from './import/helpers';
+import { confirmedSub, stripeBatch, stripeState } from './import/helpers';
 
 const IBAN = 'DE02120300000000202051';
 const s = refresh(createDemoState(), NOW);
@@ -84,5 +84,21 @@ describe('Abgleich-Ereignisse', () => {
     const ok = applyEvent(r2, imp(null, true), ctx()).state;
     expect(conn(ok)).toMatchObject({ status: 'connected', sync: { failures: 0 } });
     expect(conn(ok).lastError).toBeUndefined();
+  });
+});
+
+describe('refresh: Stripe-Zuordnung', () => {
+  test('refresh ordnet Stripe-Zahlungen zu; unbestätigte erzeugen keinen unmatched-Hinweis', () => {
+    const r = refresh(stripeState, NOW, false);
+    expect(r.allocations).toEqual([]);
+    expect(r.insights.some((i) => i.type === 'unmatched_payment')).toBe(false);
+    const c = refresh(confirmedSub(stripeState, 'sub_A', 'k-ayse'), NOW, false);
+    expect(c.allocations.filter((a) => a.contractId === 'k-ayse')).toHaveLength(3);
+    expect(c.audit.filter((a) => a.text === 'Automatisch zugeordnet (Stripe): Ayşe Öztürk')).toHaveLength(3);
+    expect(c.insights.some((i) => i.type === 'unmatched_payment')).toBe(false);
+  });
+  test('zweiter refresh ordnet nichts doppelt zu', () => {
+    const once = refresh(confirmedSub(stripeState, 'sub_A', 'k-ayse'), NOW, false);
+    expect(refresh(once, NOW, false).allocations).toEqual(once.allocations);
   });
 });

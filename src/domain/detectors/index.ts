@@ -6,6 +6,7 @@ import { detectDoubleInvoices, detectInvoiceOverdue, detectStripePaidLexwareOpen
 import { detectJobsNotInvoiced } from './jobs';
 import { detectMemberOverdue } from './members';
 import { detectUnmatchedPayments } from './payments';
+import { detectSubscriptionChanges } from './subscriptions';
 import { detectReplies } from './replies';
 import { detectStaleSources } from './sources';
 
@@ -16,6 +17,7 @@ export function runDetectors(s: AppState, now: Date): Insight[] {
     ...detectReplies(s, now),
     ...detectMemberOverdue(s, now),
     ...detectUnmatchedPayments(s, now),
+    ...detectSubscriptionChanges(s),
     ...detectStripePaidLexwareOpen(s),
     ...detectDoubleInvoices(s),
     ...detectJobsNotInvoiced(s),

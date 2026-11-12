@@ -62,6 +62,6 @@ describe('Demo-Daten', () => {
   test('Selektoren', () => {
     expect(openInsights(s).every((i) => i.status === 'open')).toBe(true);
     const kaya = memberRows(s, '2026-11-12').find((r) => r.contractId === contractOf(s, 'm-kaya'))!;
-    expect(kaya).toEqual({ contractId: contractOf(s, 'm-kaya'), name: 'Mehmet Kaya', traffic: 'red', arrearsCents: 15000, openCents: 75000, billing: 'legacy' });
+    expect(kaya).toEqual({ contractId: contractOf(s, 'm-kaya'), name: 'Mehmet Kaya', traffic: 'red', arrearsCents: 15000, openCents: 75000, billing: 'legacy', notConnected: false });
   });
 });

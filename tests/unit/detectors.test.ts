@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { reconcileInsights, runDetectors, selectTop } from '@/domain/detectors';
-import { memberView } from '@/domain/detectors/members';
+import { detectMemberOverdue, memberView } from '@/domain/detectors/members';
+import type { Connection } from '@/domain/types';
 import { detectStaleSources } from '@/domain/detectors/sources';
 import type { StoredInsight } from '@/domain/types';
 import { NOW_0930, base, conn, find, inv, ins, muellerDone, schmidtIn, stateWith, tx, types } from './helpers';
@@ -95,6 +96,27 @@ describe('Detektoren', () => {
   test('stale_source: Fehler ja, missing nein', () => {
     const r = run({ connections: [conn({ id: 'gmail', status: 'error' }), conn({ id: 'icloud', status: 'missing', lastSuccessAt: null })] }).filter((i) => i.type === 'stale_source');
     expect(r.map((i) => i.dedupeKey)).toEqual(['stale:gmail']);
+  });
+});
+
+describe('Rückstand je Vertragsquelle', () => {
+  const stripeContractOverdue = (status: Partial<Record<Connection['id'], Connection['status']>>) =>
+    stateWith({
+      contracts: [{ ...base, contactId: 'm-kaya', billing: 'stripe', startDate: '2026-09-01' }],
+      connections: stateWith().connections.map((c) => ({ ...c, status: status[c.id] ?? c.status })),
+    });
+  test('Rückstand-Hinweis braucht nur die Quelle des Vertrags', () => {
+    const st = stripeContractOverdue({ bank: 'missing', stripe_nexus: 'connected' });
+    expect(runDetectors(st, NOW_0930).some((i) => i.type === 'member_overdue')).toBe(true);
+    expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['stripe_nexus']);
+  });
+  test('Legacy-Vertrag ohne Bank → kein Rückstand-Hinweis', () => {
+    const st = stateWith({
+      contracts: [{ ...base, contactId: 'm-kaya', startDate: '2026-09-01' }],
+      connections: stateWith().connections.map((c) => (c.id === 'bank' ? { ...c, status: 'missing' as const } : c)),
+    });
+    expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['bank']);
+    expect(runDetectors(st, NOW_0930).some((i) => i.type === 'member_overdue')).toBe(false);
   });
 });
 

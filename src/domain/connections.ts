@@ -1,4 +1,4 @@
-import type { Company, Connection, ConnectionId } from './types';
+import type { Company, Connection, ConnectionId, MemberContract } from './types';
 
 export const CONNECTION_CATALOG: readonly { id: ConnectionId; company: Company | null; label: string }[] = [
   { id: 'lexware_nexus', company: 'nexus', label: 'Lexware NEXUS' },
@@ -30,4 +30,9 @@ export const HOW_TO: Record<ConnectionId, string> = {
 /** True, wenn alle genannten Quellen noch nicht verbunden sind (Status 'missing'). */
 export function notConnected(sources: ConnectionId[], connections: Connection[]): boolean {
   return sources.length > 0 && sources.every((id) => connections.find((c) => c.id === id)?.status === 'missing');
+}
+
+/** Quellen, aus denen sich der Stand eines Vertrags speist: Banküberweisung → Bank, Stripe → Stripe NEXUS. */
+export function contractSources(c: MemberContract): ConnectionId[] {
+  return c.billing === 'legacy' ? ['bank'] : ['stripe_nexus'];
 }

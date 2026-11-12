@@ -10,6 +10,7 @@ import type { StoreEvent } from '@/domain/events';
 import { areaStale } from '@/domain/freshness';
 import { normalizePhone, validPhone } from '@/domain/matching/messages';
 import { classifyBankTx, matchBankPayment } from '@/domain/matching/payments';
+import { stripeAllocations } from '@/domain/matching/stripe';
 import { mergeBatch } from '@/domain/import/merge';
 import { formatEuro } from '@/domain/money';
 import type { Action, AppState, AssistantMessage, AuditEntry, Connection, Message, Settings } from '@/domain/types';
@@ -39,6 +40,21 @@ function autoAllocate(s: AppState, at: Date, isDemo: boolean): AppState {
   return st;
 }
 
+/** Stripe-Zahlungen bestätigter Abos dem Vertrag zuordnen (auch rückwirkend und Erstattungen). */
+function allocateStripe(s: AppState, at: Date, isDemo: boolean): AppState {
+  const fresh = stripeAllocations(s);
+  if (fresh.length === 0) return s;
+  const nameOf = (contractId: string) => {
+    const c = s.contracts.find((x) => x.id === contractId);
+    return s.contacts.find((x) => x.id === c?.contactId)?.name ?? contractId;
+  };
+  return {
+    ...s,
+    allocations: [...s.allocations, ...fresh],
+    audit: [...s.audit, ...fresh.map((a) => ({ at: at.toISOString(), actor: 'system' as const, text: `Automatisch zugeordnet (Stripe): ${nameOf(a.contractId)}`, isDemo }))],
+  };
+}
+
 function settleCommitments(s: AppState, at: Date): AppState {
   let changed = false;
   const commitments = s.commitments.map((c) => {
@@ -61,7 +77,7 @@ function settleCommitments(s: AppState, at: Date): AppState {
 
 /** Auto-Zuordnung (`high`), Zusagen prüfen, Hinweise neu abgleichen. */
 export function refresh(s: AppState, at: Date, isDemo = true): AppState {
-  const st = settleCommitments(autoAllocate(s, at, isDemo), at);
+  const st = settleCommitments(autoAllocate(allocateStripe(s, at, isDemo), at, isDemo), at);
   const stale = areaStale(st.connections.map((c) => c.id), st.connections, at);
   return { ...st, insights: reconcileInsights(st.insights, [...runDetectors(st, at), ...runCoach(st, at)], at, stale, st.settings.suppressedCoachKeys) };
 }

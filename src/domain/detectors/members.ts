@@ -1,9 +1,10 @@
 import { todayBerlin } from '../clock';
+import { contractSources } from '../connections';
 import { allocate } from '../ledger/allocate';
 import { buildSchedule } from '../ledger/schedule';
 import { memberStatus, type MemberStatus } from '../ledger/status';
 import { formatEuro } from '../money';
-import type { AppState, Contact, Insight, InstallmentState, Installment, IsoDate, MemberContract } from '../types';
+import type { AppState, ConnectionId, Contact, Insight, InstallmentState, Installment, IsoDate, MemberContract } from '../types';
 import { memberRef } from './refs';
 
 export function memberView(
@@ -35,6 +36,7 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
   const out: Insight[] = [];
   let sum = 0;
   let count = 0;
+  const sources = new Set<ConnectionId>();
   for (const c of s.contracts) {
     const v = memberView(s, c.id, today);
     if (!v.contact || v.status.traffic === 'green') continue;
@@ -42,6 +44,7 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
     const arrears = v.status.arrearsCents;
     sum += arrears;
     count++;
+    contractSources(c).forEach((x) => sources.add(x));
     out.push({
       dedupeKey: `overdue:${c.id}`,
       type: 'member_overdue',
@@ -52,7 +55,7 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
       amountCents: arrears,
       refs: [memberRef(c.id, name)],
       nextStep: 'Erinnerung vorbereiten',
-      needsSources: ['bank', 'stripe_nexus'],
+      needsSources: contractSources(c),
     });
   }
   if (count >= 2) {
@@ -66,7 +69,7 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
       amountCents: sum,
       refs: out.map((i) => i.refs[0]),
       nextStep: 'Erinnerungen vorbereiten',
-      needsSources: ['bank', 'stripe_nexus'],
+      needsSources: [...sources],
     });
   }
   return out;
