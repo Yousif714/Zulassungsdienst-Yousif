@@ -1,4 +1,4 @@
-# Prompt: Persönliche Assistenz-App für NEXUS & Zulassungsdienst Bundesweit
+# Prompt: Mein persönlicher KI-Assistent für NEXUS & Zulassungsdienst Bundesweit
 
 > Diesen gesamten Text in Codex (oder ein anderes Coding-Tool) einfügen.
 
@@ -9,269 +9,250 @@
 Lies den kompletten Prompt. **Antworte zuerst nur mit:**
 
 1. deiner Einschätzung: Was ist gut, was ist riskant, was würdest du anders machen und warum?
-2. deinem Umsetzungsplan in Phasen (mit grober Dauer).
+2. deinem Umsetzungsplan in Phasen.
 3. maximal 5 offenen Fragen, die du wirklich beantwortet brauchst.
 
 Fang erst mit dem Bauen an, wenn ich deinen Plan bestätigt habe.
 
 ---
 
-## 1. Worum es geht
+## 1. Worum es geht: ein Assistent, kein Dashboard
 
-Ich bin Inhaber von zwei Firmen und verliere den Überblick:
+Ich bin Inhaber von zwei Firmen:
 
-- **NEXUS**: ein Mitglieder-Netzwerk mit ca. **40–45 zahlenden Mitgliedern**, regelmäßigen Calls (z. B. „SEELE“, „Finance“) und Content (Reels/Videos).
-- **Zulassungsdienst Bundesweit** (zulassung-bundesweit.de): Kfz-Zulassungen für Privatkunden und Autohäuser. Zwei Büros in **Bottrop** und **Essen**. Das meiste läuft aber **online** (i-Kfz) und über **WhatsApp** am Handy. Gegen Aufpreis fahren wir auch zu Kunden und Autohäusern (**Vor-Ort-Service**).
+- **NEXUS**: ein Mitglieder-Netzwerk mit ca. **40–45 zahlenden Mitgliedern**, regelmäßigen Calls (z. B. „SEELE“, „Finance“) und Content.
+- **Zulassungsdienst Bundesweit**: Kfz-Zulassungen für Privatkunden und Autohäuser. Fast alles läuft über **WhatsApp** und das Handy.
 
-Ich will eine **eigene, deutschsprachige Web-App (PWA)** fürs iPhone und den Desktop. Auf dem iPhone soll sie sich zum Homescreen hinzufügen lassen. **In 30 Sekunden** will ich sehen, was heute ansteht, wer noch zahlen muss, auf welche Nachrichten wir antworten müssen und welche Zulassungen durch sind.
+**Das Ziel ist ein persönlicher KI-Assistent**, der wie ein sehr guter Büroleiter arbeitet:
 
-Die App ist **mein persönlicher Assistent**. Sie beobachtet alle meine Konten, erkennt selbst, was durchrutscht, und sagt mir aktiv, was ich besser machen oder automatisieren kann.
+- Er ist mit **allen meinen Konten** verbunden: WhatsApp Business, E-Mail, Kalender, Stripe, beide Lexware-Konten, Geschäftskonto.
+- Er **beobachtet laufend**, was passiert, und merkt, was durchrutscht.
+- Er **meldet sich von selbst**: „Hey, diese 3 Mails sind offen“, „Kunde X hat nicht bezahlt“, „Das kannst du noch abrechnen“, „Das hast du übersehen“.
+- Er **coacht mich**: „Das kannst du besser machen“, „Das kannst du automatisieren“.
+- Er **erledigt Dinge**: Er bereitet Antworten, Erinnerungen und Zahlungslinks fertig vor, und ich muss nur noch freigeben.
 
-**Nutzer:** nur ich. Keine Mitarbeiter-Logins, keine Rollen. Login per **Passkey / Face ID**.
+Die App ist die Oberfläche für diesen Assistenten. Die wichtigste Seite ist der **Feed des Assistenten**, keine Sammlung von Statistiken.
+
+**Bewusst NICHT im Umfang:** Anbindung von Zulassungsportalen (i-Kfz, GKS, MyDigitalCar, Nextoz), Portal-Statistiken, Routenplanung. Den Status einer Zulassung setze ich selbst mit einem Tipp oder er wird aus meinen Nachrichten erkannt.
+
+**Nutzer:** nur ich. Web-App (PWA) für iPhone (Homescreen) und Desktop, auf Deutsch, im Apple-Stil.
 
 ---
 
-## 2. Technik (Vorschlag; begründe Abweichungen)
+## 2. Aufbau: der Assistent im Zentrum
+
+```
+ WhatsApp Business ─┐
+ E-Mail (mehrere) ──┤                    ┌───────────────────────────┐
+ Kalender ──────────┤   Sync (15 Min.,   │  ASSISTENT                │
+ Stripe NEXUS ──────┼─▶ Webhooks) ─────▶ │  1. Regeln & Berechnungen │ ─▶  Feed in der App
+ Lexware NEXUS ─────┤   in eine          │     (deterministisch)     │ ─▶  Push 7:00 / 19:00 / sofort
+ Lexware Zulassung ─┤   Datenbank        │  2. KI (Claude): verstehen,│ ─▶  Chat
+ Geschäftskonto ────┘                    │     formulieren, coachen  │ ─▶  vorbereitete Aktionen
+                                          └───────────────────────────┘        (ich gebe frei)
+```
+
+**Strikte Arbeitsteilung:**
+- **Zahlen rechnet immer Code nach festen Regeln**, nie die KI: Raten, Rückstände, Zuordnungen, Summen, Fristen. Jede Zahl hat einen Rechenweg und eine Quelle.
+- **Die KI versteht und formuliert:** Nachrichten lesen und einordnen („Kunde fragt nach Rechnung“, „Kunde schickt eVB“, „Zusage von mir“), Antworten und Erinnerungen entwerfen, Muster erkennen, coachen, Fragen im Chat beantworten. Für Zahlen ruft sie die Daten über Tools ab und verlinkt die Belege.
+
+---
+
+## 3. Was der Assistent können muss
+
+### 3.1 Beobachten und melden (Wachposten)
+Er erzeugt **Hinweise** mit Priorität, Begründung, Quelle und einem **vorbereiteten nächsten Schritt**. Beispiele:
+
+**Kommunikation**
+- „Autohaus Schmidt wartet seit 3 Std. auf eine Antwort (WhatsApp).“ → Antwortentwurf
+- „4 Mails seit gestern unbeantwortet, 2 davon wichtig.“ → Liste mit Entwürfen
+- „Du hast Herrn Kaya am Dienstag eine Rechnung versprochen, es gibt noch keine.“ → Rechnungsentwurf
+- „Kunde hat Unterlagen geschickt, der Auftrag kann weiter.“
+
+**Geld**
+- „3 NEXUS-Mitglieder überfällig, zusammen 1.150 €.“ → Erinnerungen (freundlich/bestimmt) inkl. Stripe-Zahlungslink
+- „Überweisung über 250 € eingegangen, gehört wahrscheinlich zu M. Kaya.“ → bestätigen
+- „Stripe meldet bezahlt, in Lexware ist die Rechnung noch offen.“
+- „Für Mitglied X gibt es eine Rechnung in Lexware **und** in Stripe, mögliche Doppelrechnung.“
+- „Zulassung für Autohaus Müller erledigt, aber noch nicht abgerechnet.“ → Rechnungsentwurf
+- „Autohaus Müller hat 2 überfällige Rechnungen, zusammen 640 €.“
+
+**Termine & Aufgaben**
+- „SEELE heute 20:00, Folientexte noch nicht vorbereitet.“ → Entwurf liegt bereit
+- „Morgen 3 Termine, bei einem fehlt die Adresse.“
+
+### 3.2 Coachen
+Abends ein kurzer Tagesrückblick, sonntags ein Wochenrückblick. Er macht **konkrete Vorschläge auf Basis meiner echten Daten**, keine Allgemeinplätze. Beispiele:
+- „9-mal diese Woche dieselbe Unterlagen-Erklärung per WhatsApp geschrieben. Hier ist eine fertige Schnellantwort.“
+- „Zwischen erledigter Zulassung und Rechnung vergehen im Schnitt 2 Tage. Soll ich dich direkt danach erinnern?“
+- „Mitglied Y zahlt seit 4 Monaten am 6. statt am 1. Fälligkeit auf den 5. legen?“
+- „Deine Antwortzeit auf WhatsApp war heute im Schnitt 2,5 Std., gestern 40 Min.“
+- „3 Vor-Ort-Termine ohne Aufpreis berechnet, zusammen 105 €.“
+- „Die SEELE-Folien machst du immer am Call-Tag. Soll der Entwurf 2 Tage vorher fertig sein?“
+
+Jeder Vorschlag hat die Knöpfe **Übernehmen · Später · Nicht mehr vorschlagen**. Der Assistent merkt sich meine Entscheidungen.
+
+### 3.3 Chat
+Ich kann alles fragen, per Text oder Diktat. Die Antworten sind mit Belegen verlinkt. Diese Fragen müssen in der Vorschau funktionieren:
+- „Wer ist bei NEXUS überfällig?“
+- „Was ist heute noch offen?“
+- „Was fehlt für SEELE?“
+- „Was ist mit dem Auftrag von Autohaus Schmidt?“
+- „Wie viel Geld kommt diesen Monat noch rein?“
+
+### 3.4 Erledigen (mit Freigabe)
+Der Assistent bereitet Aktionen fertig vor. Ich prüfe und tippe auf **Senden/Anlegen**:
+- WhatsApp- oder Mail-Antwort senden
+- Zahlungserinnerung mit Stripe-Link senden
+- Rechnungsentwurf in Lexware anlegen
+- Termin im Kalender anlegen
+- Folientexte für Gamma kopieren
+
+**Grundregel:** Ohne meine Freigabe wird nichts verschickt oder angelegt. Später kann ich einzelne Abläufe gezielt auf „automatisch“ stellen (z. B. die erste freundliche Zahlungserinnerung). Jede ausgeführte Aktion steht in einem Protokoll.
+
+**Ausbaustufen:** Zuerst nur lesen und Entwürfe zeigen. Danach Senden/Anlegen mit Freigabe. Danach einzelne Automatiken.
+
+### 3.5 Push-Mitteilungen
+- **7:00 Morgenbriefing:** die 3 wichtigsten Dinge, Termine, Geld, offene Nachrichten
+- **19:00 Abendrückblick:** was erledigt wurde, was offen bleibt, Coach-Tipps
+- **Sofort** nur bei echten Problemen (z. B. wichtiger Kunde wartet lange, große Zahlung unklar)
+
+Die Architektur muss einen **Hintergrunddienst** haben, der auch bei geschlossener App synchronisiert, Hinweise erzeugt und Push verschickt.
+
+---
+
+## 4. NEXUS: Mitgliedsbeiträge (wichtigste Datenlogik)
+
+### 4.1 Ausgangslage
+- Die meisten Mitglieder sind **seit August** dabei und zahlen eine **Gesamtsumme in Monatsraten** (z. B. 6 oder 12 Raten), bisher **fast alle per Überweisung**.
+- Abgerechnet wurde bisher über **Lexware Office (NEXUS-Konto)**. **Stripe** nutze ich erst seit Kurzem, künftig soll alles darüber laufen.
+- Einige Mitglieder haben **Sonderkonditionen**.
+- In Stripe kann ich nicht rückwirkend ab August Raten anlegen.
+
+### 4.2 Mitgliedsvertrag in der App
+Pro Mitglied: Gesamtsumme, Sonderkondition, Anzahl Raten, Ratenbetrag, Fälligkeitstag, Startdatum, Ausnahmen (Stundung, verschobene Fälligkeit, Pause), Notiz.
+
+Daraus berechnet der Code täglich **getrennt**:
+- **bereits fällige Raten:** bezahlt / unbezahlt → **Rückstand**
+- **künftig fällige Raten** → **Restbetrag nach Plan**
+- Ampel: 🟢 im Plan · 🟡 bis 7 Tage drüber · 🔴 überfällig
+- Zahlungsverlauf
+
+**Regeln (Standard, später pro Mitglied änderbar):**
+- Teilzahlungen werden auf die **älteste offene Rate zuerst** verteilt.
+- Bei widersprüchlichen Ständen gilt: **tatsächlicher Geldeingang (Bank/Stripe)** vor **Rechnungsstatus in Lexware**. Widersprüche werden als Hinweis gemeldet, nicht still aufgelöst.
+
+### 4.3 Bestandsmitglieder übernehmen
+Ein Assistent führt mich durch jedes Mitglied:
+1. Bisherige Zahlungen seit August werden aus Bank und Lexware **vorgeschlagen**, ich bestätige oder korrigiere.
+2. Die Vorschau zeigt mit Rechenweg: **Rückstand** (fällig, unbezahlt) und **künftige Raten**, getrennt, sodass keine Rate doppelt auftaucht.
+3. Ich wähle: Rückstand als Nachzahlung zur ersten Stripe-Rate **oder** auf die Restraten verteilt.
+4. Ergebnis: vorbereiteter Stripe-Ratenplan nur für den Rest. Das Anlegen in Stripe ist eine eigene, ausdrücklich freigegebene Aktion.
+
+### 4.4 Zahlungen zuordnen
+- **Stripe** ordnet eindeutig zu.
+- **Banküberweisungen:** Eine bestätigte IBAN ist ein **Hinweis auf den Zahler**. Für die Zuordnung zur konkreten Rate zählen zusätzlich Betrag, Datum und Verwendungszweck. Bei hoher Sicherheit automatisch, sonst kommt sie in die Liste **„Zuordnen“**. Sammelzahlungen und Zahlungen durch Dritte gehen immer in die Prüfung.
+- **Lexware ↔ Stripe:** Der Abgleich unterscheidet, ob es zwei Rechnungen sind (→ Warnung) oder ob die Stripe-Zahlung eine Lexware-Rechnung begleicht (→ Hinweis zur Verbuchung).
+
+### 4.5 Calls & Content
+- Calls mit Datum, Thema und Stand der Folientexte: **vorbereiten → prüfen → für Gamma kopieren**. SEELE hat standardmäßig 10 Folien, bei Finance ist die Anzahl einstellbar. Die KI schreibt den vollständigen Folientext, Gamma macht das Design.
+- Content-Board: **Idee → Rohmaterial → Schnitt → Freigabe → veröffentlicht**.
+
+---
+
+## 5. Zulassungsdienst (schlank)
+
+- **Kunden** (Privat/Autohaus) → **Fahrzeuge** (FIN, Kennzeichen) → **Aufträge** (Leistung, Status, Standort Bottrop/Essen/Online/Vor-Ort, Notiz).
+- Status einfach: **offen → wartet auf Kunde → erledigt → abgerechnet → bezahlt**. Ich setze ihn mit einem Tipp, oder der Assistent schlägt ihn aus Nachrichten vor („Kunde hat eVB geschickt“).
+- Nachrichten (WhatsApp/Mail) werden dem Kunden und Auftrag zugeordnet (Telefonnummer, Mail, Kennzeichen/FIN im Text). Nicht zuordenbare kommen in „Zuordnen“.
+- Rechnungen kommen aus dem **zweiten Lexware-Konto** (nur Zulassungsdienst). Der wichtigste Hinweis ist „erledigt, aber nicht abgerechnet“, dazu überfällige Rechnungen pro Kunde.
+- Einfache Zahlen: heute erledigt, offen, wartet auf Kunde, nicht abgerechnet.
+
+---
+
+## 6. App-Oberfläche
+
+- **iPhone:** unten drei Tabs **Heute · NEXUS · Zulassungsdienst** plus ein Assistenten-Knopf (Chat, auch per Diktat).
+- **Desktop:** Seitenleiste.
+- **Heute = Feed des Assistenten:**
+  1. **Höchstens 3 Dinge, die jetzt zählen**, jeweils mit vorbereitetem Schritt
+  2. Termine heute
+  3. Geld: offen und überfällig pro Firma (Wallet-Stil)
+  4. Nachrichten mit Antwortbedarf
+  5. Coach-Tipp des Tages
+- Jede Zeile führt mit einem Tipp zur Quelle (Nachricht, Rechnung, Mitglied, Auftrag, Call).
+- **Stil:** Apple Erinnerungen (Aufgaben), Apple Wallet (Beträge), iOS-Einstellungen (Details). Große Touch-Flächen, ruhige Farben, System-Schrift, kompakte Listen, Dark Mode.
+- Prüfe die UI gegen Web-Interface-Guidelines (falls verfügbar: `npx skills add vercel-labs/agent-skills --skill web-design-guidelines`).
+
+---
+
+## 7. Verbindungen
+
+Eine Seite **„Verbindungen“** zeigt pro Verbindung: Firma, Status, letzter erfolgreicher Abruf, nächster Schritt mit kurzer Klickanleitung.
+
+| Verbindung | Weg | Priorität |
+|---|---|---|
+| WhatsApp Business | WhatsApp Business Platform (Cloud API), bevorzugt im **Coexistence-Modus**, damit ich die Business-App am Handy weiter normal nutze. Prüfen, ob das mit meiner Nummer geht und über welchen Anbieter. | **hoch** |
+| E-Mail | Gmail API; iCloud über IMAP (App-Passwort); info@nexusnetzwerk.de: Anbieter ermitteln | **hoch** |
+| Stripe NEXUS | Stripe API + Webhooks (zunächst lesender Restricted Key) | **hoch** |
+| Lexware NEXUS | Lexware Office Public API (prüfen, ob der API-Zugang im Tarif enthalten ist) | **hoch** |
+| Lexware Zulassungsdienst | eigenes Konto, eigener Schlüssel | **hoch** |
+| Geschäftskonto | erst **CSV/CAMT-Import** seit 1. August, danach laufend über einen PSD2-Anbieter (z. B. finAPI/Tink, prüfen) | **hoch** |
+| Kalender | Google Calendar API bzw. CalDAV (iCloud) | mittel |
+
+Fehlt eine Verbindung, arbeite an den übrigen weiter. Zugangsdaten nur serverseitig in der sicheren Konfiguration, nie im Client. Privilegierte Supabase-Schlüssel nur auf dem Server.
+
+---
+
+## 8. Technik
 
 | Baustein | Wahl |
 |---|---|
-| App | **Next.js (TypeScript), als PWA** (Manifest, Homescreen-Icon, Web-Push ab iOS 16.4) |
+| App | **Next.js (TypeScript), PWA** (Homescreen, Web-Push ab iOS 16.4) |
 | Datenbank, Auth, Dateien, Jobs | **Supabase**, Region EU (Frankfurt) |
-| Hosting | **Vercel** (Vorschau-Link fürs iPhone) |
-| KI | **Claude API** über das offizielle Anthropic-SDK für TypeScript (`@anthropic-ai/sdk`) |
-| Tests | **Playwright** (Chromium + WebKit mit iPhone-Profil) |
+| Hosting | **Vercel** |
+| KI | **Claude API** über das offizielle Anthropic-SDK (`@anthropic-ai/sdk`), Hauptmodell `claude-opus-5-5`. `claude-haiku-5-5` erst zuschalten, wenn es für die Vorsortierung messbar Zeit oder Geld spart. |
+| Tests | **Playwright** (iPhone-Profil + Desktop) und Unit-Tests |
 
-**KI-Modelle:**
-- `claude-opus-5-5` als Hauptmodell: Chat-Assistent, Coach-Analysen, Folientexte, schwierige Zuordnungen, Dokumente auslesen.
-- `claude-haiku-5-5` optional für die Massen-Vorsortierung eingehender Nachrichten (Rückfrage? Welche Akte? Dringend?). Das soll per Konfiguration umschaltbar sein.
-- **Grundregel:** Die KI rechnet nie selbst. Beträge, Fristen und Statistiken kommen immer aus der Datenbank, die KI ruft sie über Tools ab und verlinkt die Quelle.
-- Prompt-Caching für die festen Systemanweisungen nutzen. Den Verbrauch pro Monat in der App anzeigen und ein Monatslimit konfigurierbar machen.
-
-**Grobe erwartete Betriebskosten:** KI ca. 60–110 $/Monat, Vercel Pro ca. 20 $, Supabase Pro ca. 25 $, WhatsApp-Anbieter ca. 50 €, Bank-API 0–50 €. Weise mich auf günstigere gleichwertige Optionen hin.
+- **Login:** Passkey (Face ID auf dem iPhone) plus Wiederherstellungsweg.
+- **Datentrennung:** Jeder Datensatz gehört eindeutig zu NEXUS oder zum Zulassungsdienst.
+- **KI-Verbrauch** pro Monat in der App anzeigen, Monatslimit konfigurierbar. Prompt-Caching nutzen.
+- **Datenschutz:** EU-Server, Dokumente verschlüsselt, automatische Löschfrist konfigurierbar.
 
 ---
 
-## 3. Grundprinzipien
+## 9. Vorschau mit Demo-Daten
 
-1. **Zwei Firmen strikt getrennt.** Daten von NEXUS und vom Zulassungsdienst werden nie vermischt. Nur auf „Heute“ stehen sie nebeneinander, klar gekennzeichnet.
-2. **Erste Ausbaustufe nur lesend.** Die App ändert nichts in Lexware, Stripe, Bank oder Postfächern.
-3. **Der Assistent schlägt vor, ich entscheide.** Er verschickt nichts von selbst an Kunden oder Mitglieder. Später kann ich einzelne Abläufe gezielt freigeben, z. B. automatische Zahlungserinnerungen.
-4. **Jede Zahl und jede wichtige Zeile ist antippbar** und führt zur passenden, gefilterten Liste, Rechnung, Nachricht, Akte oder Call-Seite.
-5. **Datenschutz pragmatisch:** EU-Server, Dokumente (Ausweise, Fahrzeugscheine) verschlüsselt ablegen und nach einer konfigurierbaren Frist automatisch löschen. Zugangsdaten nur in der sicheren Server-Konfiguration, nie im Client.
+- Realistische **fiktive** Daten: ca. 40 Mitglieder mit verschiedenen Ratenplänen (Sonderkonditionen, Bestandsmitglieder seit August, einige überfällig), ca. 10 Autohäuser und Privatkunden mit Aufträgen, WhatsApp- und Mail-Verläufe (inkl. einer gebrochenen Zusage), Termine, Calls, Content.
+- Demo-Aktionen sind sichtbar gekennzeichnet.
+- Morgenbriefing, Abendrückblick und Coach-Tipps beispielhaft zeigen.
 
 ---
 
-## 4. NEXUS: Mitglieder und Zahlungen (das Herzstück)
+## 10. Abnahme
 
-### 4.1 Ausgangslage
-- Die meisten Mitglieder sind **seit August** dabei und zahlen eine **Gesamtsumme in Monatsraten** (z. B. 6 oder 12 Raten), bisher **fast alle per Überweisung** aufs Geschäftskonto.
-- Abgerechnet wurde bisher über **Lexware Office (NEXUS-Konto)**.
-- **Stripe** nutze ich erst seit wenigen Tagen. Künftig soll alles über Stripe laufen, inklusive Ratenplan auf der Rechnung.
-- Einige Mitglieder haben **Sonderkonditionen** (Rabatte, andere Raten, andere Fälligkeiten).
-- **Problem:** Ich kann in Stripe nicht rückwirkend ab August Rechnungen bzw. Raten anlegen.
+Automatisiert (Playwright) auf **iPhone-Breite** und **Desktop**:
 
-### 4.2 Lösung: Der Mitgliedsvertrag lebt in der App
-Pro Mitglied gibt es einen **Vertrag** als Quelle der Wahrheit dafür, wer was schuldet:
-- Gesamtsumme, Rabatt/Sonderkondition, Anzahl Raten, Ratenbetrag, Fälligkeitstag, Startdatum
-- Ausnahmen: Stundung, verschobene Fälligkeit („zahlt immer am 15.“), Pausen
-- Notizfeld für Absprachen
+1. **Heute** zeigt die 3 wichtigsten Hinweise. Ein Tipp auf „Kunde wartet seit 3 Std.“ öffnet den Verlauf mit Antwortentwurf, und „Senden“ ist als Demo-Aktion markiert.
+2. **NEXUS** → überfälliges Mitglied → Rechenweg (Rückstand vs. künftige Raten) → Erinnerung mit Stripe-Link vorbereitet.
+3. **NEXUS** → „Mitglied übernehmen“ für ein Bestandsmitglied seit August → Rückstand und künftige Raten korrekt getrennt, keine Rate doppelt.
+4. **NEXUS** → unbekannte Überweisung → „Zuordnen“ → bestätigen → nächste passende Zahlung derselben IBAN wird automatisch vorgeschlagen.
+5. **NEXUS** → Lexware-Rechnung offen + Stripe bezahlt → Hinweis zur Zuordnung.
+6. **Heute** → SEELE-Call → fertige Folientexte für Gamma kopieren.
+7. **Zulassungsdienst** → erledigter, nicht abgerechneter Auftrag → Rechnungsentwurf vorbereitet.
+8. **Chat:** die 5 Fragen aus 3.3 liefern korrekte, verlinkte Antworten.
+9. **Gebrochene Zusage** aus dem Chatverlauf wird als Hinweis erkannt.
 
-Daraus berechnet die App täglich:
-- **Soll bis heute, Ist bis heute, Rückstand**, Restbetrag gesamt, nächste Fälligkeit
-- Ampel: 🟢 im Plan · 🟡 bis 7 Tage drüber · 🔴 überfällig
-- Zahlungsverlauf (z. B. „zum dritten Mal spät“)
-
-Die Zahlungsquelle (Überweisung, Stripe, bar) ist für die Berechnung egal.
-
-### 4.3 Bestandsmitglieder übernehmen (Assistent „Mitglied übernehmen“)
-1. Alte Zahlungen seit August werden **vorgeschlagen** (aus Lexware und Bankumsätzen). Ich bestätige oder korrigiere.
-2. Die App berechnet den Restbetrag. Beispiel: 3.000 € gebucht, 4 × 250 € bezahlt, also 2.000 € offen in 8 Raten.
-3. Für Stripe wird **nur der Rest** als Ratenplan ab der nächsten Fälligkeit vorgesehen. Auf der Rechnung steht „bereits gezahlt: X €“. Anlegen in Stripe erst in einer späteren, schreibenden Ausbaustufe; bis dahin gibt es eine Anleitung bzw. vorbereitete Daten.
-4. Verpasste Raten werden als **Nachzahlung** behandelt: entweder zur ersten Stripe-Rate addiert oder auf die Restraten verteilt, wählbar pro Mitglied.
-
-Neue Mitglieder werden direkt mit Stripe-Ratenplan angelegt, die App liest ihn nur aus.
-
-### 4.4 Zahlungsabgleich
-- **Stripe-Zahlungen** sind eindeutig dem Mitglied zugeordnet.
-- **Banküberweisungen** werden über IBAN, Name, Betrag und Verwendungszweck zugeordnet. Bei hoher Sicherheit automatisch, sonst als Vorschlag in der Liste **„Zuordnen“** (ein Tipp auf ✓).
-- **Lernen:** Eine einmal bestätigte IBAN gehört künftig automatisch zu diesem Mitglied, auch wenn ein Dritter zahlt (Bruder, Firma).
-
-### 4.5 Automatische Hinweise
-- „3 Mitglieder überfällig, zusammen 1.150 €“, mit Liste und fertigem Erinnerungstext (freundlich/bestimmt, WhatsApp oder Mail, inkl. Stripe-Zahlungslink).
-- „Zahlung eingegangen, keinem Mitglied zuordenbar.“
-- „Stripe meldet bezahlt, Lexware zeigt noch offen.“ Das ergibt eine Aufgabe zur Zuordnung.
-- **Doppelrechnung-Warnung:** Für dasselbe Mitglied existiert eine Rechnung in Lexware **und** in Stripe.
-- **Monatsvorschau:** „Im Dezember erwartest du noch 9.750 €, davon 1.250 € von Wackelkandidaten.“
-- Hinweis zur Buchhaltung: Wenn Stripe die Rechnungen stellt, bekommt Lexware nur die Zahlungen bzw. Auszahlungen zum Verbuchen. Prüfe und beschreibe den sauberen Weg (z. B. Stripe als Zahlungskonto in Lexware).
-
-### 4.6 Calls
-- Liste mit Datum, Uhrzeit, Thema und Stand: **Folientexte vorbereiten → prüfen → für Gamma kopieren**.
-- **SEELE** hat standardmäßig **10 fertige Folientexte**, bei **Finance** ist die Anzahl pro Call einstellbar.
-- Die KI liefert den vollständigen Folientext. Gamma übernimmt die visuelle Umsetzung. Ein Tipp kopiert alles im Gamma-tauglichen Format.
-- Optional: Der Entwurf ist automatisch 2 Tage vor dem Call fertig.
-
-### 4.7 Content
-Board: **Idee → Rohmaterial → Schnitt → Freigabe → veröffentlicht**.
+**Unit-Tests** für: Ratenplan (Soll, Ist, Rückstand, künftige Raten, Sonderkonditionen, Stundung), Teilzahlungsverteilung (älteste Rate zuerst), Übernahmeberechnung, Zahlungszuordnung.
 
 ---
 
-## 5. Zulassungsdienst Bundesweit
+## 11. Lieferung
 
-### 5.1 Datenmodell
-```
-Kunde (Privat oder Autohaus)
- └─ Fahrzeuge (FIN, Kennzeichen, Modell)
-     └─ Vorgänge (Neuzulassung, Umschreibung, Abmeldung, Wunschkennzeichen …, Option „Express“)
-         ├─ Unterlagen-Checkliste
-         ├─ Nachrichten (Mail/WhatsApp)
-         ├─ Portal-Verlauf (Ereignisse)
-         ├─ Standort: Bottrop | Essen | Online | Vor-Ort-Service
-         └─ Rechnung (Lexware Zulassungsdienst)
-```
-
-### 5.2 Unterlagen-Checkliste je Leistung
-Jede Leistung hat ihre Pflichtunterlagen, z. B. bei der Umschreibung ZB I + II, eVB, Ausweis, Vollmacht, SEPA-Mandat für die Kfz-Steuer. Eingehende Unterlagen per Mail/WhatsApp werden der Akte zugeordnet und abgehakt. Die KI liest FIN und Name aus dem Foto und gleicht sie mit der Akte ab. Fehlendes steht sichtbar in der Akte: „Fehlt: eVB · Kunde seit 2 Tagen gefragt“.
-
-### 5.3 Status
-```
-Angelegt → Unterlagen vollständig → Eingereicht (Portal) → Bestätigt
-                                         ↘ Abgelehnt → korrigiert → neu eingereicht
-→ Abgerechnet → Bezahlt
-```
-Zusätzlich ein Etikett, wer am Zug ist: **„Wir sind dran“** oder **„Wartet auf Kunde“**. Auf „Heute“ erscheint nur, was ich tun muss.
-
-### 5.4 Portale (MyDigitalCar, Nextoz, i-Kfz/GKS)
-- **Stufe 1:** Aus der Akte direkt ins richtige Portal springen. „Eingereicht“ und „Bestätigt“ setze ich mit einem Tipp.
-- **Stufe 1b:** Portal-Bestätigungs- und Ablehnungsmails im Postfach erkennen (FIN/Vorgangsnummer) und den Status **automatisch** setzen.
-- **Stufe 2:** Echte API nur, wo offiziell verfügbar. Prüfe je Portal, ob es offizielle Schnittstellen für Übermittlung und Status gibt (GKS setzt eine Zulassung als Großkunde voraus). Berichte mir das Ergebnis.
-- In der Vorschau wird der Ablauf simuliert.
-
-### 5.5 Nachrichten zuordnen
-Mails und WhatsApp werden über Telefonnummer, Mailadresse, Kennzeichen oder FIN im Text der richtigen Akte zugeordnet. Klappt das nicht, landen sie in „Zuordnen“.
-
-### 5.6 Tagesstatistik
-- Bestätigte Online-Zulassungen, eingereichte Vorgänge, Ablehnungen, fehlende Unterlagen, Schaltervorgänge.
-- **Zählregel:** Gezählt werden **Vorgänge, nicht Ereignisse**. Eine Bestätigung zählt **genau einmal pro Vorgang am Bestätigungsdatum in Europe/Berlin**. Eine erneute Einreichung erhöht die Einreichungen, erzeugt aber **keinen** zweiten bestätigten Vorgang. Das muss technisch erzwungen sein (z. B. eindeutiger Index) und getestet werden.
-- Filter: Datum, Portal, Standort, Händler, Leistung. Jede Zahl öffnet ihre Vorgangsliste.
-
-### 5.7 Rechnungen
-Das **zweite Lexware-Konto** wird ausschließlich für den Zulassungsdienst genutzt. Rechnungen werden über den Kunden plus Kennzeichen/FIN im Rechnungstext dem Vorgang zugeordnet. Hinweise:
-- „Bestätigt, aber noch nicht abgerechnet“
-- Offene und überfällige Rechnungen pro Autohaus
-- Vor-Ort-Service ohne Aufpreis auf der Rechnung
-
----
-
-## 6. Heute (Startseite)
-
-1. **Oben höchstens 3 Aufgaben**, die jetzt meine Aufmerksamkeit brauchen, jeweils mit dem nächsten konkreten Schritt. Beispiele: „SEELE heute 20:00 Uhr · Folientexte vorbereiten“, „Autohaus Schmidt wartet seit 3 Std. auf Antwort“.
-2. Heutige Termine
-3. Offene und überfällige Beträge **pro Firma**
-4. Nachrichten mit Antwortbedarf
-5. Heute bestätigte Online-Zulassungen
-6. Content, der auf Schnitt, Freigabe oder Veröffentlichung wartet
-
----
-
-## 7. Assistent (drei Rollen)
-
-### 7.1 Chat
-Ein Chat in der App, mit Tool-Zugriff auf die Datenbank. Die Antworten sind mit ihrer Quelle verlinkt. Diese Fragen müssen in der Vorschau funktionieren:
-- „Was fehlt für SEELE?“
-- „Warum hängt der Expressauftrag?“
-- „Wer ist bei NEXUS überfällig?“
-
-### 7.2 Wachposten (laufend)
-Meldet sofort, was durchrutscht:
-- unbeantwortete Kundennachrichten (mit Wartezeit)
-- nicht zuordenbare Zahlungen
-- bestätigte, aber nicht abgerechnete Zulassungen
-- Zusagen aus Chats, die nicht eingehalten wurden („Rechnung versprochen, existiert nicht“)
-
-### 7.3 Coach (abends täglich, sonntags Wochenrückblick)
-Konkrete Verbesserungs- und Automatisierungsvorschläge auf Basis meiner echten Daten, keine Allgemeinplätze. Beispiele:
-- „9-mal diese Woche dieselbe Unterlagen-Erklärung per WhatsApp. Hier ist eine fertige Schnellantwort.“
-- „Bei Autohaus Müller vergehen im Schnitt 2 Tage zwischen Bestätigung und Rechnung. Soll ich direkt nach jeder Bestätigung erinnern?“
-- „Mitglied Y zahlt seit 4 Monaten am 6. statt am 1. Fälligkeit auf den 5. legen?“
-- „3 Vor-Ort-Termine ohne Aufpreis, zusammen 105 €.“
-- „SEELE-Folien immer am selben Tag. Entwurf automatisch 2 Tage vorher?“
-
-Jeder Vorschlag hat die Knöpfe „Übernehmen“, „Später“ und „Nicht mehr vorschlagen“.
-
-### 7.4 Push-Mitteilungen
-- **7:00 Morgenbriefing**
-- **19:00 Abendstatistik + Coach-Tipps**
-- sofort nur bei echten Problemen
-
-Die Architektur muss so vorbereitet sein, dass ein **Hintergrunddienst auch bei geschlossener App** synchronisiert (z. B. alle 15 Minuten) und erinnert.
-
----
-
-## 8. Verbindungen
-
-Eine Seite **„Verbindungen“** zeigt pro Verbindung: Firma, Status (verbunden / fehlt / Fehler), letzten Datenstand, nächsten Schritt.
-
-| Verbindung | Firma | Weg |
-|---|---|---|
-| Lexware Office NEXUS | NEXUS | Lexware Public API (API-Schlüssel). Prüfen, ob der API-Zugang im Tarif enthalten ist. |
-| Lexware Office Zulassungsdienst | Zulassungsdienst | eigenes Konto, eigener Schlüssel |
-| Stripe NEXUS | NEXUS | Stripe API + Webhooks (zunächst Restricted Key, nur lesend) |
-| Geschäftskonto | beide, je nach Konto | **Einmalig:** CSV/CAMT-Import der Umsätze seit 1. August. **Laufend:** PSD2-Anbieter (z. B. finAPI oder Tink, prüfen), Freigabe alle 180 Tage erneuern. |
-| Gmail | — | Gmail API (OAuth) |
-| iCloud Mail | — | IMAP mit App-spezifischem Passwort |
-| info@nexusnetzwerk.de | NEXUS | Anbieter ermitteln (Google Workspace, Microsoft 365 oder IMAP beim Hoster) |
-| Kalender | — | Google Calendar API bzw. CalDAV (iCloud) |
-| WhatsApp Business | v. a. Zulassungsdienst | **WhatsApp Business Platform (Cloud API)**, bevorzugt im **Coexistence-Modus**, damit ich die WhatsApp-Business-App auf dem Handy weiter normal nutze und die Chats inkl. Verlauf trotzdem synchronisiert werden. Prüfen, ob das für meine Nummer geht und über welchen Anbieter (z. B. 360dialog). |
-| Zulassungsportale | Zulassungsdienst | siehe 5.4 |
-
-Für jede Verbindung, die einen Login, eine Freigabe oder einen Schlüssel von mir braucht: **eine kurze Klickanleitung** in der App. Fehlt eine Verbindung, arbeite an den übrigen weiter.
-
-**Priorität nach der Vorschau:** lesender Anschluss von beiden Lexware-Konten, NEXUS-Stripe, Bank (CSV-Import), Kalender und E-Mail. WhatsApp danach.
-
----
-
-## 9. Design
-
-- Vorbilder: **Apple Erinnerungen** für Aufgaben, **Apple Wallet** für Beträge, **iOS-Einstellungen** für Details.
-- Große Touch-Flächen, ruhige Farben, klare Typografie (System-Schrift / SF), kompakte Listen, **Dark Mode**.
-- **iPhone:** unten drei Tabs **Heute · NEXUS · Zulassungsdienst** plus ein schwebender Knopf für den Assistenten.
-- **Desktop:** Seitenleiste.
-- Jede wichtige Zeile führt mit einem Tipp zum passenden Eintrag.
-- Prüfe die UI gegen die Web-Interface-Guidelines (falls verfügbar: `npx skills add vercel-labs/agent-skills --skill web-design-guidelines`).
-- Nutze Figma, wenn verfügbar, für einen schnellen ersten „Heute“-Entwurf. Sonst direkt im Code.
-
----
-
-## 10. Vorschau mit Demo-Daten
-
-- Realistische **fiktive** Daten: ca. 40 NEXUS-Mitglieder mit verschiedenen Ratenplänen (inkl. Sonderkonditionen, Bestandsmitglieder seit August, einige überfällig), ca. 10 Autohäuser + Privatkunden mit Fahrzeugen und Vorgängen in allen Status, Nachrichten, Calls, Content.
-- **Demo-Aktionen sichtbar kennzeichnen.**
-- Morgenbriefing, Abendstatistik und Coach-Hinweise beispielhaft zeigen.
-
----
-
-## 11. Abnahme
-
-Starte die App und prüfe diese Abläufe automatisiert (Playwright) auf **iPhone-Breite (WebKit mit iPhone-Profil, falls verfügbar)** und am **Desktop**:
-
-1. Heute → SEELE-Call → fertige Beispiel-Folientexte für Gamma kopieren.
-2. Heute → offene WhatsApp-Rückfrage → Fahrzeugakte → fehlende Unterlage → Portalbestätigung und Rechnung.
-3. NEXUS → offene Lexware-Rechnung → bestätigte Stripe-Zahlung → Aufgabe zur Zuordnung.
-4. Zulassungsdienst → Tagesstatistik filtern → bestätigte Vorgänge öffnen → prüfen, dass eine erneute Einreichung **keinen Doppelzähler** erzeugt.
-5. NEXUS → „Mitglied übernehmen“ für ein Bestandsmitglied seit August → Restbetrag und Nachzahlung korrekt berechnet.
-6. NEXUS → unbekannte Überweisung → „Zuordnen“ → bestätigen → nächste Zahlung derselben IBAN wird automatisch zugeordnet.
-7. Chat: Die drei Pflichtfragen aus 7.1 liefern korrekte, verlinkte Antworten.
-
-Zusätzlich **Unit-Tests** für die Ratenplan-Berechnung (Soll/Ist/Rückstand inkl. Sonderkonditionen und Stundungen) und die Zählregel der Tagesstatistik.
-
----
-
-## 12. Lieferung
-
-- klickbare Vorschau (Link, den ich **auf dem iPhone** öffnen kann, oder der konkrete nächste Schritt dafür)
+- klickbare Vorschau, die ich **auf dem iPhone** öffnen kann (oder der konkrete nächste Schritt dafür)
 - Screenshots (iPhone + Desktop)
 - kurze Liste:
   - Was funktioniert?
   - Was läuft mit Beispieldaten?
   - Für welche Live-Verbindung brauche ich noch einen Klick, Schlüssel oder eine Freigabe (mit Klickanleitung)?
-  - Ergebnis der Portal-Prüfung (MyDigitalCar, Nextoz, i-Kfz/GKS) und der WhatsApp-Coexistence-Prüfung
+  - Ergebnis der WhatsApp-Coexistence- und Lexware-Tarif-Prüfung
