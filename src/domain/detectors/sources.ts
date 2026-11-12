@@ -7,6 +7,8 @@ export function detectStaleSources(s: AppState, now: Date): Insight[] {
   for (const c of s.connections) {
     const f = sourceFreshness(c, now);
     if (f !== 'error' && f !== 'stale') continue;
+    // Echte Abgleiche melden einen Fehler erst nach 3 Fehlversuchen; die Demo-Störung (ohne `sync`) sofort.
+    if (f === 'error' && c.sync !== undefined && c.sync.failures < 3) continue;
     out.push({
       dedupeKey: `stale:${c.id}`,
       type: 'stale_source',

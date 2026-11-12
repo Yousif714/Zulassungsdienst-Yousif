@@ -10,6 +10,7 @@ import type { StoreEvent } from '@/domain/events';
 import { areaStale } from '@/domain/freshness';
 import { normalizePhone, validPhone } from '@/domain/matching/messages';
 import { classifyBankTx, matchBankPayment } from '@/domain/matching/payments';
+import { mergeBatch } from '@/domain/import/merge';
 import { formatEuro } from '@/domain/money';
 import type { Action, AppState, AssistantMessage, AuditEntry, Connection, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
@@ -276,6 +277,30 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       });
       const what = e.status === 'error' ? 'Störung simuliert' : e.status === 'connected' ? 'wieder verbunden' : 'getrennt';
       return owner({ state: { ...s, connections }, text: `Verbindung ${conn?.label ?? e.id}: ${what}` });
+    }
+    case 'importBatch': {
+      const conn = s.connections.find((c) => c.id === e.connectionId);
+      if (!conn) return { state: s };
+      const r = mergeBatch(s, e.batch, ctx.newId);
+      const connections = s.connections.map((c) => {
+        if (c.id !== e.connectionId) return c;
+        const next: Connection = { ...c, status: 'connected', lastSuccessAt: at.toISOString(), sync: { cursor: e.cursor, complete: e.complete, failures: 0 } };
+        delete next.lastError;
+        return next;
+      });
+      const { payments: p, invoices: i, subscriptions: a } = r.added;
+      const state = { ...r.state, connections };
+      return p + i + a > 0
+        ? { state, audit: { actor: 'system', text: `Abgleich ${conn.label}: ${p} neue Zahlungen, ${i} Rechnungen, ${a} Abos` } }
+        : { state };
+    }
+    case 'syncFailed': {
+      const conn = s.connections.find((c) => c.id === e.connectionId);
+      if (!conn) return { state: s };
+      const connections = s.connections.map((c) =>
+        c.id !== e.connectionId ? c : { ...c, status: 'error' as const, lastError: e.error, sync: { cursor: c.sync?.cursor ?? null, complete: c.sync?.complete ?? false, failures: (c.sync?.failures ?? 0) + 1 } });
+      const state = { ...s, connections };
+      return conn.status === 'error' ? { state } : { state, audit: { actor: 'system', text: `Abgleich ${conn.label}: Fehler – ${e.error}` } };
     }
     case 'assistantInbound': {
       const owner = validPhone(s.settings.ownerPhone);

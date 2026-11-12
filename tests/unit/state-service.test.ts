@@ -8,6 +8,7 @@ import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { Action } from '@/domain/types';
 import { NOW_0930 as NOW } from './helpers';
 import { createDemoState } from '@/data/seed';
+import { emptyBatch } from '@/domain/import/batch';
 
 const draft = (p: Partial<Action> = {}): Action => ({
   id: 'a-1', type: 'create_calendar_event', company: 'zulassung', title: 'Termin anlegen',
@@ -194,5 +195,8 @@ describe('Zustands-Dienst', () => {
     expect(isClientEvent({ type: 'setSlides', callId: 'c-1', status: 'draft' })).toBe(false);
     expect(isClientEvent({ type: 'setSlides', callId: 'c-1', slides: [{ position: '1', title: 'T', body: 'B' }], status: 'draft' })).toBe(false);
     expect(isClientEvent({ type: 'setSlides', callId: 'c-1', slides: [{ position: 1, title: 'T' }], status: 'draft' })).toBe(false);
+  });
+  test.each(['importBatch', 'syncFailed'])('%s ist kein Client-Ereignis', (type) => {
+    expect(isClientEvent({ type, connectionId: 'stripe_nexus', batch: emptyBatch(), error: 'x', cursor: null, complete: true })).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { reconcileInsights, runDetectors, selectTop } from '@/domain/detectors';
 import { memberView } from '@/domain/detectors/members';
+import { detectStaleSources } from '@/domain/detectors/sources';
 import type { StoredInsight } from '@/domain/types';
 import { NOW_0930, base, conn, find, inv, ins, muellerDone, schmidtIn, stateWith, tx, types } from './helpers';
 
@@ -142,4 +143,12 @@ describe('Lebenszyklus', () => {
     const list = [mk('a', 'info', 9), mk('b', 'today', 100), mk('c', 'now', 5), mk('d', 'now', 50), mk('e', 'now', 999, 'done'), mk('f', 'today', 200)];
     expect(selectTop(list).map((i) => i.dedupeKey)).toEqual(['d', 'c', 'f']);
   });
+});
+
+test('Fehler-Hinweis erst ab 3 Fehlversuchen, Demo-Störung (ohne sync) sofort', () => {
+  const c = (failures?: number) => conn({ id: 'stripe_nexus', company: 'nexus', label: 'Stripe NEXUS', status: 'error', lastSuccessAt: null, lastError: 'x', ...(failures === undefined ? {} : { sync: { cursor: null, complete: true, failures } }) });
+  const n = (failures?: number) => detectStaleSources(stateWith({ connections: [c(failures)] }), NOW_0930).length;
+  expect(n(2)).toBe(0);
+  expect(n(3)).toBe(1);
+  expect(n()).toBe(1);
 });
