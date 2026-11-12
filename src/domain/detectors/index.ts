@@ -56,8 +56,9 @@ export function reconcileInsights(
     if (f) {
       if (e.status === 'dismissed') return e;
       if (e.status === 'done' || e.status === 'stale') {
-        const { resolvedAt: _r, ...rest } = e;
-        return { ...rest, ...f, status: 'open', createdAt: stamp };
+        const reopened: StoredInsight = { ...e, ...f, status: 'open', createdAt: stamp };
+        delete reopened.resolvedAt;
+        return reopened;
       }
       return { ...e, ...f, status: e.status };
     }

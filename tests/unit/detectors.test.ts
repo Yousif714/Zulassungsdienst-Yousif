@@ -23,16 +23,23 @@ describe('Detektoren', () => {
   test('voll abgerechnet → kein Hinweis', () => {
     expect(types(run({ jobs: [{ ...muellerDone, invoiceIds: ['i89'] }], invoices: [inv('i89', 8900)] }))).not.toContain('job_not_invoiced');
   });
-  test('member_overdue: einzeln info + Sammelhinweis today', () => {
-    const s = { contracts: [{ ...base, contactId: 'm-kaya', startDate: '2026-09-01' }] };
-    const r = run(s).filter((i) => i.type === 'member_overdue');
-    expect(r.map((i) => i.dedupeKey).sort()).toEqual(['overdue:all:2026-11-12', 'overdue:c1']);
-    const one = r.find((i) => i.dedupeKey === 'overdue:c1')!;
-    expect(one.priority).toBe('info');
-    expect(one.amountCents).toBe(90000);
-    expect(one.body).toContain('Rückstand');
-    const all = r.find((i) => i.priority === 'today')!;
-    expect(all.title).toBe('1 Mitglied überfällig, zusammen 900,00 €');
+  test('member_overdue: ein Mitglied → nur Einzelhinweis', () => {
+    const r = run({ contracts: [{ ...base, contactId: 'm-kaya', startDate: '2026-09-01' }] }).filter((i) => i.type === 'member_overdue');
+    expect(r.map((i) => i.dedupeKey)).toEqual(['overdue:c1']);
+    expect(r[0].priority).toBe('info');
+    expect(r[0].amountCents).toBe(90000);
+    expect(r[0].body).toContain('Rückstand');
+  });
+  test('member_overdue: zwei Mitglieder → Sammelhinweis', () => {
+    const r = run({ contracts: [{ ...base, contactId: 'm-kaya', startDate: '2026-09-01' }, { ...base, id: 'c2', contactId: 'm-yilmaz', startDate: '2026-09-01' }] }).filter((i) => i.type === 'member_overdue');
+    expect(r).toHaveLength(3);
+    const all = r.find((i) => i.dedupeKey === 'overdue:all:2026-11-12')!;
+    expect(all.priority).toBe('today');
+    expect(all.title).toBe('2 Mitglieder überfällig, zusammen 1.800,00 €');
+    expect(all.amountCents).toBe(180000);
+  });
+  test('Stripe-Zahlung ohne Allocation → kein unmatched_payment', () => {
+    expect(types(run({ payments: [tx({ source: 'stripe', connectionId: 'stripe_nexus' })] }))).not.toContain('unmatched_payment');
   });
   test('memberView nutzt Allocations und Ausnahmen', () => {
     const s = stateWith({ contracts: [base], payments: [tx({ id: 'p1', bookedOn: '2026-10-01' })], allocations: [{ paymentId: 'p1', contractId: 'c1', amountCents: 30000, method: 'auto' }] });

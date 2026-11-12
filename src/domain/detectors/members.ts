@@ -55,14 +55,14 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
       needsSources: ['bank', 'stripe_nexus'],
     });
   }
-  if (count > 0) {
+  if (count >= 2) {
     out.push({
       dedupeKey: `overdue:all:${today}`,
       type: 'member_overdue',
       company: 'nexus',
       priority: 'today',
-      title: `${count} ${count === 1 ? 'Mitglied' : 'Mitglieder'} überfällig, zusammen ${formatEuro(sum)}`,
-      body: `Offene Rückstände bei ${count} ${count === 1 ? 'Mitglied' : 'Mitgliedern'}.`,
+      title: `${count} Mitglieder überfällig, zusammen ${formatEuro(sum)}`,
+      body: `Offene Rückstände bei ${count} Mitgliedern.`,
       amountCents: sum,
       refs: out.map((i) => i.refs[0]),
       nextStep: 'Erinnerungen vorbereiten',
