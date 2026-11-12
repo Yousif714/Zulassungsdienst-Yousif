@@ -60,3 +60,26 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 - Ausführung im Reducer statt auf dem Server (siehe 1).
 - Ein abgelehnter Hinweis bleibt innerhalb einer „Episode“ abgelehnt und kommt zurück, wenn das Problem später erneut auftritt. Ausnahmen: veraltete Quelle und unterdrückte Coach-Tipps.
 - Fehlende Verbindungen gelten als „Datenstand zu alt“.
+
+## Offen aus Paket 2a (Reviews, nicht merge-blockierend)
+
+**Vor 2b/2f fällig**
+- Auftrag und Übernahme zeigen im Echtmodus „Demo“ im Kopf.
+- Antworttext „Gesendet (Demo)“ und Protokolltexte für echte Anbieter anpassen.
+- Wenn das Speichern von `actionExecuted` dreimal am Konflikt scheitert, kommt der Fehler erst nach dem Anbieter-Aufruf. Der Sweep fängt das ab. Besser wäre ein eigener Retry nur für dieses Event.
+- `recentJobRuns` und der Supabase-Client sind nur gegen Fake/Memory getestet: einmal `npm run test:integration` gegen „nexus-test“ laufen lassen.
+
+**Vor 2e fällig**
+- Stürzt ein Tick nach `claimJobRun` ab, geht der Lauf verloren (kein Neuversuch).
+- Der Sweep für hängende Ausführungen läuft nur in den 15-Min-Sync-Slots, nicht alle 5 Min.
+
+**Sonstiges**
+- `updateCounter` (Passkey-Zähler) ist nicht atomar. Alte `job_runs`-Zeilen werden nie gelöscht, `ran_at` hat keinen Index.
+- `recover` hat keine Drosselung (Codes mit 50 Bit, unkritisch).
+- „Neue Wiederherstellungscodes“ ohne Rückfrage. Kein Test für „Passkey hinzufügen“ und neue Codes. Login-Routen ohne eigene Unit-Tests.
+- Heute-Hinweis „Noch nichts verbunden“ erscheint nur, wenn alle Verbindungen `missing` sind (`error` versteckt ihn).
+- Doppelte Hilfen: `postJson`/`run` in Einstellungen und Anmelden, `norm()` in `src/ai/tools.ts` und `demo-ai.ts`.
+- Session-500 ohne Anmelde-Flag führt zu Demo statt Offline. Fehler beim Schreiben des Flags führen fälschlich zu Offline.
+- Architektur-Test erkennt keine dynamischen Importe. `api-guard` prüft nur per Textsuche.
+- Die globale Demo-Leiste schiebt den Seitenkopf um ca. 44 px.
+- Kleinkram: ungenutzter `ConnectionId`-Import in `seed.ts`, Import-Reihenfolge, schwache Assertions in einzelnen Tests.
