@@ -26,7 +26,11 @@ export const viewport: Viewport = {
   ],
 };
 
-const registerServiceWorker = `if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); }); }`;
+const registerServiceWorker = `(function () {
+  if (!('serviceWorker' in navigator)) return;
+  var register = function () { navigator.serviceWorker.register('/sw.js').catch(function (err) { console.error('Service Worker konnte nicht registriert werden:', err); }); };
+  if (document.readyState === 'complete') register(); else window.addEventListener('load', register, { once: true });
+})();`;
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
