@@ -447,7 +447,7 @@ export interface Repos { state: StateRepository; auth: AuthRepository }
   - Store: `useAppStore(): { state; dispatch; mode }`; im Echtmodus lädt der Provider `/api/state`, `dispatch` postet an `/api/events` und übernimmt den Antwortzustand; 401 → `location.assign('/anmelden')`; Fehler → Status-Meldung „Konnte nicht gespeichert werden“ (Zustand unverändert). Im Echtmodus wird nichts in localStorage geschrieben.
 
 - [ ] **Step 1: Failing tests:**
-  - `mode.test.ts`: Tabelle für `resolveMode` (nicht angemeldet → demo; angemeldet ohne Flag → real; Flag `'1'` → demo; Server nicht erreichbar → demo).
+  - `mode.test.ts`: Tabelle für `resolveMode` (nicht angemeldet → demo; angemeldet ohne Flag → real; Flag `'1'` → demo; Server nicht erreichbar → `offline` (eigener Zustand: Hinweis „Server nicht erreichbar – Daten nicht aktuell“, KEIN stilles Umschalten auf Demo-Daten; Demo nur per ausdrücklichem Schalter)).
   - `api-events.test.ts` (Handler direkt, `requireSession` gemockt, Memory-Repos über Testmodus): ohne Sitzung → 401; `{ event: { type: 'resetDemo' } }` → 400; gültiges `dismissInsight` → 200 und Repo-Revision +1; Body ohne `event` → 400.
   - Store-Test: `loadInitial` bleibt grün; neuer Test, dass ein Echt-Provider-Hilfsmodul nie `STORE_KEY` schreibt (Spy auf `setItem`).
 - [ ] **Step 2:** Run → FAIL.
