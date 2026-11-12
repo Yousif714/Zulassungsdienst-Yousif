@@ -11,6 +11,7 @@ function fakeClient(log: string[], pageRows: (table: string, from: number) => un
     let single = false;
     const b: Record<string, unknown> = {};
     for (const m of ['select', 'order', 'eq', 'overrideTypes']) b[m] = () => b;
+    b.gte = (col: string, v: string) => { log.push(`gte ${table}.${col} ${v}`); return b; };
     b.range = (f: number) => { from = f; return b; };
     b.single = () => { single = true; return b; };
     b.then = (resolve: (r: Res) => void) => {
@@ -36,6 +37,14 @@ describe('Supabase-Repository (ohne Netz)', () => {
     const firstTable = log.findIndex((x) => x.startsWith('start ') && x !== 'start meta');
     expect(metaEnd).toBeGreaterThanOrEqual(0);
     expect(firstTable).toBeGreaterThan(metaEnd);
+    expect(log).not.toContain('start job_runs');
+  });
+
+  it('recentJobRuns liest nur job_runs ab dem Stichtag', async () => {
+    const log: string[] = [];
+    const repos = createSupabaseReposFromClient(fakeClient(log, (t, from) => (t === 'job_runs' && from === 0 ? [{ key: 'sync:x' }] : [])));
+    expect(await repos.state.recentJobRuns(new Date('2026-11-04T00:00:00Z'))).toEqual(['sync:x']);
+    expect(log).toContain('gte job_runs.ran_at 2026-11-04T00:00:00.000Z');
   });
 
   it('Paging läuft weiter bis eine leere Seite kommt (auch bei kleinem max-rows)', async () => {

@@ -234,7 +234,7 @@ export function createDemoState(): AppState {
 
   return {
     connections, contacts, contracts, exceptions: {}, payments, allocations, ibanLinks, invoices, messages, commitments, events, calls, content, vehicles, jobs,
-    insights: [], actions: [], audit: [], jobRuns: [], assistantChat: [],
+    insights: [], actions: [], audit: [], assistantChat: [],
     settings: { replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '+491510000000', suppressedCoachKeys: [] },
   };
 }

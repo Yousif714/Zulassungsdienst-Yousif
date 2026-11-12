@@ -11,14 +11,13 @@ const demo = () => {
   s.exceptions = { [cid]: [{ kind: 'x' } as never] };
   const a = s.allocations[0] ?? { paymentId: 'p1', contractId: cid, amountCents: 100, method: 'auto' as const };
   s.allocations = [...s.allocations, a, { ...a }];
-  s.jobRuns = ['job:a', 'job:b'];
   return s;
 };
 
 describe('tables', () => {
   it('Rundreise toRows/fromRows ist verlustfrei', () => {
     const s = demo();
-    expect(fromRows(toRows(s), s.jobRuns)).toEqual(s);
+    expect(fromRows(toRows(s))).toEqual(s);
   });
   it('doppelte Allocation-Paare bekommen laufende Nummern', () => {
     const rows = toRows(demo()).allocations;
@@ -27,7 +26,7 @@ describe('tables', () => {
     expect(ids.some((i) => i.endsWith(':1'))).toBe(true);
   });
   it('fehlende Tabellen fallen auf den Leerzustand zurück', () => {
-    const s = fromRows({}, []);
+    const s = fromRows({});
     expect(s.contracts).toEqual([]);
     expect(s.settings.replyThresholdHours).toBe(2);
   });
@@ -43,7 +42,7 @@ describe('tables', () => {
     s.assistantChat = [{ id: 'm2', text: 'b' }, { id: 'm1', text: 'a' }] as never;
     const rows = toRows(s);
     const shuffled = Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, [...v].reverse()]));
-    expect(fromRows(shuffled, s.jobRuns)).toEqual(s);
+    expect(fromRows(shuffled)).toEqual(s);
   });
   it('Umordnen erzeugt Upserts (ord ist Teil der Zeile)', () => {
     const s = demo();

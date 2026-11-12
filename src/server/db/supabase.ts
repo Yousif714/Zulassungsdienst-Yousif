@@ -49,21 +49,16 @@ export function createSupabaseReposFromClient(db: SupabaseClient): Repos {
       const meta = await db.from('meta').select('value').eq('key', 'revision').single();
       if (meta.error) fail('load meta', meta.error);
       const revision = Number((meta.data as { value: unknown }).value);
-      const [tables, jobRuns] = await Promise.all([
-        Promise.all(
-          TABLE_NAMES.map(async (t) => {
-            const rows = await selectAll<Row>(`load ${t}`, (from, to) =>
-              db.from(t).select(columns(t)).order('ord').order('id').range(from, to).overrideTypes<Row[], { merge: false }>(),
-            );
-            return [t, rows] as const;
-          }),
-        ),
-        selectAll<{ key: string }>('load job_runs', (from, to) =>
-          db.from('job_runs').select('key').order('ran_at').order('key').range(from, to).overrideTypes<{ key: string }[], { merge: false }>(),
-        ),
-      ]);
+      const tables = await Promise.all(
+        TABLE_NAMES.map(async (t) => {
+          const rows = await selectAll<Row>(`load ${t}`, (from, to) =>
+            db.from(t).select(columns(t)).order('ord').order('id').range(from, to).overrideTypes<Row[], { merge: false }>(),
+          );
+          return [t, rows] as const;
+        }),
+      );
       const rows = Object.fromEntries(tables) as Record<TableName, Row[]>;
-      return { state: fromRows(rows, jobRuns.map((x) => x.key)), revision };
+      return { state: fromRows(rows), revision };
     },
 
     async save(changes: ChangeSet, expectedRevision: number) {
@@ -80,6 +75,14 @@ export function createSupabaseReposFromClient(db: SupabaseClient): Repos {
       const { data, error } = await db.rpc('claim_job_run', { p_key: key, p_at: at.toISOString() });
       if (error) fail('claimJobRun', error);
       return data === true;
+    },
+
+    async recentJobRuns(since) {
+      const rows = await selectAll<{ key: string }>('recentJobRuns', (from, to) =>
+        db.from('job_runs').select('key').gte('ran_at', since.toISOString()).order('ran_at').order('key').range(from, to)
+          .overrideTypes<{ key: string }[], { merge: false }>(),
+      );
+      return rows.map((x) => x.key);
     },
   };
 

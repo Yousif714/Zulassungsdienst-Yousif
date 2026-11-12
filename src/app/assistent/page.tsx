@@ -6,6 +6,7 @@ import { DemoBadge } from '@/components/DemoBadge';
 import { Bubble, ContactHeader, LinkCards, RichText, TimeStamp, TypingBubble, placeMessages, type Placed } from '@/components/Messages';
 import { useAI } from '@/data/ai-client';
 import { useAppStore } from '@/data/store';
+import { draftLink } from '@/domain/assistant';
 import { buildBriefing, renderBriefingText } from '@/domain/briefing';
 import { formatBerlin, now, todayBerlin } from '@/domain/clock';
 import { chooseDelivery } from '@/domain/scheduler';
@@ -24,8 +25,13 @@ function stampLabel(iso: string): string {
   return todayBerlin(d) === todayBerlin(now()) ? `Heute ${formatBerlin(d, 'HH:mm')}` : formatBerlin(d, 'dd.MM. HH:mm');
 }
 
-/** `onButton` fehlt im Echtmodus: Knopf-Freigaben kommen dort nur über WhatsApp (Webhook), nicht aus der App. */
-function Message({ p, fresh, onButton }: { p: Placed<AssistantMessage>; fresh: boolean; onButton?: (b: Button) => void }) {
+type LinkRef = NonNullable<AssistantMessage['links']>[number];
+
+/**
+ * `onButton` fehlt im Echtmodus: Knopf-Freigaben kommen dort nur über WhatsApp (Webhook), nicht aus der App.
+ * Statt der Knöpfe zeigt der Echtmodus `draft`, den Link „Entwurf öffnen“.
+ */
+function Message({ p, fresh, onButton, draft }: { p: Placed<AssistantMessage>; fresh: boolean; onButton?: (b: Button) => void; draft?: LinkRef | null }) {
   const m = p.item;
   if (m.direction === 'ignored') {
     return (
@@ -38,6 +44,7 @@ function Message({ p, fresh, onButton }: { p: Placed<AssistantMessage>; fresh: b
     <li className="imsg-row" data-side={p.side} data-first={p.first} data-testid="wa-msg">
       <Bubble side={p.side} tail={p.tail} enter={fresh}><RichText text={m.text} /></Bubble>
       {m.links && <LinkCards links={m.links} />}
+      {draft && <LinkCards links={[draft]} />}
       {m.buttons && onButton && (
         <div className="imsg-pills">
           {m.buttons.map((b) => (
@@ -146,7 +153,9 @@ export default function AssistentPage() {
             {placeMessages(visible, (m) => (m.direction === 'ignored' ? null : m.direction === 'from_owner' ? 'out' : 'in'), (m) => m.at).map((p) => (
               <Fragment key={p.item.id}>
                 {p.stamp && <TimeStamp dateTime={p.item.at}>{stampLabel(p.item.at)}</TimeStamp>}
-                <Message p={p} fresh={fresh.has(p.item.id)} onButton={demo ? (button) => dispatch({ type: 'assistantButton', button }) : undefined} />
+                <Message p={p} fresh={fresh.has(p.item.id)}
+                  onButton={demo ? (button) => dispatch({ type: 'assistantButton', button }) : undefined}
+                  draft={!demo && p.item.buttons?.length ? draftLink(state, p.item.buttons[0].actionId) : null} />
               </Fragment>
             ))}
             {typing && <li className="imsg-row" data-side="in"><TypingBubble /></li>}

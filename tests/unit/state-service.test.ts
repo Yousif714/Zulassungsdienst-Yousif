@@ -7,6 +7,7 @@ import type { ActionProvider } from '@/domain/actions/machine';
 import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { Action } from '@/domain/types';
 import { NOW_0930 as NOW } from './helpers';
+import { createDemoState } from '@/data/seed';
 
 const draft = (p: Partial<Action> = {}): Action => ({
   id: 'a-1', type: 'create_calendar_event', company: 'zulassung', title: 'Termin anlegen',
@@ -58,6 +59,18 @@ describe('Zustands-Dienst', () => {
     expect(stored.actions.find((a) => a.id === 'a-1')?.status).toBe('executed');
     expect(stored.audit.length).toBeGreaterThan(0);
     expect(stored.audit.every((x) => x.isDemo === false)).toBe(true);
+  });
+
+  test('Hinweis, der erst beim Abgleich entsteht, lässt sich per dispatchEvents erledigen', async () => {
+    const repos = createMemoryRepos();
+    const { state, revision } = await repos.state.load();
+    // Gespeicherter Stand ohne Hinweise: sie entstehen erst durch refresh (wie zwischen zwei Sync-Läufen).
+    expect((await repos.state.save(diffState(state, { ...createDemoState(), insights: [] }), revision)).ok).toBe(true);
+    const shown = (await loadState(repos, NOW)).insights.find((i) => i.status === 'open' && !i.dedupeKey.startsWith('reply:'));
+    expect(shown).toBeDefined();
+    const r = await dispatchEvents(repos, [{ type: 'dismissInsight', key: shown!.dedupeKey }], deps());
+    expect(r.state.insights.find((i) => i.dedupeKey === shown!.dedupeKey)?.status).toBe('dismissed');
+    expect((await loadState(repos, NOW)).insights.find((i) => i.dedupeKey === shown!.dedupeKey)?.status).toBe('dismissed');
   });
 
   test('Konflikt durch zweites Gerät → neu laden, erneut anwenden, beide Änderungen bleiben', async () => {

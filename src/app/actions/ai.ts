@@ -5,7 +5,6 @@ import { createStateTools } from '@/ai/tools';
 import { handleInbound } from '@/domain/assistant';
 import type { ChatAnswer } from '@/domain/ai-port';
 import { realNow } from '@/domain/clock';
-import type { StoreEvent } from '@/domain/events';
 import type { AppState, Call } from '@/domain/types';
 import { requireSession } from '@/server/auth/session';
 import { getActionProvider, getAI, getRepos } from '@/server/registry';
@@ -46,16 +45,16 @@ export async function slidesForCall(callId: string): Promise<Call['slides']> {
 }
 
 /**
- * Nachricht des Inhabers an den Assistenten. Die Ereignisse aus `handleInbound` sind hier Server-Ereignisse
- * (nicht über `isClientEvent`); ein Erinnerungsentwurf wird als Echt-Entwurf gespeichert.
+ * Nachricht des Inhabers an den Assistenten. Die Sitzung ist bereits als Inhaber geprüft, darum Kanal `app`
+ * (keine Abhängigkeit von der Inhaber-Nummer). Die Ereignisse aus `handleInbound` sind Server-Ereignisse
+ * (nicht über `isClientEvent`); ein Erinnerungsentwurf entsteht als Echt-Entwurf.
  */
 export async function sendToAssistant(text: string): Promise<{ state: AppState }> {
   await guard(text);
   const repos = getRepos();
   const at = realNow();
   const s = await loadState(repos, at);
-  const r = await handleInbound(s, s.settings.ownerPhone, text.trim(), at, getAI(), createStateTools(s, at));
-  const events = r.events.map((e): StoreEvent => (e.type === 'createAction' ? { ...e, action: { ...e.action, isDemo: false } } : e));
-  const { state } = await dispatchEvents(repos, events, { at: realNow, provider: getActionProvider() });
+  const r = await handleInbound(s, 'App', text.trim(), at, getAI(), createStateTools(s, at), { channel: 'app', isDemo: false });
+  const { state } = await dispatchEvents(repos, r.events, { at: realNow, provider: getActionProvider() });
   return { state };
 }

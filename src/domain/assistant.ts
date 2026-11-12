@@ -4,7 +4,7 @@ import { reminderAction, reminderActionId } from './action-factory';
 import { REJECT_REASON_DE, approve } from './actions/machine';
 import { todayBerlin } from './clock';
 import { memberView } from './detectors';
-import type { StoreEvent } from './events';
+import type { InboundChannel, StoreEvent } from './events';
 import { normalizePhone, validPhone } from './matching/messages';
 import { paymentLinkFor } from './payment-link';
 import type { Action, AppState, AssistantMessage, Contact, MemberContract } from './types';
@@ -42,13 +42,22 @@ function deliver(
   return { events: [...events, { type: 'assistantOutbound', id: reply.id, text, ...more }], reply };
 }
 
+/**
+ * `channel`: `'whatsapp'` prüft den Absender gegen die Inhaber-Nummer (ohne gültige Nummer gilt niemand als Inhaber).
+ * `'app'` nur für Eingaben aus einer angemeldeten Sitzung: der Absender ist dort bereits als Inhaber authentifiziert.
+ * `isDemo`: Kennzeichen neu angelegter Entwürfe.
+ */
+export type InboundOptions = { channel: InboundChannel; isDemo: boolean };
+
 export async function handleInbound(
-  s: AppState, from: string, text: string, now: Date, ai: AIProvider, tools: AITools,
+  s: AppState, from: string, text: string, now: Date, ai: AIProvider, tools: AITools, opts: InboundOptions,
 ): Promise<{ events: StoreEvent[]; reply: AssistantMessage | null }> {
-  const inbound: StoreEvent = { type: 'assistantInbound', from, text };
-  // Der Store legt fremde Absender als `ignored` ab und protokolliert sie. Ohne gültige Inhaber-Nummer gilt niemand als Inhaber.
-  const owner = validPhone(s.settings.ownerPhone);
-  if (owner === null || normalizePhone(from) !== owner) return { events: [inbound], reply: null };
+  const inbound: StoreEvent = { type: 'assistantInbound', from, text, ...(opts.channel === 'app' ? { channel: 'app' as const } : {}) };
+  // Der Store legt fremde Absender als `ignored` ab und protokolliert sie.
+  if (opts.channel !== 'app') {
+    const owner = validPhone(s.settings.ownerPhone);
+    if (owner === null || normalizePhone(from) !== owner) return { events: [inbound], reply: null };
+  }
 
   const member = isReminderCommand(text) ? findMember(s, text) : null;
   if (member) {
@@ -63,7 +72,7 @@ export async function handleInbound(
       });
     }
     const action: Action = stored ?? reminderAction({
-      contract, contact, status, at: now, isDemo: true,
+      contract, contact, status, at: now, isDemo: opts.isDemo,
       text: await ai.draftReminder({ contact, status, tone: 'freundlich', paymentLink: paymentLinkFor(contract.id) }),
     });
     const buttons: Button[] = (['Senden', 'Ändern', 'Später'] as const).map((label) => ({ label, actionId: id, version: action.version, issuedAt: now.toISOString() }));
@@ -83,6 +92,12 @@ function editHref(s: AppState, a: Action): string {
   return p.threadId ? `/nachrichten/${p.threadId}` : '/';
 }
 
+/** Link „Entwurf öffnen“ zu einer Aktion (Knopf „Ändern“ und Echtmodus-Chat ohne Knöpfe); null, wenn es sie nicht gibt. */
+export function draftLink(s: AppState, actionId: string): LinkRef | null {
+  const a = s.actions.find((x) => x.id === actionId);
+  return a ? { label: 'Entwurf öffnen', href: editHref(s, a) } : null;
+}
+
 const invalid = (reason: string) => `Dieser Knopf ist nicht mehr gültig (${reason.replace(/\.$/, '')}). Ich habe nichts gesendet.`;
 
 export function handleButton(s: AppState, b: Button, now: Date): { events: StoreEvent[]; reply: AssistantMessage } {
@@ -91,7 +106,7 @@ export function handleButton(s: AppState, b: Button, now: Date): { events: Store
 
   if (b.label === 'Später') return deliver(s, [], 'Okay, ich erinnere dich später.', now);
   if (b.label === 'Ändern') {
-    return deliver(s, [], 'Zum Ändern öffne den Entwurf in der App.', now, { links: [{ label: 'Entwurf öffnen', href: editHref(s, a) }] });
+    return deliver(s, [], 'Zum Ändern öffne den Entwurf in der App.', now, { links: [draftLink(s, a.id)!] });
   }
 
   const approveEvent: StoreEvent = { type: 'approveAction', id: a.id, version: b.version, via: 'whatsapp', buttonIssuedAt: b.issuedAt };

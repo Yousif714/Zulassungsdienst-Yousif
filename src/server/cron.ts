@@ -5,6 +5,12 @@ import { chooseDelivery, dueRuns, type JobName } from '@/domain/scheduler';
 import type { Repos } from './db/repository';
 import { dispatchEvents, loadState, syncState } from './state-service';
 
+/**
+ * Wie weit `runTick` beanspruchte Läufe zurückliest. `dueRuns` betrachtet nur Slots von gestern und heute (Berlin)
+ * innerhalb von 2 Std.; ein Lauf wird frühestens zu seinem Slot beansprucht. 8 Tage decken das mit großem Abstand.
+ */
+export const JOB_RUN_LOOKBACK_MS = 8 * 24 * 3_600_000;
+
 const BRIEFING: Partial<Record<JobName, 'morning' | 'evening' | 'weekly'>> = {
   briefing_morning: 'morning', review_evening: 'evening', review_weekly: 'weekly',
 };
@@ -15,7 +21,8 @@ export async function runTick(deps: { repos: Repos; at: Date; provider: ActionPr
   const state = await loadState(repos, at);
   const ran: string[] = [];
   const skipped: string[] = [];
-  for (const run of dueRuns(at, new Set(state.jobRuns), state.settings)) {
+  const claimed = new Set(await repos.state.recentJobRuns(new Date(at.getTime() - JOB_RUN_LOOKBACK_MS)));
+  for (const run of dueRuns(at, claimed, state.settings)) {
     if (!(await repos.state.claimJobRun(run.key, at))) {
       skipped.push(run.key);
       continue;

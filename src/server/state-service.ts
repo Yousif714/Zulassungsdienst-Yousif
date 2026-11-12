@@ -125,7 +125,10 @@ export async function dispatchEvents(
 ): Promise<{ state: AppState; created: string[] }> {
   const ctx = (): EngineContext => ({ at: deps.at(), isDemo: false, newId });
   const r = await commit(repos.state, (s) => {
-    const res = applyEvents(s, events, ctx());
+    // Auf dem abgeglichenen Stand anwenden, den auch GET /api/state zeigt: sonst verpufft z. B. das Erledigen eines
+    // Hinweises, der erst durch refresh entsteht und noch nicht gespeichert ist.
+    const c = ctx();
+    const res = applyEvents(refresh(s, c.at, false), events, c);
     return { state: res.state, value: res.created };
   });
   const sink = serverSink(repos.state, r.state, ctx);

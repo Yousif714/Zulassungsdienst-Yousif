@@ -6,8 +6,7 @@ export function createEmptyState(): AppState {
   return {
     connections: CONNECTION_CATALOG.map(({ id, company, label }) => ({ id, company, label, status: 'missing', lastSuccessAt: null })),
     contacts: [], contracts: [], exceptions: {}, payments: [], allocations: [], ibanLinks: [], invoices: [], messages: [],
-    commitments: [], events: [], calls: [], content: [], vehicles: [], jobs: [], insights: [], actions: [], audit: [], jobRuns: [],
-    assistantChat: [],
+    commitments: [], events: [], calls: [], content: [], vehicles: [], jobs: [], insights: [], actions: [], audit: [], assistantChat: [],
     settings: { replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '', suppressedCoachKeys: [] },
   };
 }

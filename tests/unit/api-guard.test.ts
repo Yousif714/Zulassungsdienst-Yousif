@@ -25,6 +25,19 @@ describe('API-Schutz', () => {
       expect(readFileSync(f, 'utf8')).toContain('requireSession(');
     });
   }
+  // Mit cacheComponents wird ein GET-Handler beim Build vorgerendert, bis er Laufzeitdaten anfasst. Liest er vorher die
+  // Umgebung oder die Datenbank, scheitert `next build` ohne Env. Darum zuerst Cookies (requireSession) oder connection().
+  it('GET-Routen werden dynamisch, bevor sie Umgebung oder Datenbank lesen', () => {
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      const body = src.split(/export async function GET\([^)]*\)\s*\{/)[1];
+      if (body === undefined) continue;
+      const dyn = body.search(/await (connection|cookies|headers)\(\)|requireSession\(/);
+      const env = body.search(/readEnv\(|getRepos\(|getActionProvider\(/);
+      expect(dyn, path.relative(API, f)).toBeGreaterThanOrEqual(0);
+      if (env >= 0) expect(dyn, path.relative(API, f)).toBeLessThan(env);
+    }
+  });
   it('keine Route setzt runtime', () => {
     for (const f of files) expect(readFileSync(f, 'utf8')).not.toMatch(/export const runtime/);
   });

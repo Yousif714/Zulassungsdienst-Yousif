@@ -279,7 +279,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     }
     case 'assistantInbound': {
       const owner = validPhone(s.settings.ownerPhone);
-      const fromOwner = owner !== null && normalizePhone(e.from) === owner;
+      const fromOwner = e.channel === 'app' || (owner !== null && normalizePhone(e.from) === owner);
       const text = fromOwner ? e.text : `Nachricht von fremder Nummer ignoriert: „${e.text}“`;
       const msg: AssistantMessage = { id: ctx.newId(), direction: fromOwner ? 'from_owner' : 'ignored', from: e.from, text, at: at.toISOString() };
       const st = { ...s, assistantChat: [...s.assistantChat, msg] };

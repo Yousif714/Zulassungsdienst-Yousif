@@ -40,7 +40,19 @@ export function repositoryContract(name: string, make: () => Promise<Repos>): vo
       const { state } = await make();
       const res = await Promise.all(Array.from({ length: 10 }, () => state.claimJobRun('k', AT)));
       expect(res.filter(Boolean)).toHaveLength(1);
-      expect((await state.load()).state.jobRuns).toEqual(['k']);
+      expect(await state.recentJobRuns(AT)).toEqual(['k']);
+    });
+
+    it('recentJobRuns: nur Läufe ab dem Stichtag; load liest keine Laufschlüssel', async () => {
+      const { state } = await make();
+      const day = 24 * 3_600_000;
+      expect(await state.claimJobRun('alt', new Date(AT.getTime() - 10 * day))).toBe(true);
+      expect(await state.claimJobRun('neu', AT)).toBe(true);
+      expect(await state.recentJobRuns(new Date(AT.getTime() - 8 * day))).toEqual(['neu']);
+      expect((await state.recentJobRuns(new Date(AT.getTime() - 11 * day))).sort()).toEqual(['alt', 'neu']);
+      // Auch ein alter Schlüssel bleibt beansprucht.
+      expect(await state.claimJobRun('alt', AT)).toBe(false);
+      expect('jobRuns' in (await state.load()).state).toBe(false);
     });
 
     it('addFirstPasskey: bei zwei parallelen Aufrufen genau ein true', async () => {

@@ -44,7 +44,8 @@ export function useAI(): AIClient {
       slidesFor: (id) => local().slidesFor(id),
       async sendToAssistant(text) {
         const at = now();
-        const r = await handleInbound(state, state.settings.ownerPhone, text, at, demoAI, createStateTools(state, at));
+        // Demo spielt den WhatsApp-Weg nach: Absender ist die Demo-Inhaber-Nummer.
+        const r = await handleInbound(state, state.settings.ownerPhone, text, at, demoAI, createStateTools(state, at), { channel: 'whatsapp', isDemo: true });
         r.events.forEach(dispatch);
       },
     };

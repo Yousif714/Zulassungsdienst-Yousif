@@ -47,6 +47,14 @@ test('Verbindungen: Einrichtungs-Liste mit 10 offenen Einträgen', async () => {
   await expect(page.getByRole('button', { name: /simulieren|Wieder verbinden/ })).toHaveCount(0);
 });
 
+test('Assistent im Echtmodus antwortet dem Inhaber auch ohne gespeicherte Inhaber-Nummer', async () => {
+  await page.goto('/assistent');
+  await page.getByTestId('wa-input').fill('Was ist heute noch offen?');
+  await page.getByTestId('wa-send').click();
+  await expect(page.getByTestId('wa-msg')).toHaveCount(2);
+  await expect(page.getByTestId('wa-ignored')).toHaveCount(0);
+});
+
 test('Demo-Schalter: an zeigt Demo-Daten, aus wieder leeren Echtzustand', async () => {
   await page.goto('/einstellungen');
   const konto = page.getByTestId('account-group');

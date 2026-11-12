@@ -7,6 +7,9 @@ import { DemoProvider } from '@/domain/actions/demo-provider';
 import { GET } from '@/app/api/cron/tick/route';
 import { resetTestRepos } from '@/server/registry';
 
+// `connection()` braucht einen echten Request-Kontext; im Unit-Test reicht ein No-op.
+vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), connection: async () => {} }));
+
 let repos: Repos;
 const provider = new DemoProvider();
 beforeEach(() => {
@@ -54,7 +57,7 @@ describe('runTick', () => {
     await runTick({ repos, at, provider });
     const r2 = await runTick({ repos, at: new Date('2026-11-12T06:10:00Z'), provider });
     expect(r2.ran).toEqual([]);
-    expect((await repos.state.load()).state.jobRuns).toContain('briefing_morning:2026-11-12:07:00');
+    expect(await repos.state.recentJobRuns(new Date('2026-11-12T00:00:00Z'))).toContain('briefing_morning:2026-11-12:07:00');
   });
   test('sync setzt executing älter als 5 Min. auf uncertain', async () => {
     const t0 = new Date('2026-11-12T05:00:00Z');

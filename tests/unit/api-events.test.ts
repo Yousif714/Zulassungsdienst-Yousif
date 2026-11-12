@@ -46,6 +46,8 @@ describe('GET /api/state', () => {
     expect(r.status).toBe(200);
     const body = (await r.json()) as { state: { contacts: unknown[] } };
     expect(body.state.contacts.length).toBeGreaterThan(0);
+    // Laufschlüssel des Cron sind reine Server-Buchhaltung und gehen nicht an den Browser.
+    expect('jobRuns' in body.state).toBe(false);
   });
 });
 
@@ -96,6 +98,13 @@ describe('KI-Server-Actions', () => {
     const { state } = await sendToAssistant('Was ist heute noch offen?');
     expect(state.assistantChat.map((m) => m.direction)).toEqual(['from_owner', 'to_owner']);
     expect((await getRepos().state.load()).state.assistantChat).toHaveLength(2);
+  });
+  it('sendToAssistant im leeren Echtstart (ohne Inhaber-Nummer) antwortet statt zu ignorieren', async () => {
+    resetTestRepos(); // leerer Zustand, ownerPhone ''
+    expect((await getRepos().state.load()).state.settings.ownerPhone).toBe('');
+    const { state } = await sendToAssistant('Was ist heute noch offen?');
+    expect(state.assistantChat.map((m) => m.direction)).toEqual(['from_owner', 'to_owner']);
+    expect(state.audit.some((a) => a.text.includes('fremder Nummer'))).toBe(false);
   });
   it('sendToAssistant: Erinnerungsentwurf ist kein Demo-Entwurf', async () => {
     const s = (await getRepos().state.load()).state;

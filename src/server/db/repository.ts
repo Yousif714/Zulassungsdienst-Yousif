@@ -6,6 +6,8 @@ export interface StateRepository {
   load(): Promise<{ state: AppState; revision: number }>;
   save(changes: ChangeSet, expectedRevision: number): Promise<{ ok: true; revision: number } | { ok: false; reason: 'conflict' }>;
   claimJobRun(key: string, at: Date): Promise<boolean>; // true nur für den ersten
+  /** Schlüssel der Läufe, die ab `since` beansprucht wurden. Nicht Teil von `load()`: job_runs wächst um ~100 Zeilen pro Tag. */
+  recentJobRuns(since: Date): Promise<string[]>;
 }
 export interface StoredPasskey { id: string; publicKey: string; counter: number; transports: string[]; createdAt: string }
 export interface AuthRepository {

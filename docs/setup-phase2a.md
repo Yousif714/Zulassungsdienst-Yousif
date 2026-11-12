@@ -16,7 +16,7 @@ Einmalige Einrichtung von Supabase und Vercel. Keine echten Werte in dieses Doku
 
    Danach „Deployments“ → letztes Deployment → „Redeploy“.
 6. **Cron prüfen:** Projekt → Settings → „Cron Jobs“ zeigt `/api/cron/tick` alle 5 Minuten.
-7. **Erste Anmeldung:** auf dem iPhone in Safari `APP_ORIGIN/anmelden` öffnen → `OWNER_SETUP_TOKEN` eingeben → „Passkey anlegen“ → Face ID bestätigen.
+7. **Erste Anmeldung:** auf dem iPhone in Safari `APP_ORIGIN/anmelden` öffnen → den Wert von `OWNER_SETUP_TOKEN` ins Feld „Einrichtungs-Code“ eingeben → „Passkey anlegen“ → Face ID bestätigen.
 8. **Wiederherstellungscodes sichern:** die 10 Codes sofort im Passwort-Manager speichern (z. B. iCloud-Schlüsselbund, Notiz). Jeder Code gilt nur einmal. Neue Codes später unter Einstellungen → Konto → „Neue Wiederherstellungscodes“.
 9. **Optional:** `OWNER_SETUP_TOKEN` in Vercel löschen (die Einrichtung ist ohnehin gesperrt). Zweites Gerät: angemeldet unter Einstellungen → Konto → „Passkey hinzufügen“. Dort stehen auch „Demo-Modus“ und „Abmelden“.
 10. **Integrationstest (für Entwickler):** zweites Projekt `nexus-test` in Frankfurt, Schritt 2 dort wiederholen, lokal `SUPABASE_TEST_URL` und `SUPABASE_TEST_SERVICE_ROLE_KEY` setzen (optional `SUPABASE_TEST_ANON_KEY`), dann `npm run test:integration`. Diese Variablen nicht auf Vercel anlegen.

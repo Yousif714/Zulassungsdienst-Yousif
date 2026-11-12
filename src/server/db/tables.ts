@@ -56,7 +56,7 @@ export function toRows(s: AppState): Record<TableName, Row[]> {
   return r;
 }
 
-export function fromRows(input: Partial<Record<TableName, Row[]>>, jobRunKeys: string[]): AppState {
+export function fromRows(input: Partial<Record<TableName, Row[]>>): AppState {
   const r: Partial<Record<TableName, Row[]>> = {};
   for (const [k, v] of Object.entries(input) as [TableName, Row[]][]) r[k] = [...v].sort((x, y) => x.ord - y.ord);
   const s = createEmptyState();
@@ -70,7 +70,6 @@ export function fromRows(input: Partial<Record<TableName, Row[]>>, jobRunKeys: s
   if (r.audit) s.audit = r.audit.map((x) => x.data as AppState['audit'][number]);
   const settings = r.settings?.find((x) => x.id === 'owner');
   if (settings) s.settings = settings.data as AppState['settings'];
-  s.jobRuns = [...jobRunKeys];
   return s;
 }
 

@@ -8,6 +8,7 @@ import { setClockMode, setNowForTests } from '@/domain/clock';
 import { notConnected } from '@/domain/connections';
 import { validPhone } from '@/domain/matching/messages';
 import { NOW_0930 as NOW } from './helpers';
+const WA = { channel: 'whatsapp', isDemo: true } as const;
 
 afterEach(() => { setClockMode('demo'); setNowForTests(null); });
 
@@ -27,7 +28,7 @@ describe('leerer Startzustand', () => {
   test('leere Nummer: validPhone null, handleInbound ignoriert jede Nummer', async () => {
     expect(validPhone('')).toBeNull();
     const e = createEmptyState();
-    const r = await handleInbound(e, '+491510000000', 'Hallo', NOW, demoAI, createStateTools(e, NOW));
+    const r = await handleInbound(e, '+491510000000', 'Hallo', NOW, demoAI, createStateTools(e, NOW), WA);
     expect(r.reply).toBeNull();
   });
   test('notConnected', () => {
