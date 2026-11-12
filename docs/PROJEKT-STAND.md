@@ -22,6 +22,7 @@ Kernziele:
 |---|---|
 | `docs/superpowers/specs/2026-11-12-nexus-assistent-design.md` | **Spec**: Architektur, Datenmodell, Rechenregeln (Abschnitt 4a), Abnahme (10) |
 | `docs/superpowers/plans/2026-11-12-nexus-phase1-vorschau.md` | Bauplan Phase 1 (abgeschlossen) |
+| `docs/superpowers/specs/2026-11-12-phase2-design.md` | **Spec Phase 2** (Pakete 2a–2f, Fundament-Architektur) |
 | `docs/phase2-backlog.md` | Offene Punkte und verschobene Befunde für Phase 2 |
 | `docs/NEXUS-Assistent-Prompt.md` | Fachliche Anforderungen (Prompt-Form) |
 | `docs/Codex-Vergleich-Prompt.md` | Zweitmeinungs-Prompt für Codex |
