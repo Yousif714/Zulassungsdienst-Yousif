@@ -4,7 +4,7 @@ import { checkAction, executeApproved, type EventSink } from '@/data/executor';
 import type { ActionProvider } from '@/domain/actions/machine';
 import type { StoreEvent } from '@/domain/events';
 import { newId } from '@/domain/ids';
-import type { AppState } from '@/domain/types';
+import type { ActionType, AppState, Call, Company, Job, Settings } from '@/domain/types';
 import type { Repos, StateRepository } from './db/repository';
 import { diffState, type ChangeSet } from './db/tables';
 
@@ -18,24 +18,53 @@ export const CLIENT_EVENTS: ReadonlySet<StoreEvent['type']> = new Set<StoreEvent
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+const isVersion = (v: unknown) => Number.isInteger(v) && (v as number) >= 1;
+/** Prüft gegen alle Werte eines String-Unions; `Record<T, true>` erzwingt zur Compile-Zeit Vollständigkeit. */
+const oneOf = <T extends string>(all: Record<T, true>) => (v: unknown): v is T => typeof v === 'string' && Object.hasOwn(all, v);
+
+const isActionType = oneOf<ActionType>({ send_whatsapp: true, send_email: true, send_reminder: true, create_invoice_draft: true, create_calendar_event: true, mark_invoice_settled: true, link_invoice_to_job: true, confirm_payment_match: true });
+const isCompany = oneOf<Company>({ nexus: true, zulassung: true });
+const isJobStatus = oneOf<Job['status']>({ open: true, waiting_customer: true, done: true, invoiced: true, paid: true });
+const isSlidesStatus = oneOf<Call['slidesStatus']>({ todo: true, draft: true, reviewed: true, copied: true });
+
+/** Erlaubte Einstellungen mit Typprüfung je Schlüssel. Ein falscher Typ würde gespeichert und jede spätere Auswertung sprengen. */
+const SETTINGS: { [K in keyof Settings]: (v: unknown) => boolean } = {
+  replyThresholdHours: (v) => typeof v === 'number' && Number.isFinite(v) && v >= 1 && v <= 72, // wie im Einstellungs-Formular
+  briefingsEnabled: (v) => typeof v === 'boolean',
+  ownerPhone: (v) => typeof v === 'string', // Nummernformat prüft die Engine (validPhone)
+  suppressedCoachKeys: (v) => Array.isArray(v) && v.every((k) => typeof k === 'string'),
+};
+const isSettingsPatch = (p: unknown) => isObj(p) && Object.entries(p).every(([k, v]) => Object.hasOwn(SETTINGS, k) && SETTINGS[k as keyof Settings](v));
+
+/** Status- und Ausführungsfelder setzt nur der Server; ein Client-Entwurf darf sie nicht mitbringen. */
+const SERVER_ONLY_ACTION_FIELDS = ['approvedVia', 'approvedAt', 'executedAt', 'executingSince', 'error'] as const;
+const isDraft = (a: unknown) =>
+  isObj(a) && isStr(a.id) && isActionType(a.type) && (a.company === null || isCompany(a.company)) && isStr(a.title)
+  && isObj(a.payload) && isVersion(a.version) && a.status === 'draft' && isStr(a.createdAt)
+  && a.isDemo === false // Echtmodus: ein Demo-Entwurf wird abgelehnt, nicht umgeschrieben
+  && (a.insightKey === undefined || isStr(a.insightKey))
+  && SERVER_ONLY_ACTION_FIELDS.every((k) => a[k] === undefined);
+
+const isSlides = (v: unknown) => Array.isArray(v) && v.every((x) => isObj(x) && Number.isInteger(x.position) && typeof x.title === 'string' && typeof x.body === 'string');
 
 /** Pflichtfelder je erlaubtem Ereignis (Grundform; die Fachregeln prüft die Engine). */
 const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
   confirmPaymentMatch: (e) => isStr(e.paymentId) && isStr(e.contractId),
   settleInvoice: (e) => isStr(e.invoiceId) && isStr(e.paymentId),
   linkInvoiceToJob: (e) => isStr(e.jobId) && isStr(e.invoiceId),
-  setJobStatus: (e) => isStr(e.jobId) && isStr(e.status),
+  setJobStatus: (e) => isStr(e.jobId) && isJobStatus(e.status),
   // Nur Entwürfe: eine Aktion darf nie ohne Freigabe als „approved“ hereinkommen.
-  createAction: (e) => isObj(e.action) && isStr(e.action.id) && isStr(e.action.type) && typeof e.action.version === 'number' && e.action.status === 'draft' && isObj(e.action.payload),
+  createAction: (e) => isDraft(e.action),
   editAction: (e) => isStr(e.id) && isObj(e.payload),
-  approveAction: (e) => isStr(e.id) && typeof e.version === 'number' && (e.via === 'app' || e.via === 'whatsapp'),
+  // Nur die App: WhatsApp-Freigaben kommen über den Webhook, sonst ließen sich Kanal und Knopf-Zeit fälschen.
+  approveAction: (e) => isStr(e.id) && isVersion(e.version) && e.via === 'app' && e.buttonIssuedAt === undefined,
   retryAction: (e) => isStr(e.id),
   checkAction: (e) => isStr(e.id),
   dismissInsight: (e) => isStr(e.key),
   snoozeInsight: (e) => isStr(e.key),
   suppressCoach: (e) => isStr(e.key),
-  setSlides: (e) => isStr(e.callId) && isStr(e.status),
-  updateSettings: (e) => isObj(e.patch),
+  setSlides: (e) => isStr(e.callId) && isSlides(e.slides) && isSlidesStatus(e.status),
+  updateSettings: (e) => isSettingsPatch(e.patch),
 };
 
 export function isClientEvent(e: unknown): e is StoreEvent {

@@ -128,4 +128,58 @@ describe('Zustands-Dienst', () => {
     expect(isClientEvent({ type: 'createAction', action: draft() })).toBe(true);
     expect(isClientEvent({ type: 'createAction', action: draft({ status: 'approved' }) })).toBe(false);
   });
+
+  test('updateSettings: nur bekannte Schlüssel mit passendem Typ', () => {
+    const ok = (patch: unknown) => isClientEvent({ type: 'updateSettings', patch });
+    expect(ok({ replyThresholdHours: 4, briefingsEnabled: false, ownerPhone: '+491701234567', suppressedCoachKeys: ['a', 'b'] })).toBe(true);
+    expect(ok({})).toBe(true);
+    expect(ok({ suppressedCoachKeys: 42 })).toBe(false);
+    expect(ok({ suppressedCoachKeys: ['a', 3] })).toBe(false);
+    expect(ok({ replyThresholdHours: '4' })).toBe(false);
+    expect(ok({ replyThresholdHours: Number.NaN })).toBe(false);
+    expect(ok({ replyThresholdHours: 0 })).toBe(false);
+    expect(ok({ replyThresholdHours: 1000 })).toBe(false);
+    expect(ok({ briefingsEnabled: 'ja' })).toBe(false);
+    expect(ok({ ownerPhone: 491701234567 })).toBe(false);
+    expect(ok({ unbekannt: 1 })).toBe(false);
+    expect(ok([])).toBe(false);
+  });
+
+  test('createAction: strenge Form, nur echte Entwürfe', () => {
+    const ok = (action: unknown) => isClientEvent({ type: 'createAction', action });
+    expect(ok(draft({ company: null }))).toBe(true);
+    expect(ok({ ...draft(), type: 'delete_everything' })).toBe(false);
+    expect(ok({ ...draft(), title: '' })).toBe(false);
+    expect(ok({ ...draft(), title: undefined })).toBe(false);
+    expect(ok({ ...draft(), company: 'fremd' })).toBe(false);
+    expect(ok({ ...draft(), createdAt: 5 })).toBe(false);
+    expect(ok({ ...draft(), version: 0 })).toBe(false);
+    expect(ok({ ...draft(), version: 1.5 })).toBe(false);
+    expect(ok(draft({ isDemo: true }))).toBe(false);
+    expect(ok(draft({ approvedVia: 'app' }))).toBe(false);
+    expect(ok(draft({ approvedAt: NOW.toISOString() }))).toBe(false);
+    expect(ok(draft({ executedAt: NOW.toISOString() }))).toBe(false);
+    expect(ok(draft({ executingSince: NOW.toISOString() }))).toBe(false);
+    expect(ok(draft({ error: 'x' }))).toBe(false);
+    expect(ok(draft({ insightKey: 'reply:m-1' }))).toBe(true);
+    expect(ok(draft({ insightKey: 3 as unknown as string }))).toBe(false);
+  });
+
+  test('approveAction nur über die App, ohne Knopf-Zeitstempel', () => {
+    expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'whatsapp', buttonIssuedAt: NOW.toISOString() })).toBe(false);
+    expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app', buttonIssuedAt: NOW.toISOString() })).toBe(false);
+    expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 0, via: 'app' })).toBe(false);
+  });
+
+  test('setJobStatus und setSlides: Werte aus den Aufzählungen, Folien mit Form', () => {
+    expect(isClientEvent({ type: 'setJobStatus', jobId: 'j-1', status: 'done' })).toBe(true);
+    expect(isClientEvent({ type: 'setJobStatus', jobId: 'j-1', status: 'gelöscht' })).toBe(false);
+    const slides = [{ position: 1, title: 'Titel', body: 'Text' }];
+    expect(isClientEvent({ type: 'setSlides', callId: 'c-1', slides, status: 'draft' })).toBe(true);
+    expect(isClientEvent({ type: 'setSlides', callId: 'c-1', slides: [], status: 'reviewed' })).toBe(true);
+    expect(isClientEvent({ type: 'setSlides', callId: 'c-1', slides, status: 'fertig' })).toBe(false);
+    expect(isClientEvent({ type: 'setSlides', callId: 'c-1', status: 'draft' })).toBe(false);
+    expect(isClientEvent({ type: 'setSlides', callId: 'c-1', slides: [{ position: '1', title: 'T', body: 'B' }], status: 'draft' })).toBe(false);
+    expect(isClientEvent({ type: 'setSlides', callId: 'c-1', slides: [{ position: 1, title: 'T' }], status: 'draft' })).toBe(false);
+  });
 });
