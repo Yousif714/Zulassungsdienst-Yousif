@@ -1012,6 +1012,16 @@ a.task-body:active {
   font-weight: 600;
 }
 
+.action-sheet-result:focus {
+  outline: none;
+}
+
+.action-sheet-result:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
 .action-sheet-ok {
   display: inline-flex;
   align-items: center;

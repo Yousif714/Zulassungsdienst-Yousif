@@ -11,3 +11,19 @@ test('Abnahme 1: wartender Kunde → Antwort senden → Protokoll, Hinweis zu', 
   await page.goto('/protokoll'); await expect(page.getByText(/Autohaus Schmidt/)).toBeVisible();
   await page.goto('/'); await expect(page.locator('[data-key="reply:m-schmidt-in-1"]')).toHaveCount(0);
 });
+
+test('ActionSheet: Fokus beim Ändern und Live-Region nach dem Senden', async ({ page }) => {
+  await page.goto('/nachrichten/t-schmidt?reset=1');
+  await expect(page.getByTestId('draft-text')).not.toBeEmpty();
+  const status = page.getByTestId('action-status');
+  await expect(status).toHaveAttribute('role', 'status');
+  await expect(status).toBeEmpty();
+  const aendern = page.getByRole('button', { name: 'Ändern' });
+  await aendern.click();
+  await expect(page.getByTestId('draft-editor')).toBeFocused();
+  await page.getByRole('button', { name: 'Abbrechen' }).click();
+  await expect(aendern).toBeFocused();
+  await page.getByRole('button', { name: 'Senden' }).click();
+  await expect(status).toContainText('Gesendet (Demo)');
+  await expect(status).toBeFocused();
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { Action } from '@/domain/types';
 
@@ -21,15 +21,44 @@ export function ActionSheet({ action, onSend, onEdit, onLater }: Props) {
   const text = typeof action.payload.text === 'string' ? action.payload.text : '';
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(text);
+  const editor = useRef<HTMLTextAreaElement>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const status = useRef<HTMLDivElement>(null);
+  const backToEdit = useRef(false);
+  const prevStatus = useRef(action.status);
+
+  // Fokus folgt dem Zustand: Editor beim Ändern, danach zurück auf „Ändern“.
+  useEffect(() => {
+    if (editing) editor.current?.focus();
+    else if (backToEdit.current) {
+      backToEdit.current = false;
+      editButton.current?.focus();
+    }
+  }, [editing]);
+
+  // Nach dem Senden (Wechsel weg vom Entwurf) auf die Statusmeldung, damit sie nicht im Leeren endet.
+  useEffect(() => {
+    if (prevStatus.current === 'draft' && action.status !== 'draft') status.current?.focus();
+    prevStatus.current = action.status;
+  }, [action.status]);
 
   const startEdit = () => {
     setValue(text);
     setEditing(true);
   };
-  const saveEdit = () => {
+  const stopEdit = (save: boolean) => {
+    backToEdit.current = true;
     setEditing(false);
-    if (value.trim() && value !== text) onEdit(value);
+    if (save && value.trim() && value !== text) onEdit(value);
   };
+
+  const statusText =
+    action.status === 'executed' ? 'Gesendet (Demo)'
+      : action.status === 'failed' ? `Fehlgeschlagen${action.error ? `: ${action.error}` : ''}`
+        : action.status === 'uncertain' ? 'Ausgang unklar'
+          : action.status === 'approved' || action.status === 'executing' ? 'Wird gesendet …'
+            : '';
+  const isError = action.status === 'failed' || action.status === 'uncertain';
 
   return (
     <section className="action-sheet" data-testid="action-sheet" data-status={action.status} aria-label={action.title}>
@@ -40,6 +69,7 @@ export function ActionSheet({ action, onSend, onEdit, onLater }: Props) {
 
       {editing ? (
         <textarea
+          ref={editor}
           className="action-sheet-editor"
           data-testid="draft-editor"
           aria-label="Entwurf bearbeiten"
@@ -57,32 +87,24 @@ export function ActionSheet({ action, onSend, onEdit, onLater }: Props) {
             <span>Senden</span>
             <DemoBadge />
           </button>
-          <button type="button" className="btn btn-secondary" onClick={startEdit}>Ändern</button>
+          <button ref={editButton} type="button" className="btn btn-secondary" onClick={startEdit}>Ändern</button>
           <button type="button" className="btn btn-plain" onClick={onLater}>Später</button>
         </div>
       )}
       {action.status === 'draft' && editing && (
         <div className="action-sheet-buttons">
-          <button type="button" className="btn btn-primary" onClick={saveEdit}>Übernehmen</button>
-          <button type="button" className="btn btn-plain" onClick={() => setEditing(false)}>Abbrechen</button>
+          <button type="button" className="btn btn-primary" onClick={() => stopEdit(true)}>Übernehmen</button>
+          <button type="button" className="btn btn-plain" onClick={() => stopEdit(false)}>Abbrechen</button>
         </div>
       )}
 
-      {action.status === 'executed' && (
-        <div className="action-sheet-result" data-testid="action-status" role="status">
-          <span className="action-sheet-ok"><IconCheck /></span>
-          <span>Gesendet (Demo)</span>
-        </div>
-      )}
-      {(action.status === 'failed' || action.status === 'uncertain') && (
-        <div className="action-sheet-result action-sheet-error" data-testid="action-status" role="status">
-          <IconWarning />
-          <span>{action.status === 'failed' ? `Fehlgeschlagen${action.error ? `: ${action.error}` : ''}` : 'Ausgang unklar'}</span>
-        </div>
-      )}
-      {(action.status === 'approved' || action.status === 'executing') && (
-        <div className="action-sheet-result" data-testid="action-status" role="status">Wird gesendet …</div>
-      )}
+      {/* Immer vorhanden (anfangs leer), damit Screenreader die spätere Meldung ansagen. */}
+      <div ref={status} tabIndex={-1} role="status" data-testid="action-status"
+        className={statusText ? `action-sheet-result${isError ? ' action-sheet-error' : ''}` : 'action-sheet-status-empty'}>
+        {action.status === 'executed' && <span className="action-sheet-ok"><IconCheck /></span>}
+        {isError && <IconWarning />}
+        {statusText && <span>{statusText}</span>}
+      </div>
     </section>
   );
 }
