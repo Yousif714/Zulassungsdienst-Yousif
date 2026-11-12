@@ -121,9 +121,26 @@ Quelle: Abo sub_…, Rechnungen RE-1043, RE-1051
 - **Erstimport fortsetzbar:** Fortschritt je Verbindung (Cursor) wird gespeichert. Ein Lauf bricht vor dem Vercel-Zeitlimit ab und macht im nächsten Slot weiter.
 - **Vorschlags-ID** = sortierte Quellschlüssel (`connection:external_id`). Ein verworfener Vorschlag bleibt verworfen. Kommt eine neue Quelle hinzu (z. B. ein neues Abo), entsteht eine neue ID und damit ein neuer Vorschlag.
 
-**Offen beim Inhaber**
-1. Woran erkennt man eine Mitgliedschaft in Stripe bzw. Lexware NEXUS? Vorschlag, falls unbekannt: alle Stripe-Abos mit Enddatum und alle Lexware-NEXUS-Rechnungen. Falsches verwirft der Inhaber einmal.
-2. Umgestellte Mitglieder: Deckt das Stripe-Abo nur den Restbetrag ab (→ ein zusammengeführter Vertrag) oder ist es ein neuer Vertrag (→ zwei)?
+**Vom Inhaber beantwortet**
+1. **Erkennung:** Die Rechnung trägt „NEXUS-Mitgliedschaft“ mit Laufzeit („6 Monate“, „12 Monate“ …). Für die Mapper heißt das:
+   - Nur Rechnungen bzw. Positionen, die „Mitgliedschaft“ enthalten (ohne Groß-/Kleinschreibung, Bindestrich egal), werden zu Vorschlägen.
+   - Die Laufzeit in Monaten wird aus dem Text gelesen und ergibt die Anzahl der Raten.
+   - Für Stripe gilt dasselbe auf dem Produkt- bzw. Positionsnamen.
+   - Alles andere wird importiert (Rechnungen, Zahlungen), erzeugt aber keinen Vorschlag.
+2. **Umstellung:** Die Bestandsmitglieder sind noch **nicht** auf Stripe umgestellt. Es gibt also heute keine Zusammenführung von Lexware-Vertrag und Stripe-Abo. Die Umstellung soll die App übernehmen, siehe 11b.
+
+## 11b. Paket 2b-3: Umstellung auf Stripe (neu)
+- **Zweck:** Für jedes Bestandsmitglied den Restbetrag als Stripe-Abo mit festem Enddatum aufsetzen, ohne Handarbeit des Inhabers.
+- **Reihenfolge:** nach 2b-2. Der Restbetrag hängt von den Banküberweisungen ab. Ohne Bankdaten wäre er falsch.
+- **Ablauf:**
+  - Die Übernahme-Seite rechnet den Restplan mit Rückstand und Nachzahlungsmodus (`planTakeover`).
+  - „Auf Stripe umstellen“ erzeugt eine **Aktion zur Freigabe** (Spec: „Anlegen = eigene freigegebene Aktion“).
+  - Nach Freigabe legt der Server eine **Stripe-Checkout-Sitzung im Abo-Modus** an, mit Raten und Enddatum laut Plan.
+  - Das Mitglied hinterlegt Karte oder SEPA selbst. Ohne Zahlungsmittel des Mitglieds kann Stripe nicht abbuchen.
+  - Den Link schickt der Inhaber per „Senden“. Ab 2e/2f geht das direkt per WhatsApp, bis dahin kopiert er ihn.
+  - Sobald das Abo aktiv ist, verknüpft der Webhook es mit dem bestehenden Vertrag, und `billing` wechselt auf `stripe`.
+- **Braucht:** einen zweiten Stripe-Schlüssel mit Schreibrecht nur für Checkout, Kunden, Produkte und Preise. Er bleibt getrennt vom Lese-Schlüssel.
+- **Sammelaktion:** „Alle umstellen“ bereitet die Aktionen für alle fertigen Restpläne vor. Freigegeben wird einzeln oder gesammelt.
 
 ## 12. Dem Bauenden überlassen
 - Genaue API-Felder und Endpunkte (vorher in der aktuellen Doku prüfen).
