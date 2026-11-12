@@ -11,10 +11,12 @@ const NOW = Date.parse('2026-11-12T10:00:00Z');
 const ctx = (o: Partial<PullContext> = {}): PullContext => ({
   fetch: fixtureFetch(stripeRoutesPaged), key: 'sk_test_SECRET', sleep: async () => {}, now: () => NOW, deadline: NOW + 60_000, known: new Map(), ...o,
 });
-/** now() zählt bei jedem Aufruf eine Sekunde hoch; Budget = `n` Sekunden. */
-const counterBudget = (n: number): Pick<PullContext, 'now' | 'deadline'> => {
-  let t = NOW;
-  return { now: () => (t += 1000), deadline: NOW + n * 1000 };
+/** Budget über die Zahl der Anfragen: nach `n` fetch-Aufrufen ist `now()` hinter der Deadline (unabhängig vom Zeitverbrauch des Clients). */
+const limitFetches = (routes: Record<string, unknown>, n: number) => {
+  const inner = fixtureFetch(routes);
+  let count = 0;
+  const f = ((i: RequestInfo | URL, init?: RequestInit) => { count++; return inner(i, init); }) as typeof fetch;
+  return { o: { fetch: f, now: () => (count >= n ? NOW + 1_000_000 : NOW), deadline: NOW + 60_000 } };
 };
 const ids = (r: { batch: { payments: { externalId: string }[] } }) => r.batch.payments.map((p) => p.externalId);
 const sinceSec = Date.parse(`${IMPORT_SINCE}T00:00:00Z`) / 1000 - 7200; // Berlin-Mitternacht (Sommerzeit) als sichere Untergrenze
@@ -42,13 +44,32 @@ describe('pullStripe', () => {
     expect(calls.find((c) => c.startsWith('/v1/invoices?'))).toContain(`created%5Bgte%5D=${cur.createdGte}`);
   });
 
-  test('Zeitbudget erreicht → Teilergebnis, Cursor, complete false; Fortsetzung liefert den Rest', async () => {
-    const first = await pullStripe(null, ctx(counterBudget(3)));
+  test('Abbruch mitten in der Rechnungsliste → Cursor mit starting_after; Folgelauf liefert genau den Rest', async () => {
+    const lim = limitFetches(stripeRoutesPaged, 3); // Abos, Produkte, Rechnungsseite 1
+    const first = await pullStripe(null, ctx(lim.o));
     expect(first.complete).toBe(false);
-    expect(first.cursor).not.toBeNull();
-    const second = await pullStripe(first.cursor, ctx());
+    expect(ids(first).sort()).toEqual(['in_A1', 'in_A2']);
+    expect(JSON.parse(first.cursor!)).toEqual({ createdGte: sinceSec, phase: 'invoices', startingAfter: 'in_A2' });
+    const calls: string[] = [];
+    const second = await pullStripe(first.cursor, ctx({ fetch: fixtureFetch(stripeRoutesPaged, { calls }) }));
     expect(second.complete).toBe(true);
-    expect(new Set([...ids(first), ...ids(second)])).toEqual(new Set(['in_A1', 'in_A2', 'in_A3', 'in_B1', 'in_D1', 're_B1']));
+    expect(calls.some((c) => c.startsWith('/v1/subscriptions'))).toBe(false); // Abos nur beim Lauf-Start
+    expect(ids(second).sort()).toEqual(['in_A3', 'in_B1', 'in_D1', 're_B1']);
+    expect(ids(first).filter((i) => ids(second).includes(i))).toEqual([]);
+  });
+
+  test('Abbruch zwischen Erstattungen und Streitfällen → Cursor phase disputes; Folgelauf nur Streitfälle', async () => {
+    const lim = limitFetches(stripeRoutesPaged, 5); // Abos, Produkte, 2 Rechnungsseiten, Erstattungen
+    const first = await pullStripe(null, ctx(lim.o));
+    expect(first.complete).toBe(false);
+    expect(ids(first)).toContain('re_B1');
+    expect(first.batch.disputes).toEqual([]);
+    expect(JSON.parse(first.cursor!)).toMatchObject({ phase: 'disputes', startingAfter: null });
+    const calls: string[] = [];
+    const second = await pullStripe(first.cursor, ctx({ fetch: fixtureFetch(stripeRoutesPaged, { calls }) }));
+    expect(second.complete).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(second.batch.disputes).toEqual([{ externalId: 'dp_1', invoiceExternalId: 'in_A3' }]);
   });
 
   test('Budget schon vor der ersten Anfrage erreicht → leerer Batch, Cursor bleibt am Anfang', async () => {

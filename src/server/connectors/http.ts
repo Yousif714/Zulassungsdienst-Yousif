@@ -34,8 +34,9 @@ export function createApiClient(o: {
       const path = pathAndQuery.split('?')[0];
       let res = await send(pathAndQuery);
       if (res.status === 429) {
-        const s = Number(res.headers.get('retry-after'));
-        await o.sleep(Number.isFinite(s) && s >= 0 ? Math.min(s * 1000, MAX_RETRY_WAIT_MS) : 1000);
+        const h = res.headers.get('retry-after');
+        const s = h ? Number(h) : NaN;
+        await o.sleep(Number.isFinite(s) && s > 0 ? Math.min(s * 1000, MAX_RETRY_WAIT_MS) : 1000);
         res = await send(pathAndQuery);
       }
       if (!res.ok) throw new ConnectorError(`${o.label}: HTTP ${res.status} bei ${path}${res.status === 401 || res.status === 403 ? ' (Schlüssel prüfen)' : ''}`);

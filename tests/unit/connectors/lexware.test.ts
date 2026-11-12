@@ -9,9 +9,12 @@ const NOW = Date.parse('2026-11-12T10:00:00Z');
 const ctx = (o: Partial<PullContext> = {}): PullContext => ({
   fetch: fixtureFetch(lexwareRoutes), key: 'lx_SECRET', sleep: async () => {}, now: () => NOW, deadline: NOW + 60_000, known: new Map(), ...o,
 });
-const counterBudget = (n: number): Pick<PullContext, 'now' | 'deadline'> => {
-  let t = NOW;
-  return { now: () => (t += 1000), deadline: NOW + n * 1000 };
+/** Budget über die Zahl der Anfragen: nach `n` fetch-Aufrufen ist `now()` hinter der Deadline. */
+const limitFetches = (routes: Record<string, unknown>, n: number) => {
+  const inner = fixtureFetch(routes);
+  let count = 0;
+  const f = ((i: RequestInfo | URL, init?: RequestInit) => { count++; return inner(i, init); }) as typeof fetch;
+  return { o: { fetch: f, now: () => (count >= n ? NOW + 1_000_000 : NOW), deadline: NOW + 60_000 } };
 };
 const numbers = (r: { batch: { invoices: { number: string }[] } }) => r.batch.invoices.map((i) => i.number);
 const ALL = ['RE-1043', 'RE-1051', 'RE-1060', 'RE-1100', 'RE-1101', 'RE-1102', 'RE-1110'];
@@ -73,17 +76,30 @@ describe('pullLexware', () => {
     expect(r.batch.invoices[0].company).toBe('zulassung');
   });
 
-  test('Abbruch am Budget, Fortsetzung über Cursor und known', async () => {
-    const first = await pullLexware('lexware_nexus', null, ctx({ fetch: fixtureFetch(lexwareRoutesPaged), ...counterBudget(5) }));
+  test('Abbruch mitten in den Details → Cursor; Folgelauf holt genau den Rest, known nicht leer', async () => {
+    const lim = limitFetches(lexwareRoutesPaged, 5); // Kontakte, Liste 0, 3 Details
+    const first = await pullLexware('lexware_nexus', null, ctx(lim.o));
     expect(first.complete).toBe(false);
-    expect(first.cursor).not.toBeNull();
-    expect(first.batch.invoices.length).toBeLessThan(ALL.length);
+    expect(first.batch.invoices).toHaveLength(3);
+    expect(JSON.parse(first.cursor!)).toEqual({ phase: 'invoices', page: 0 });
     const known = new Map(first.batch.invoices.map((i) => [i.externalId, i.sourceUpdatedAt]));
+    expect(known.size).toBe(3);
     const calls: string[] = [];
     const second = await pullLexware('lexware_nexus', first.cursor, ctx({ fetch: fixtureFetch(lexwareRoutesPaged, { calls }), known }));
     expect(second.complete).toBe(true);
+    expect(second.cursor).toBeNull();
+    expect(calls.some((c) => c.startsWith('/v1/contacts'))).toBe(false);
     for (const i of first.batch.invoices) expect(calls).not.toContain(`/v1/invoices/${i.externalId}`);
-    expect(new Set([...numbers(first), ...numbers(second)])).toEqual(new Set(ALL));
+    expect(calls.filter((c) => c.startsWith('/v1/invoices/'))).toHaveLength(ALL.length - 3);
+    expect(numbers(first).filter((n) => numbers(second).includes(n))).toEqual([]);
+    expect([...numbers(first), ...numbers(second)].sort()).toEqual(ALL.slice().sort());
+  });
+
+  test('Eintrag ohne updatedDate wird nie übersprungen', async () => {
+    const entry = { id: idOf('RE-1100'), voucherStatus: 'open', voucherNumber: 'RE-1100' };
+    const routes = { ...lexwareRoutes, '/v1/voucherlist': { content: [entry], last: true } };
+    const r = await pullLexware('lexware_nexus', null, ctx({ fetch: fixtureFetch(routes), known: new Map([[entry.id, undefined]]) }));
+    expect(numbers(r)).toEqual(['RE-1100']);
   });
 
   test('Fehler tragen den Schlüssel nicht', async () => {

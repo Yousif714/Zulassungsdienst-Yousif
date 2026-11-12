@@ -54,7 +54,7 @@ export async function pullLexware(conn: LexwareConnection, cursor: string | null
       );
       for (const entry of (page.content ?? []) as Obj[]) {
         if (entry.voucherStatus === 'draft' || !entry.id) continue;
-        if (ctx.known.has(entry.id) && ctx.known.get(entry.id) === entry.updatedDate) continue;
+        if (entry.updatedDate && ctx.known.has(entry.id) && ctx.known.get(entry.id) === entry.updatedDate) continue;
         const detail = await get(`/v1/invoices/${encodeURIComponent(entry.id)}`);
         // Die Voucherlist ist maßgeblich für Status, Fälligkeit und Restbetrag (und die Änderungsmarke).
         const merged = { ...detail };

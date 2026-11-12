@@ -51,6 +51,15 @@ describe('createApiClient', () => {
     expect(waits).toEqual([1000]);
   });
 
+  test('429 ohne Retry-After (oder ungültig) → 1000 ms Wartezeit', async () => {
+    for (const headers of [{} as Record<string, string>, { 'retry-after': '' }, { 'retry-after': 'bald' }, { 'retry-after': '0' }]) {
+      const waits: number[] = [];
+      const f = spyFetch([], [new Response('{}', { status: 429, headers }), { ok: true }]);
+      await createApiClient({ ...base, minIntervalMs: 0, fetch: f, sleep: async (ms) => { waits.push(ms); } }).getJson('/v1/x');
+      expect(waits).toEqual([1000]);
+    }
+  });
+
   test('zweites 429 → sicherer Fehler, kein dritter Versuch', async () => {
     const calls: Request[] = [];
     const f = spyFetch(calls, [new Response('{}', { status: 429 })]);
