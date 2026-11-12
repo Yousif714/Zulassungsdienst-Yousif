@@ -15,8 +15,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar />
       <main className="shell-main">
         <div className="shell-content">{children}</div>
+        {/* Schwebt fixiert; steht im main, damit er in einem Landmark liegt. */}
+        {pathname !== '/chat' && pathname !== '/assistent' && <AssistantButton />}
       </main>
-      {pathname !== '/chat' && pathname !== '/assistent' && <AssistantButton />}
       <TabBar />
     </>
   );

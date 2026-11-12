@@ -19,7 +19,7 @@ export default function ContentPage() {
   return (
     <>
       <PageHeader title="Content" subtitle="Vom Einfall bis zur Veröffentlichung" trailing={<BackLink href="/nexus" label="NEXUS" />} />
-      <div className="board">
+      <div className="board" tabIndex={0} role="region" aria-label="Content-Board">
         {STAGES.map(({ stage, label }) => {
           const items = state.content.filter((c) => c.stage === stage);
           return (

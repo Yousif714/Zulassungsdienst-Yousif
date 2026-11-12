@@ -122,7 +122,7 @@ export default function JobPage() {
             <ListRow key={i.id} testId={`invoice-candidate-${i.id}`} title={i.number}
               subtitle={`${formatIsoDe(i.issuedOn)}${i.text ? ` · ${i.text}` : ''}`}
               value={<span className="amount">{formatEuro(i.totalCents)}</span>}
-              accessory={<button type="button" className="btn btn-secondary btn-small"
+              accessory={<button type="button" className="btn btn-secondary btn-small" aria-label={`Rechnung ${i.number} zuordnen`}
                 onClick={() => dispatch({ type: 'linkInvoiceToJob', jobId: job.id, invoiceId: i.id })}>Zuordnen</button>} />
           ))}
         </ListGroup>

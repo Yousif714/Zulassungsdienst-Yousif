@@ -16,6 +16,8 @@ test('Abnahme 2: überfälliges Mitglied → Rechenweg → Erinnerung mit Link',
 
 test('Abnahme 3: Übernahme Referenzbeispiel', async ({ page }) => {
   await page.goto(`/nexus/mitglieder/${KAYA}/uebernahme?reset=1`);
+  await expect(page.getByTestId('arrears')).toHaveText(formatEuro(15000));
+  await expect(page.getByTestId('future')).toHaveText(formatEuro(60000));
   await expect(page.getByTestId('open-total')).toHaveText(formatEuro(75000));
   await expect(page.getByTestId('rate-amounts')).toHaveText([formatEuro(45000), formatEuro(30000)].join(' · '));
   await page.getByRole('radio', { name: /verteilen/i }).check();
@@ -108,4 +110,11 @@ test('Erinnerung: eigene Aktion je Rückstandsstand', async ({ page }) => {
   await expect(page.getByTestId('action-status')).toContainText('Gesendet (Demo)');
   const ids = (await storedActions(page)).filter((a) => a.type === 'send_reminder').map((a) => a.id);
   expect(ids).toEqual([`reminder-${KAYA}-2026-11-01`]);
+});
+
+test('Wiederholte Knöpfe nennen im Namen, worum es geht', async ({ page }) => {
+  await page.goto('/nexus/zuordnen?reset=1');
+  await expect(page.getByRole('button', { name: 'Zahlung von S. Yilmaz an Selin Yilmaz bestätigen', exact: true })).toBeVisible();
+  await page.goto('/zulassung/auftraege/j-mueller-1');
+  await expect(page.getByRole('button', { name: 'Rechnung RE-Z-2026-311 zuordnen', exact: true })).toBeVisible();
 });

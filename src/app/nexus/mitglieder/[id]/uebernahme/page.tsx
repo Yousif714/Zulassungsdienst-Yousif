@@ -85,7 +85,8 @@ export default function TakeoverPage() {
             <ListRow key={p.id} title={formatIsoDe(p.bookedOn)} subtitle={p.reference}
               value={<span className="amount">{formatEuro(a.amountCents)}</span>}
               accessory={a.method === 'auto'
-                ? <button type="button" className="btn btn-secondary btn-small" onClick={() => dispatch({ type: 'confirmPaymentMatch', paymentId: p.id, contractId: id })}>Bestätigen</button>
+                ? <button type="button" className="btn btn-secondary btn-small" aria-label={`Zahlung vom ${formatIsoDe(p.bookedOn)} über ${formatEuro(a.amountCents)} bestätigen`}
+                  onClick={() => dispatch({ type: 'confirmPaymentMatch', paymentId: p.id, contractId: id })}>Bestätigen</button>
                 : <span className="chip">bestätigt</span>} />
           ))}
       </ListGroup>

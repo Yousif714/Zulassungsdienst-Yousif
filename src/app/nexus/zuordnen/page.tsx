@@ -44,19 +44,21 @@ function PaymentCard({ payment, match }: { payment: Payment; match: MatchResult 
           </p>
           <p className="card-note">{match.reason}</p>
           <div className="card-buttons">
-            <button type="button" className="btn btn-primary" onClick={() => confirm(suggested.id)}>Bestätigen</button>
+            <button type="button" className="btn btn-primary" aria-label={`Zahlung von ${payment.payerName ?? 'Unbekannt'} an ${nameOf(state, suggested.contactId)} bestätigen`}
+              onClick={() => confirm(suggested.id)}>Bestätigen</button>
           </div>
         </>
       ) : (
         <>
           <p className="card-note">{match.reason}</p>
           <div className="card-buttons">
-            <label htmlFor={selectId} className="visually-hidden">Mitglied wählen</label>
+            <label htmlFor={selectId} className="visually-hidden">Mitglied für Zahlung von {payment.payerName ?? 'Unbekannt'} wählen</label>
             <select id={selectId} className="select" value={chosen} onChange={(e) => setChosen(e.target.value)}>
               <option value="">Mitglied wählen …</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
-            <button type="button" className="btn btn-primary" disabled={!chosen} onClick={() => confirm(chosen)}>Zuordnen</button>
+            <button type="button" className="btn btn-primary" disabled={!chosen} aria-label={`Zahlung von ${payment.payerName ?? 'Unbekannt'} zuordnen`}
+              onClick={() => confirm(chosen)}>Zuordnen</button>
           </div>
         </>
       )}
@@ -162,7 +164,8 @@ export default function MatchPage() {
                     Stripe-Zahlung über <span className="amount">{formatEuro(payment.amountCents)}</span> am {formatIsoDe(payment.bookedOn)}.
                   </p>
                   <div className="card-buttons">
-                    <button type="button" className="btn btn-primary" onClick={() => dispatch({ type: 'settleInvoice', invoiceId: invoice.id, paymentId: payment.id })}>
+                    <button type="button" className="btn btn-primary" aria-label={`Rechnung ${invoice.number} als durch Stripe bezahlt markieren`}
+                      onClick={() => dispatch({ type: 'settleInvoice', invoiceId: invoice.id, paymentId: payment.id })}>
                       Als durch Stripe bezahlt markieren
                     </button>
                   </div>
