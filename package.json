@@ -12,10 +12,12 @@
     "lint": "eslint",
     "test": "vitest run",
     "e2e": "playwright test --trace off",
-    "contrast": "node scripts/contrast.mjs"
+    "contrast": "node scripts/contrast.mjs",
+    "test:integration": "vitest run tests/integration"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
+    "@supabase/supabase-js": "^2.119.0",
     "date-fns": "^4.4.0",
     "next": "16.4.6",
     "react": "19.3.0",
