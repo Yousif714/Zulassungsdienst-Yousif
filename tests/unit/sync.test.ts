@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+import { demoInvoiceReader } from '@/ai/demo-invoice-reader';
 import { DemoProvider } from '@/domain/actions/demo-provider';
 import { deriveProposals } from '@/domain/import/proposals';
 import { createMemoryRepos } from '@/server/db/memory';
@@ -18,10 +19,18 @@ const deps = (p: Partial<SyncDeps> = {}): SyncDeps => ({
 const conn = async (id: string) => (await repos.state.load()).state.connections.find((c) => c.id === id)!;
 
 describe('syncConnections', () => {
-  test('ohne Schlüssel bleibt die Verbindung missing', async () => {
+  test('ohne Schlüssel bleibt die Verbindung missing; ohne Reader: claude_invoices skipped', async () => {
     const r = await syncConnections(repos, deps({ keys: {} }));
-    expect(r).toEqual({ stripe_nexus: 'skipped', lexware_nexus: 'skipped', bank_qonto: 'skipped', lexware_zulassung: 'skipped' });
+    expect(r).toEqual({ stripe_nexus: 'skipped', lexware_nexus: 'skipped', bank_qonto: 'skipped', lexware_zulassung: 'skipped', claude_invoices: 'skipped' });
     expect((await conn('stripe_nexus')).status).toBe('missing');
+    expect((await conn('claude_invoices')).status).toBe('missing');
+  });
+  test('mit Demo-Reader nach Lexware: Lesungen gespeichert, Verbindung verbunden', async () => {
+    const r = await syncConnections(repos, deps({ reader: demoInvoiceReader }));
+    expect(r.claude_invoices).not.toBe('skipped');
+    const s = (await repos.state.load()).state;
+    expect(s.connections.find((c) => c.id === 'claude_invoices')?.status).toBe('connected');
+    expect(s.invoiceReadings.length).toBeGreaterThan(0);
   });
   test('Qonto ohne Schlüssel → skipped, Verbindung bleibt missing', async () => {
     const r = await syncConnections(repos, deps({ keys: { stripe_nexus: 'SK' } }));
