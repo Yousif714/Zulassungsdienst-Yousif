@@ -40,9 +40,20 @@ describe('migrateState', () => {
     const s = stateWith({ ibanLinks: [{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: 'a' }, { iban: 'de89 3704 0044 0532 0130 00', contactId: 'm-yilmaz', confirmedAt: 'b' }] });
     expect(migrateState(s).ibanLinks).toEqual([{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: 'a' }]);
   });
+  test('alter Hinweis ohne needsSources wirft nicht', () => {
+    const s = stateWith({ insights: [{ ...ins('k2'), status: 'open', createdAt: 'x' }] });
+    delete (s.insights[0] as Partial<typeof s.insights[0]>).needsSources;
+    expect(() => migrateState(legacy().insights.length ? { ...legacy(), insights: s.insights } : s)).not.toThrow();
+  });
   test('idempotent', () => expect(migrateState(migrateState(legacy()))).toEqual(migrateState(legacy())));
   test('nichts zu tun → dasselbe Objekt', () => { const s = stateWith(); expect(migrateState(s)).toBe(s); });
   test('fromRows migriert', () => expect(fromRows(toRows(legacy())).connections.map((c) => c.id)).toContain('bank_qonto'));
+  test('loadInitial ergänzt fehlende Katalog-Verbindungen als missing', () => {
+    const old = stateWith();
+    old.connections = old.connections.filter((c) => c.id !== 'bank_sparkasse');
+    const st = memStorage({ [STORE_KEY]: JSON.stringify(old) });
+    expect(loadInitial(st, '', NOW_0930).state.connections.find((c) => c.id === 'bank_sparkasse')).toMatchObject({ status: 'missing', lastSuccessAt: null });
+  });
   test('loadInitial migriert gespeicherten Demo-Stand', () => {
     const st = memStorage({ [STORE_KEY]: JSON.stringify(legacy()) });
     expect(loadInitial(st, '', NOW_0930).state.payments[0].connectionId).toBe('bank_qonto');

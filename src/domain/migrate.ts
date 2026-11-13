@@ -44,10 +44,18 @@ export function migrateState(s: AppState): AppState {
   }
 
   let insights = s.insights;
-  if (insights.some((i) => i.needsSources.some(isLegacy))) {
+  if (insights.some((i) => (i.needsSources ?? []).some(isLegacy))) {
     changed = true;
-    insights = insights.map((i) => ({ ...i, needsSources: i.needsSources.map((id) => (isLegacy(id) ? NEW_ID : id)) }));
+    insights = insights.map((i) => ({ ...i, needsSources: (i.needsSources ?? []).map((id) => (isLegacy(id) ? NEW_ID : id)) }));
   }
 
   return changed ? { ...s, connections, payments, ibanLinks, insights } : s;
+}
+
+/** Jede Katalog-Verbindung existiert immer (neu hinzugekommene fehlen in alten Ständen); fehlende starten als „missing“. */
+export function ensureCatalogConnections(s: AppState): AppState {
+  const known = new Set(s.connections.map((c) => c.id));
+  const add = CONNECTION_CATALOG.filter((c) => !known.has(c.id));
+  if (add.length === 0) return s;
+  return { ...s, connections: [...s.connections, ...add.map(({ id, company, label }): Connection => ({ id, company, label, status: 'missing', lastSuccessAt: null }))] };
 }

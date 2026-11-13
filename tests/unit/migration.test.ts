@@ -85,5 +85,6 @@ describe('Migration Qonto (2b-2)', () => {
     expect(sql).toContain("where connection_id = 'bank'");
     expect(sql).toContain("delete from connections where id = 'bank'");
     expect(sql).toContain("'\"bank_qonto\"'");
+    expect(sql).toContain('order by n');
   });
 });
