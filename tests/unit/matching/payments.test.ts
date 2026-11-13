@@ -29,6 +29,23 @@ describe('IBAN', () => {
     expect(matchBankPayment(tx({ iban: IBAN_KAYA, amountCents: 30000 }), { ...ctx, ibanLinks: [{ ...ibanLinks[0], iban: 'DE89 3704 0044 0532 0130 00' }] }).confidence).toBe('high'));
   test('gleiche IBAN, anderer Betrag → Vorschlag', () => expect(matchBankPayment(tx({ iban: IBAN_KAYA, amountCents: 12345 }), ctx)).toMatchObject({ confidence: 'medium', target: { id: 'k-kaya' } }));
 });
+describe('Eine IBAN, mehrere Mitglieder', () => {
+  const shared = { ...ctx, ibanLinks: [...ibanLinks, { iban: IBAN_KAYA, contactId: 'm-yilmaz', confirmedAt: '2026-10-02T10:00:00Z' }] };
+  test('passender Betrag → nie automatisch, Auswahl aus den Zielen beider Mitglieder', () => {
+    const r = matchBankPayment(tx({ iban: IBAN_KAYA, amountCents: 30000 }), shared);
+    expect(r).toMatchObject({ confidence: 'medium', target: null });
+    expect(r.candidates.map((c) => c.id).sort()).toEqual(['k-kaya', 'k-yilmaz']);
+  });
+  test('Betrag passt zu keinem → Vorschlag mit allen Zielen, mittel', () => {
+    const r = matchBankPayment(tx({ iban: IBAN_KAYA, amountCents: 12345 }), shared);
+    expect(r).toMatchObject({ confidence: 'medium', target: null });
+    expect(r.candidates).toHaveLength(2);
+  });
+  test('derselbe Kontakt doppelt verlinkt zählt als einer → weiterhin hoch', () => {
+    const dup = { ...ctx, ibanLinks: [...ibanLinks, { ...ibanLinks[0], iban: 'DE89 3704 0044 0532 0130 00' }] };
+    expect(matchBankPayment(tx({ iban: IBAN_KAYA, amountCents: 30000 }), dup)).toMatchObject({ confidence: 'high', target: { id: 'k-kaya' } });
+  });
+});
 describe('Betrag', () => {
   test.each([[30000, true], [60000, true], [90000, true], [15000, true], [120000, false], [45000, false], [29999, false]])('%i passt: %s', (a, ok) =>
     expect(amountFitsContract(a, expected.get('k-kaya')!)).toBe(ok));

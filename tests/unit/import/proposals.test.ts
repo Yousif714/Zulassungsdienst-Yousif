@@ -4,7 +4,7 @@ import { mapLexwareContacts, mapLexwareInvoice } from '@/domain/import/lexware';
 import { mapStripe } from '@/domain/import/stripe';
 import { mergeBatch } from '@/domain/import/merge';
 import { deriveProposals, findContactFor, proposalId } from '@/domain/import/proposals';
-import { normalizeName, nameMatches } from '@/domain/matching/payments';
+import { normalizeName, normalizeNameStrict, nameMatches } from '@/domain/matching/payments';
 import type { AppState, Contact, Invoice } from '@/domain/types';
 import { lexContacts, lexInvoices, stripeRaw } from '../../fixtures';
 import { confirmedSub, emptyState, lexState, patchSub, seq, stripeState, withContract } from './helpers';
@@ -141,4 +141,14 @@ test('Hinweis zeigt nicht auf verworfenen Vorschlag', () => {
   const s = { ...mergedWithLexContact(stripeState, { id: 'c-91', name: 'A. Öztürk', email: null }), dismissedProposals: ['lexware_nexus:c-91'] };
   expect(P(s, 'lexware_nexus:c-91')).toBeUndefined();
   expect(P(s, 'stripe_nexus:sub_A')!.possibleMatch).toBeNull();
+});
+test('Firmenzusätze: „Müller GmbH“ und „Müller UG“ werden nicht zusammengeführt, Kontakt „Müller“ nicht wiederverwendet', () => {
+  const s = mergedWithLexContact(stripeState, { id: 'c-94', name: 'Ayşe Öztürk GmbH', email: null });
+  expect(P(s, 'stripe_nexus:sub_A')!.sourceLabel).toBe('Stripe');
+  expect(P(s, 'lexware_nexus:c-94')).toBeDefined();
+  const p = { ...P(stripeState, 'stripe_nexus:sub_A')!, name: 'Müller GmbH', email: null, contactRefs: [] };
+  expect(findContactFor(p, [mk('a', 'Müller'), mk('b', 'Müller UG')]).match).toBe('none');
+  expect(findContactFor(p, [mk('a', 'Müller GmbH')]).match).toBe('name');
+  expect(normalizeNameStrict('Müller GmbH')).toBe('mueller gmbh');
+  expect(normalizeNameStrict('Dr. Ayşe Öztürk')).toBe('ayse oeztuerk');
 });

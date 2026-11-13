@@ -141,7 +141,7 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
     text = `Zahlung über ${formatEuro(p.amountCents)} Rechnung ${inv.number} zugeordnet`;
   } else return fail;
   const iban = p.iban ? normalizeIban(p.iban) : '';
-  const ibanLinks = iban && contactId && !s.ibanLinks.some((l) => normalizeIban(l.iban) === iban)
+  const ibanLinks = iban && contactId && !s.ibanLinks.some((l) => normalizeIban(l.iban) === iban && l.contactId === contactId)
     ? [...s.ibanLinks, { iban, contactId, confirmedAt: at.toISOString() }]
     : s.ibanLinks;
   // Auto-Zuordnungen der Rückbuchungen dieser Zahlung fallen weg; refresh leitet sie vom neuen Ziel ab.

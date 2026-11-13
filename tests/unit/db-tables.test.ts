@@ -21,6 +21,20 @@ describe('tables', () => {
     const s = demo();
     expect(fromRows(toRows(s))).toEqual(s);
   });
+  it('IBAN-Links: gleiche IBAN bei zwei Kontakten ergibt zwei Zeilen mit eindeutiger id; alte Zeile (id = IBAN) wird ersetzt', () => {
+    const l = (contactId: string) => ({ iban: 'DE55', contactId, confirmedAt: 'x' });
+    const prev = { ...demo(), ibanLinks: [l('a')] };
+    const next = { ...prev, ibanLinks: [l('a'), l('b')] };
+    const rows = toRows(next).iban_links;
+    expect(new Set(rows.map((r) => r.id)).size).toBe(2);
+    expect(fromRows(toRows(next)).ibanLinks).toEqual(next.ibanLinks);
+    const d = diffState(prev, next).iban_links;
+    expect(d.upsert.length).toBeGreaterThanOrEqual(1);
+    // Zeilen im bisherigen Format (id = IBAN) bleiben lesbar
+    const old = toRows(prev);
+    old.iban_links = [{ id: 'DE55', ord: 0, data: l('a') }];
+    expect(fromRows(old).ibanLinks).toEqual([l('a')]);
+  });
   it('doppelte Allocation-Paare bekommen laufende Nummern', () => {
     const rows = toRows(demo()).allocations;
     const ids = rows.map((r) => r.id);

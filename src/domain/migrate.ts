@@ -37,7 +37,7 @@ export function migrateState(s: AppState): AppState {
 
   let ibanLinks = s.ibanLinks;
   const normalized = ibanLinks.map((l) => ({ ...l, iban: normalizeIban(l.iban) }));
-  const unique = normalized.filter((l, i) => normalized.findIndex((x) => x.iban === l.iban) === i);
+  const unique = normalized.filter((l, i) => normalized.findIndex((x) => x.iban === l.iban && x.contactId === l.contactId) === i);
   if (unique.length !== ibanLinks.length || unique.some((l, i) => l.iban !== ibanLinks[i].iban)) {
     changed = true;
     ibanLinks = unique;

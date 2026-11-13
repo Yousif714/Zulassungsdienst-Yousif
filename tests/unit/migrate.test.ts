@@ -36,9 +36,13 @@ describe('migrateState', () => {
     expect(m.ibanLinks).toEqual([{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: 'x' }]);
     expect(m.insights[0].needsSources).toEqual(['bank_qonto', 'stripe_nexus']);
   });
-  test('doppelte IBAN-Links: der erste bleibt', () => {
-    const s = stateWith({ ibanLinks: [{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: 'a' }, { iban: 'de89 3704 0044 0532 0130 00', contactId: 'm-yilmaz', confirmedAt: 'b' }] });
+  test('doppelte IBAN-Links (gleiche IBAN und gleicher Kontakt): der erste bleibt', () => {
+    const s = stateWith({ ibanLinks: [{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: 'a' }, { iban: 'de89 3704 0044 0532 0130 00', contactId: 'm-kaya', confirmedAt: 'b' }] });
     expect(migrateState(s).ibanLinks).toEqual([{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: 'a' }]);
+  });
+  test('gleiche IBAN bei mehreren Kontakten: alle Links bleiben', () => {
+    const s = stateWith({ ibanLinks: [{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: 'a' }, { iban: 'de89 3704 0044 0532 0130 00', contactId: 'm-yilmaz', confirmedAt: 'b' }] });
+    expect(migrateState(s).ibanLinks).toEqual([{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: 'a' }, { iban: IBAN_KAYA, contactId: 'm-yilmaz', confirmedAt: 'b' }]);
   });
   test('alter Hinweis ohne needsSources wirft nicht', () => {
     const s = stateWith({ insights: [{ ...ins('k2'), status: 'open', createdAt: 'x' }] });

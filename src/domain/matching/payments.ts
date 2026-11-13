@@ -19,7 +19,7 @@ const TITLES = new Set(['dr', 'prof', 'dipl', 'ing', 'med', 'mag']);
 const COMPANY_WORDS = new Set(['gmbh', 'mbh', 'ug', 'haftungsbeschraenkt', 'gbr', 'kg', 'ohg', 'ag', 'co', 'und', 'ek']);
 
 /** Vergleichsform eines Namens: klein, Umlaute/ß/türkische Buchstaben aufgelöst, Akzente und Titel (Dr., Prof.) entfernt. */
-export function normalizeName(s: string): string {
+function normalizeWords(s: string, stripCompany: boolean): string {
   const words = s
     .normalize('NFC')
     .toLowerCase()
@@ -38,10 +38,20 @@ export function normalizeName(s: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .split(' ');
-  const noCompany = words.filter((w) => !COMPANY_WORDS.has(w));
+  const noCompany = stripCompany ? words.filter((w) => !COMPANY_WORDS.has(w)) : words;
   const base = noCompany.length >= 1 ? noCompany : words;
   const rest = base.filter((w) => !TITLES.has(w));
   return (rest.length >= 2 ? rest : base).join(' ');
+}
+
+/** Großzügige Vergleichsform (Firmenzusätze wie GmbH/UG entfernt) – für den Bankabgleich. */
+export function normalizeName(s: string): string {
+  return normalizeWords(s, true);
+}
+
+/** Strenge Vergleichsform (Firmenzusätze bleiben) – für Vertragsvorschläge: „Müller GmbH“, „Müller UG“, „Müller“ sind verschieden. */
+export function normalizeNameStrict(s: string): string {
+  return normalizeWords(s, false);
 }
 
 export function nameMatches(contactName: string, payerName: string): boolean {
@@ -121,9 +131,15 @@ export function matchBankPayment(p: Payment, ctx: MatchContext): MatchResult {
   }
 
   const iban = p.iban ? normalizeIban(p.iban) : '';
-  const link = iban ? ctx.ibanLinks.find((l) => normalizeIban(l.iban) === iban) : undefined;
-  if (link) {
-    const all = targetsOf(link.contactId);
+  const linkedContactIds = iban ? [...new Set(ctx.ibanLinks.filter((l) => normalizeIban(l.iban) === iban).map((l) => l.contactId))] : [];
+  if (linkedContactIds.length > 1) {
+    // Eine IBAN, mehrere Mitglieder (z. B. Firma zahlt für zwei): nie automatisch, immer Auswahl.
+    const all = linkedContactIds.flatMap(targetsOf);
+    const fitting = all.filter(fits);
+    return result(fitting.length > 0 ? fitting : all, 'medium', 'Diese IBAN gehört zu mehreren Mitgliedern, bitte auswählen.');
+  }
+  if (linkedContactIds.length === 1) {
+    const all = targetsOf(linkedContactIds[0]);
     const fitting = all.filter(fits);
     if (fitting.length === 1) return result(fitting, 'high', 'Bestätigte IBAN und Betrag passen.');
     if (fitting.length > 1) return result(fitting, 'medium', 'Mehrere Verträge oder Rechnungen passen, bitte auswählen.');
@@ -178,9 +194,11 @@ export function bankReturnAllocations(s: AppState): Allocation[] {
     const original = s.payments.find((x) => x.id !== p.id && x.connectionId === p.connectionId && x.externalId === p.refundOf);
     const a = original ? s.allocations.find((x) => x.paymentId === original.id) : undefined;
     if (!a) continue;
+    // Höchstens der zugeordnete Betrag des Originals (bei Überzahlung auf eine Rechnung kleiner als die Zahlung).
+    const amountCents = Math.max(p.amountCents, -a.amountCents);
     out.push(a.invoiceId
-      ? { paymentId: p.id, invoiceId: a.invoiceId, amountCents: p.amountCents, method: 'auto' }
-      : { paymentId: p.id, contractId: a.contractId!, amountCents: p.amountCents, method: 'auto' });
+      ? { paymentId: p.id, invoiceId: a.invoiceId, amountCents, method: 'auto' }
+      : { paymentId: p.id, contractId: a.contractId!, amountCents, method: 'auto' });
   }
   return out;
 }

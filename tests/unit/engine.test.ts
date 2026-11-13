@@ -3,6 +3,7 @@ import { createDemoState } from '@/data/seed';
 import { applyEvent, applyEvents, refresh, type EngineContext } from '@/data/engine';
 import { reducer } from '@/data/store';
 import type { StoreEvent } from '@/domain/events';
+import { memberView } from '@/domain/detectors/members';
 import { invoiceOpenCents } from '@/domain/ledger/receivables';
 import { unallocatedBankPayments } from '@/data/selectors';
 import { NOW_0930 as NOW, base, isOpen, stateWith, tx, workshop } from './helpers';
@@ -120,6 +121,14 @@ describe('Zuordnung Vertrag/Rechnung (Paket 2b-2)', () => {
     r = refresh({ ...r, payments: [...r.payments, tx({ id: 'q2', externalId: 'q2', iban: 'DE12 3456', amountCents: 14900 })] }, NOW);
     expect(r.allocations.find((a) => a.paymentId === 'q2')).toMatchObject({ invoiceId: 'i-ws', method: 'auto' });
   });
+  test('Bestätigen lernt die IBAN je Kontakt: zweiter Kontakt wird zusätzlich verlinkt, gleicher nicht doppelt', () => {
+    const pay = (id: string) => tx({ id, externalId: id, iban: 'DE55 1111', payerName: 'Firma XY', amountCents: 30000 });
+    let r = stateWith({ contracts: [yilmaz, { ...base, id: 'k-kaya', contactId: 'm-kaya' }], payments: [pay('q1'), pay('q2'), pay('q3')] });
+    r = reducer(r, { type: 'confirmPaymentMatch', paymentId: 'q1', contractId: 'k-yilmaz' });
+    r = reducer(r, { type: 'confirmPaymentMatch', paymentId: 'q2', contractId: 'k-kaya' });
+    r = reducer(r, { type: 'confirmPaymentMatch', paymentId: 'q3', contractId: 'k-kaya' });
+    expect(r.ibanLinks.filter((l) => l.iban === 'DE551111').map((l) => l.contactId).sort()).toEqual(['m-kaya', 'm-yilmaz']);
+  });
   test('Bestätigen auf nicht offene oder fremde Rechnung wird abgelehnt', () => {
     const paid = { ...workshop, status: 'paid' as const, openCents: 0 };
     const r = reducer(stateWith({ invoices: [paid], payments: [tx({ id: 'q1' })] }), { type: 'confirmPaymentMatch', paymentId: 'q1', invoiceId: 'i-ws' });
@@ -171,6 +180,22 @@ describe('Zuordnung Vertrag/Rechnung (Paket 2b-2)', () => {
     expect(r.allocations.find((a) => a.paymentId === 'q2')).toMatchObject({ contractId: 'k-yilmaz' });
     r = reducer(r, { type: 'confirmPaymentMatch', paymentId: 'q1', contractId: 'k-other' });
     expect(r.allocations.filter((a) => a.paymentId === 'q2')).toEqual([{ paymentId: 'q2', contractId: 'k-other', amountCents: -30000, method: 'auto' }]);
+  });
+  test('Rückbuchung zieht höchstens den zugeordneten Betrag ab (Überzahlung auf Rechnung)', () => {
+    const o = tx({ id: 'q1', externalId: 't1', iban: 'DE00X', payerName: 'Selin Yilmaz', amountCents: 20000 });
+    const b = tx({ id: 'q2', externalId: 't2', iban: 'DE00X', amountCents: -20000, refundOf: 't1' });
+    const r = refresh(reducer(stateWith({ invoices: [workshop], payments: [o, b] }), { type: 'confirmPaymentMatch', paymentId: 'q1', invoiceId: 'i-ws' }), NOW);
+    expect(r.allocations.find((a) => a.paymentId === 'q1')!.amountCents).toBe(14900);
+    expect(r.allocations.find((a) => a.paymentId === 'q2')).toMatchObject({ invoiceId: 'i-ws', amountCents: -14900 });
+    expect(invoiceOpenCents(r, r.invoices.find((i) => i.id === 'i-ws')!)).toBe(14900);
+  });
+  test('Rechnungs-Zuordnung ändert nie den Rückstand eines Vertrags', () => {
+    const inv = { ...workshop, contactId: 'm-yilmaz' };
+    const s0 = stateWith({ contracts: [yilmaz], invoices: [inv], payments: [tx({ id: 'q1', iban: 'DE00X', payerName: 'Selin Yilmaz', amountCents: 14900 })] });
+    const before = memberView(s0, 'k-yilmaz', '2026-11-12').status;
+    const after = memberView(reducer(s0, { type: 'confirmPaymentMatch', paymentId: 'q1', invoiceId: 'i-ws' }), 'k-yilmaz', '2026-11-12').status;
+    expect(after.arrearsCents).toBe(before.arrearsCents);
+    expect(after).toEqual(before);
   });
   test('Bestätigen von Beträgen <= 0 wird abgelehnt', () => {
     const r = reducer(stateWith({ contracts: [yilmaz], payments: [orig, back] }), { type: 'confirmPaymentMatch', paymentId: 'q2', contractId: 'k-yilmaz' });

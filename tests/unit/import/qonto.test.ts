@@ -31,3 +31,11 @@ test('Lastschrift-Typ als Eingang bleibt normaler Eingang, nur als Ausgang Rück
   const credit = mapQonto([{ ...base, transaction_id: 'dd1', operation_type: 'direct_debit_collection' }]).payments;
   expect(credit[0]).toMatchObject({ amountCents: 30000, kind: 'incoming' });
 });
+test('Fremdwährung per local_currency (Kontowährung EUR) übersprungen, EUR oder fehlend bleibt', () => {
+  const base = qontoTransactions.transactions[0];
+  const m = (id: string, extra: Record<string, unknown>) => mapQonto([{ ...base, transaction_id: id, currency: 'EUR', ...extra }]).payments;
+  expect(m('lc1', { local_currency: 'USD' })).toHaveLength(0);
+  expect(m('lc2', { local_currency: 'EUR' })).toHaveLength(1);
+  expect(m('lc3', { local_currency: undefined })).toHaveLength(1);
+  expect(m('lc4', { local_currency: null })).toHaveLength(1);
+});

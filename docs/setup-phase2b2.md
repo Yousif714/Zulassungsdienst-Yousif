@@ -2,7 +2,7 @@
 
 Qonto lesend anbinden (nur Eingänge). Es wird nichts geschrieben oder gesendet. Keine echten Werte in dieses Dokument oder ins Repository schreiben.
 
-1. **Supabase zuerst, vor Merge und Deploy:** SQL Editor → „New query“ → Inhalt von `supabase/migrations/20261114000000_qonto.sql` einfügen → „Run“. Benennt die Verbindung `bank` in `bank_qonto` um, ohne Datenverlust, beliebig oft ausführbar.
+1. **Supabase zuerst, vor Merge und Deploy:** SQL Editor → „New query“ → Inhalt von `supabase/migrations/20261114000000_qonto.sql` einfügen → „Run“. Benennt die Verbindung `bank` in `bank_qonto` um, und stellt die IBAN-Links auf eine Zeile je IBAN und Kontakt um (eine IBAN kann zu mehreren Mitgliedern gehören), ohne Datenverlust, beliebig oft ausführbar.
 2. **Qonto:** Web-App → Einstellungen → „Integrationen & Partner“ → „API-Schlüssel“: **Login** und **Secret Key** kopieren (nur Lesen) und in den Passwort-Manager. Menüpfad ggf. gegen die Qonto-Hilfe prüfen.
 3. **Vercel:** Projekt → Settings → „Environment Variables“ → nur für **Production**, jeweils als „Secret“: `QONTO_LOGIN`, `QONTO_SECRET_KEY`. Danach „Deployments“ → letztes Deployment → „Redeploy“.
 4. **Prüfen, was du dann siehst:**

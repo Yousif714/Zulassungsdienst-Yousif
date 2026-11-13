@@ -21,10 +21,11 @@ function PaymentCard({ payment, match }: { payment: Payment; match: MatchResult 
   const { state, dispatch } = useAppStore();
   const selectId = useId();
   const [chosen, setChosen] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const payer = payment.payerName ?? 'Unbekannt';
   const options = matchOptions(state);
   const candidateValues = match.candidates.map((t) => `${t.kind}:${t.id}`);
-  const list = match.target || match.candidates.length === 0 ? options : options.filter((o) => candidateValues.includes(o.value));
+  const list = showAll || match.target || match.candidates.length === 0 ? options : options.filter((o) => candidateValues.includes(o.value));
   const confirm = (value: string) => {
     const [kind, id] = [value.slice(0, value.indexOf(':')), value.slice(value.indexOf(':') + 1)];
     dispatch(kind === 'invoice'
@@ -59,18 +60,24 @@ function PaymentCard({ payment, match }: { payment: Payment; match: MatchResult 
           </div>
         </>
       ) : (
-        <>
-          <p className="card-note">{match.reason}</p>
-          <div className="card-buttons">
-            <label htmlFor={selectId} className="visually-hidden">Ziel für Zahlung von {payer} wählen</label>
-            <select id={selectId} className="select" value={chosen} onChange={(e) => setChosen(e.target.value)}>
-              <option value="">{match.candidates.length > 0 ? 'Zuordnung wählen …' : 'Mitglied oder Rechnung wählen …'}</option>
-              {list.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <button type="button" className="btn btn-primary" disabled={!chosen} aria-label={`Zuordnen (Zahlung von ${payer})`}
-              onClick={() => confirm(chosen)}>Zuordnen</button>
-          </div>
-        </>
+        <p className="card-note">{match.reason}</p>
+      )}
+      {(!(target && (invoice || contract)) || showAll) && (
+        <div className="card-buttons">
+          <label htmlFor={selectId} className="visually-hidden">Ziel für Zahlung von {payer} wählen</label>
+          <select id={selectId} className="select" value={chosen} onChange={(e) => setChosen(e.target.value)}>
+            <option value="">{match.candidates.length > 0 && !showAll ? 'Zuordnung wählen …' : 'Mitglied oder Rechnung wählen …'}</option>
+            {list.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <button type="button" className="btn btn-primary" disabled={!chosen} aria-label={`Zuordnen (Zahlung von ${payer})`}
+            onClick={() => confirm(chosen)}>Zuordnen</button>
+        </div>
+      )}
+      {!showAll && (target || match.candidates.length > 0) && (
+        <div className="card-buttons">
+          <button type="button" className="btn btn-secondary" aria-expanded={false} aria-label={`Andere Zuordnung … (Zahlung von ${payer})`}
+            onClick={() => setShowAll(true)}>Andere Zuordnung …</button>
+        </div>
       )}
       <div className="card-buttons">
         <button type="button" className="btn btn-secondary" aria-label={`Keine Mitgliedszahlung (Zahlung von ${payer})`}

@@ -52,7 +52,7 @@ export function toRows(s: AppState): Record<TableName, Row[]> {
     seen.set(pair, n + 1);
     return { id: `${pair}:${n}`, ord: i, data: x };
   });
-  r.iban_links = s.ibanLinks.map((x, i) => ({ id: x.iban, ord: i, data: x }));
+  r.iban_links = s.ibanLinks.map((x, i) => ({ id: `${x.iban}:${x.contactId}`, ord: i, data: x }));
   r.contract_exceptions = Object.entries(s.exceptions).map(([id, data], i) => ({ id, ord: i, data }));
   r.audit = s.audit.map((x, i) => ({ id: auditId(i), ord: i, data: x }));
   r.dismissed_proposals = s.dismissedProposals.map((x, i) => ({ id: x, ord: i, data: x }));

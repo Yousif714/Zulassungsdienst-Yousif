@@ -5,7 +5,7 @@ import { emptyBatch, IMPORT_SINCE } from './batch';
 
 /** Feldnamen gegen https://api-doc.qonto.com prüfen (gegen Doku prüfen; Session ohne Netz). Eine Stelle für Korrekturen. */
 export const QF = {
-  list: 'transactions', id: 'transaction_id', amountCents: 'amount_cents', side: 'side', currency: 'currency',
+  list: 'transactions', id: 'transaction_id', amountCents: 'amount_cents', side: 'side', currency: 'currency', localCurrency: 'local_currency',
   label: 'label', reference: 'reference', settledAt: 'settled_at', emittedAt: 'emitted_at', operationType: 'operation_type',
   counterpartyIban: ['income.counterparty_account_number', 'transfer.counterparty_account_number'], // erster nicht leerer Pfad
 } as const;
@@ -26,6 +26,9 @@ export function mapQonto(transactions: unknown[]): ImportBatch {
   const batch = emptyBatch();
   for (const t of transactions) {
     if (pick(t, QF.currency) !== 'EUR') continue;
+    // `currency` ist die Kontowährung; die Währung der Originalbuchung steht in `local_currency` (gegen Doku prüfen).
+    const local = pick(t, QF.localCurrency);
+    if (typeof local === 'string' && local !== 'EUR') continue;
     const side = pick(t, QF.side);
     const cents = pick(t, QF.amountCents);
     const id = str(pick(t, QF.id));

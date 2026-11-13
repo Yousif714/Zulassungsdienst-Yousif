@@ -47,6 +47,20 @@ test('Zuordnen: „Ja, gehört zu …“ ordnet zu und lernt die IBAN', async ({
   await expect(page.getByText('Automatisch zugeordnet: Selin Yilmaz')).toBeVisible();
 });
 
+test('Zuordnen: „Andere Zuordnung …“ erlaubt eine Korrektur trotz Vorschlag', async ({ page }) => {
+  await page.goto('/nexus/zuordnen?reset=1');
+  const card = page.getByTestId('match-p-yilmaz-1');
+  await expect(card.getByRole('button', { name: 'Ja, gehört zu Selin Yilmaz (Zahlung von S. Yilmaz)', exact: true })).toBeVisible();
+  const other = card.getByRole('button', { name: 'Andere Zuordnung … (Zahlung von S. Yilmaz)', exact: true });
+  await expect(other).toHaveText('Andere Zuordnung …');
+  await other.click();
+  const select = card.getByRole('combobox');
+  expect(await select.locator('option').count()).toBeGreaterThan(2);
+  await select.selectOption({ index: 1 });
+  await card.getByRole('button', { name: 'Zuordnen (Zahlung von S. Yilmaz)', exact: true }).click();
+  await expect(card).toHaveCount(0);
+});
+
 test('Zuordnen: „Keine Mitgliedszahlung“ blendet aus und bleibt nach Neuladen weg', async ({ page }) => {
   await page.goto('/nexus/zuordnen?reset=1');
   const first = page.locator('[data-testid^="match-"]').first();
