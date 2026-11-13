@@ -78,6 +78,22 @@ describe('readXlsxRows', () => {
     ]);
   });
 
+  test('Portal-Export: x:-Präfix, t="str", absolute Targets, BOM in Rels, &amp;', async () => {
+    const rows = await readXlsxRows(new Uint8Array(readFileSync('tests/fixtures/portal/mitglieder-portal-export.xlsx')));
+    expect(rows).toEqual([
+      ['Mitglied', 'E-Mail-Adresse(n)', 'Beigetreten', 'Zuletzt aktiv'],
+      ['Ayşe Öztürk', 'ayse.oeztuerk@example.de', '04.08.2026', '12.11.2026'],
+      ['Max Mustermann', 'max@example.de; m.mustermann@firma-example.de', '10.08.2026', '01.11.2026'],
+      ['Calvin Beispiel', 'Calvin.Beispiel@Example.DE', '06.11.2026 / 01.08.2026', 'nie'],
+      ['Dr. Lena Muster & Co', 'lena@example.de', '15.09.2026', '13.11.2026'],
+    ]);
+    const r = parsePortalRows(rows);
+    expect(r.entries).toHaveLength(4);
+    expect(r.entries[1].emails).toEqual(['max@example.de', 'm.mustermann@firma-example.de']);
+    expect(r.entries[2]).toMatchObject({ joinedOn: '2026-08-01', lastActiveOn: null, lastActiveText: 'nie' });
+    expect(r.entries[3].name).toBe('Dr. Lena Muster & Co');
+  });
+
   test('kein ZIP → Fehler', async () => {
     await expect(readXlsxRows(new Uint8Array([1, 2, 3]))).rejects.toThrow(/XLSX/);
   });

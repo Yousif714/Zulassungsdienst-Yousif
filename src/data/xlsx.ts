@@ -8,6 +8,11 @@
 
 const td = new TextDecoder('utf-8');
 
+/** XML lesen: BOM weg, Namespace-Präfixe der Tags (`<x:row>` → `<row>`) entfernen. Attribute bleiben. */
+function xmlText(bytes: Uint8Array): string {
+  return td.decode(bytes).replace(/^\uFEFF/, '').replace(/<(\/?)[A-Za-z_][\w.-]*:(?=[A-Za-z_])/g, '<$1');
+}
+
 async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -109,10 +114,10 @@ function firstSheetPath(files: Map<string, Uint8Array>): string {
   const wb = files.get('xl/workbook.xml');
   const rels = files.get('xl/_rels/workbook.xml.rels');
   if (wb && rels) {
-    const sheet = td.decode(wb).match(/<sheet\b[^>]*>/)?.[0];
+    const sheet = xmlText(wb).match(/<sheet\b[^>]*>/)?.[0];
     const rid = sheet ? attr(sheet, 'r:id') : undefined;
     if (rid) {
-      for (const m of td.decode(rels).matchAll(/<Relationship\b([^>]*?)\/?>/g)) {
+      for (const m of xmlText(rels).matchAll(/<Relationship\b([^>]*?)\/?>/g)) {
         if (attr(m[1], 'Id') !== rid) continue;
         const target = attr(m[1], 'Target');
         if (!target) break;
@@ -129,10 +134,10 @@ export async function readXlsxRows(bytes: Uint8Array): Promise<string[][]> {
   const files = await unzip(bytes);
   const sheetBytes = files.get(firstSheetPath(files));
   if (!sheetBytes) throw new Error('Kein Tabellenblatt in der XLSX-Datei gefunden.');
-  const get = (name: string) => (files.has(name) ? td.decode(files.get(name)) : undefined);
+  const get = (name: string) => (files.has(name) ? xmlText(files.get(name)!) : undefined);
   const strings = sharedStrings(get('xl/sharedStrings.xml'));
   const dates = dateStyles(get('xl/styles.xml'));
-  const sheet = td.decode(sheetBytes);
+  const sheet = xmlText(sheetBytes);
   const rows: string[][] = [];
   for (const rm of sheet.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
     const row: string[] = [];
