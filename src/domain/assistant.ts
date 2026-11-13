@@ -1,4 +1,5 @@
 import type { AIProvider, AITools } from './ai-port';
+import { membershipContractOf } from './ledger/contracts';
 import { newId } from './ids';
 import { reminderAction, reminderActionId } from './action-factory';
 import { REJECT_REASON_DE, approve } from './actions/machine';
@@ -87,7 +88,9 @@ export async function handleInbound(
 /** Bearbeiten-Ziel einer Aktion in der App. */
 function editHref(s: AppState, a: Action): string {
   const p = a.payload as { contactId?: string; threadId?: string };
-  const contract = s.contracts.find((c) => c.contactId === p.contactId);
+  // Vertrag der Erinnerung (Hinweis overdue:<id>), sonst der Mitgliedsvertrag des Kontakts.
+  const fromInsight = a.insightKey?.startsWith('overdue:') ? s.contracts.find((c) => c.id === a.insightKey!.slice('overdue:'.length)) : undefined;
+  const contract = fromInsight ?? (p.contactId ? membershipContractOf(s, p.contactId) : undefined);
   if (a.type === 'send_reminder' && contract) return `/nexus/mitglieder/${contract.id}`;
   return p.threadId ? `/nachrichten/${p.threadId}` : '/';
 }

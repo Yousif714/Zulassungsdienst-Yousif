@@ -13,7 +13,7 @@ import { bankReturnAllocations, classifyBankTx, matchBankPayment, normalizeIban,
 import { stripeAllocations } from '@/domain/matching/stripe';
 import { validateContractDraft, type ContractDraft } from '@/domain/import/contract-draft';
 import { READ_LIMITS, limitReached, planFromReading, readingProposalId } from '@/domain/import/invoice-reading';
-import { invoiceRef, retargetAllocations } from '@/domain/ledger/contracts';
+import { invoiceRef, membershipContractOf, retargetAllocations } from '@/domain/ledger/contracts';
 import { mergeBatch } from '@/domain/import/merge';
 import { mergePortalList, normalizePortalEntries } from '@/domain/import/portal-list';
 import { deriveProposals, findContactFor, type ContractProposal } from '@/domain/import/proposals';
@@ -432,8 +432,8 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       const hit = view.contactIds[0] ?? null;
       const found = hit !== null ? { match: 'ref' as const, contactId: hit, name: null } : view.nameMatch ? { match: 'name' as const, contactId: view.nameMatch.contactId, name: view.nameMatch.name } : { match: 'none' as const, contactId: null, name: null };
       const { contacts, contactId } = attachContact(s, p, e.contactId, ctx.newId, { found, emails: mails });
-      // Hat der zugeordnete Kontakt schon einen Vertrag, entsteht kein zweiter: Mitglied nur verknüpfen.
-      if (s.contracts.some((c) => c.contactId === contactId)) {
+      // Hat der zugeordnete Kontakt schon einen Mitgliedsvertrag, entsteht kein zweiter: Mitglied nur verknüpfen.
+      if (membershipContractOf(s, contactId)) {
         const name = contacts.find((c) => c.id === contactId)?.name ?? view.member.name;
         return owner({ state: { ...s, contacts }, text: `Vertrag nicht angelegt: ${name} hat schon einen Vertrag, Mitglied mit dem Kontakt verknüpft.` });
       }
