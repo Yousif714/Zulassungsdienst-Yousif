@@ -1,8 +1,9 @@
 export type Company = 'nexus' | 'zulassung';
 export type IsoDate = string; // 'YYYY-MM-DD'
-export type ConnectionId = 'lexware_nexus'|'lexware_zulassung'|'stripe_nexus'|'bank_qonto'|'bank_sparkasse'|'gmail'|'icloud'|'info_mail'|'calendar'|'whatsapp_kunden'|'whatsapp_assistent';
+export type ConnectionId = 'lexware_nexus'|'lexware_zulassung'|'stripe_nexus'|'bank_qonto'|'bank_sparkasse'|'gmail'|'icloud'|'info_mail'|'calendar'|'whatsapp_kunden'|'whatsapp_assistent'|'portal_nexus';
 export interface ExternalRef { connectionId: ConnectionId; externalId: string }
 export interface Connection { id: ConnectionId; company: Company | null; label: string; status: 'connected'|'missing'|'error'; lastSuccessAt: string | null; lastError?: string; sync?: { cursor: string | null; complete: boolean; failures: number } }
+export interface PortalMember { id: string; connectionId: 'portal_nexus'; externalId: string; email: string; name: string; firstSeenAt: string; lastSeenInListAt: string }
 export interface Contact { id: string; company: Company; kind: 'member'|'private'|'dealer'; name: string; phones: string[]; emails: string[]; externalRefs?: ExternalRef[]; contactPersons?: string[] }
 export interface MemberContract { id: string; contactId: string; totalCents: number; installments: number; installmentCents: number; dueDay: number; startDate: IsoDate; billing: 'legacy'|'stripe'; specialTerms?: string; catchUpMode: 'first_rate'|'spread'; origin?: ExternalRef[] }
 export type ContractException =
@@ -47,4 +48,4 @@ export interface Subscription {
   disputes: string[];
   contractId: string | null; confirmedPriceCents: number | null; confirmedEndDate: IsoDate | null;
 }
-export interface AppState { connections: Connection[]; contacts: Contact[]; contracts: MemberContract[]; exceptions: Record<string, ContractException[]>; payments: Payment[]; allocations: Allocation[]; ibanLinks: IbanLink[]; invoices: Invoice[]; messages: Message[]; commitments: Commitment[]; events: CalendarEvent[]; calls: Call[]; content: ContentItem[]; vehicles: Vehicle[]; jobs: Job[]; insights: StoredInsight[]; actions: Action[]; audit: AuditEntry[]; assistantChat: AssistantMessage[]; subscriptions: Subscription[]; dismissedProposals: string[]; settings: Settings }
+export interface AppState { connections: Connection[]; contacts: Contact[]; contracts: MemberContract[]; exceptions: Record<string, ContractException[]>; payments: Payment[]; allocations: Allocation[]; ibanLinks: IbanLink[]; invoices: Invoice[]; messages: Message[]; commitments: Commitment[]; events: CalendarEvent[]; calls: Call[]; content: ContentItem[]; vehicles: Vehicle[]; jobs: Job[]; insights: StoredInsight[]; actions: Action[]; audit: AuditEntry[]; assistantChat: AssistantMessage[]; subscriptions: Subscription[]; dismissedProposals: string[]; portalMembers: PortalMember[]; ignoredPortalMembers: string[]; settings: Settings }

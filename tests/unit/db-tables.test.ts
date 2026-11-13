@@ -3,7 +3,7 @@ import { createDemoState } from '@/data/seed';
 import { applyEvent, refresh } from '@/data/engine';
 import { toRows, fromRows, diffState, TABLES } from '@/server/db/tables';
 import { createEmptyState } from '@/data/empty-state';
-import type { Subscription } from '@/domain/types';
+import type { PortalMember, Subscription } from '@/domain/types';
 
 import { NOW_0930 as NOW, stateWith } from './helpers';
 
@@ -121,4 +121,13 @@ describe('Zuordnung auf Rechnung', () => {
     expect(toRows(s).allocations[0].id).toBe('p:inv:i1:0');
     expect(fromRows(toRows(s)).allocations).toEqual(s.allocations);
   });
+});
+
+it('Portal-Mitglieder und Ausgeblendete überstehen toRows/fromRows', () => {
+  const m: PortalMember = { id: 'pm1', connectionId: 'portal_nexus', externalId: 'a@b.de', email: 'a@b.de', name: 'A', firstSeenAt: '2026-11-12T08:30:00.000Z', lastSeenInListAt: '2026-11-12T08:30:00.000Z' };
+  const s = { ...createEmptyState(), portalMembers: [m], ignoredPortalMembers: ['x@y.de'] };
+  const rows = toRows(s);
+  expect(rows.portal_members[0]).toMatchObject({ id: 'pm1', connection_id: 'portal_nexus', external_id: 'a@b.de' });
+  expect(rows.ignored_portal_members[0]).toMatchObject({ id: 'x@y.de', data: 'x@y.de' });
+  expect(fromRows(rows)).toMatchObject({ portalMembers: [m], ignoredPortalMembers: ['x@y.de'] });
 });

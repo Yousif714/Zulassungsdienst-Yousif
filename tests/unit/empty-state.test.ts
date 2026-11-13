@@ -15,7 +15,10 @@ afterEach(() => { setClockMode('demo'); setNowForTests(null); });
 describe('leerer Startzustand', () => {
   test('alle Verbindungen fehlen, Listen leer', () => {
     const e = createEmptyState();
-    expect(e.connections.length).toBe(11);
+    expect(e.connections.length).toBe(12);
+    expect(e.connections.find((c) => c.id === 'portal_nexus')).toMatchObject({ company: 'nexus', label: 'NEXUS-Portal', status: 'missing' });
+    expect(e.portalMembers).toEqual([]);
+    expect(e.ignoredPortalMembers).toEqual([]);
     expect(e.connections.every((c) => c.status === 'missing' && c.lastSuccessAt === null)).toBe(true);
     expect(e.contacts).toEqual([]);
     expect(e.exceptions).toEqual({});

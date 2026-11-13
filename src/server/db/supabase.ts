@@ -13,6 +13,9 @@ function columns(t: TableName): string {
   return 'id,ord,data';
 }
 
+/** Tabellen, die fehlen dürfen (Migration noch nicht eingespielt). */
+const OPTIONAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['portal_members', 'ignored_portal_members']);
+
 function fail(what: string, error: { message: string }): never {
   throw new Error(`Supabase ${what}: ${error.message}`);
 }
@@ -50,10 +53,16 @@ export function createSupabaseReposFromClient(db: SupabaseClient): Repos {
       const revision = Number((meta.data as { value: unknown }).value);
       const tables = await Promise.all(
         TABLE_NAMES.map(async (t) => {
-          const rows = await selectAll<Row>(`load ${t}`, (from, to) =>
-            db.from(t).select(columns(t)).order('ord').order('id').range(from, to).overrideTypes<Row[], { merge: false }>(),
-          );
-          return [t, rows] as const;
+          try {
+            const rows = await selectAll<Row>(`load ${t}`, (from, to) =>
+              db.from(t).select(columns(t)).order('ord').order('id').range(from, to).overrideTypes<Row[], { merge: false }>(),
+            );
+            return [t, rows] as const;
+          } catch (e) {
+            // Portal-Tabellen kommen mit einer späteren Migration: läuft sie erst nach dem Deploy, startet die App mit leeren Listen.
+            if (OPTIONAL_TABLES.has(t)) return [t, [] as Row[]] as const;
+            throw e;
+          }
         }),
       );
       const rows = Object.fromEntries(tables) as Record<TableName, Row[]>;

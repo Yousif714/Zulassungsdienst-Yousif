@@ -6,8 +6,8 @@ import type { AppState } from '@/domain/types';
 /** `ord` = Position im AppState-Array; die Persistenz muss danach sortieren (kein impliziter Tabellenreihenfolge-Vertrag). */
 export type Row = { id: string; ord: number; data: unknown; connection_id?: string | null; external_id?: string | null; dedupe_key?: string };
 
-type ArrayKey = 'connections' | 'contacts' | 'contracts' | 'payments' | 'invoices' | 'messages' | 'commitments' | 'events' | 'calls' | 'content' | 'vehicles' | 'jobs' | 'actions' | 'subscriptions';
-const SIMPLE: ArrayKey[] = ['connections', 'contacts', 'contracts', 'payments', 'invoices', 'messages', 'commitments', 'events', 'calls', 'content', 'vehicles', 'jobs', 'actions', 'subscriptions'];
+type ArrayKey = 'connections' | 'contacts' | 'contracts' | 'payments' | 'invoices' | 'messages' | 'commitments' | 'events' | 'calls' | 'content' | 'vehicles' | 'jobs' | 'actions' | 'subscriptions' | 'portalMembers';
+const SIMPLE: ArrayKey[] = ['connections', 'contacts', 'contracts', 'payments', 'invoices', 'messages', 'commitments', 'events', 'calls', 'content', 'vehicles', 'jobs', 'actions', 'subscriptions', 'portalMembers'];
 
 /** AppState-Schlüssel → Tabelle (job_runs läuft ausschließlich über claimJobRun). */
 export const TABLES = {
@@ -16,10 +16,11 @@ export const TABLES = {
   jobs: 'jobs', actions: 'actions', insights: 'insights', assistantChat: 'assistant_messages', allocations: 'allocations',
   ibanLinks: 'iban_links', exceptions: 'contract_exceptions', audit: 'audit', settings: 'settings',
   subscriptions: 'subscriptions', dismissedProposals: 'dismissed_proposals',
+  portalMembers: 'portal_members', ignoredPortalMembers: 'ignored_portal_members',
 } as const;
 export type TableName = (typeof TABLES)[keyof typeof TABLES];
 /** Tabellen mit Schlüsselspalten connection_id/external_id (eindeutig je Quelle). */
-export const WITH_EXTERNAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['payments', 'invoices', 'messages', 'events', 'subscriptions']);
+export const WITH_EXTERNAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['payments', 'invoices', 'messages', 'events', 'subscriptions', 'portal_members']);
 const TABLE_NAMES = [...new Set(Object.values(TABLES))] as TableName[];
 
 export type ChangeSet = Record<TableName, { upsert: Row[]; delete: string[] }>;
@@ -56,6 +57,7 @@ export function toRows(s: AppState): Record<TableName, Row[]> {
   r.contract_exceptions = Object.entries(s.exceptions).map(([id, data], i) => ({ id, ord: i, data }));
   r.audit = s.audit.map((x, i) => ({ id: auditId(i), ord: i, data: x }));
   r.dismissed_proposals = s.dismissedProposals.map((x, i) => ({ id: x, ord: i, data: x }));
+  r.ignored_portal_members = s.ignoredPortalMembers.map((x, i) => ({ id: x, ord: i, data: x }));
   r.settings = [{ id: 'owner', ord: 0, data: s.settings }];
   return r;
 }
@@ -73,6 +75,7 @@ export function fromRows(input: Partial<Record<TableName, Row[]>>): AppState {
   if (r.contract_exceptions) s.exceptions = Object.fromEntries(r.contract_exceptions.map((x) => [x.id, x.data])) as AppState['exceptions'];
   if (r.audit) s.audit = r.audit.map((x) => x.data as AppState['audit'][number]);
   if (r.dismissed_proposals) s.dismissedProposals = r.dismissed_proposals.map((x) => x.data as string);
+  if (r.ignored_portal_members) s.ignoredPortalMembers = r.ignored_portal_members.map((x) => x.data as string);
   const settings = r.settings?.find((x) => x.id === 'owner');
   if (settings) s.settings = settings.data as AppState['settings'];
   // Frische Datenbank oder neuer Katalog-Eintrag: jede bekannte Verbindung existiert immer (sonst fehlen
