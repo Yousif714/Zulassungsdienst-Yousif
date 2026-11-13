@@ -136,3 +136,31 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 - Architektur-Test erkennt keine dynamischen Importe. `api-guard` prüft nur per Textsuche.
 - Die globale Demo-Leiste schiebt den Seitenkopf um ca. 44 px.
 - Kleinkram: Import-Reihenfolge, schwache Assertions in einzelnen Tests.
+
+## Offen aus Sparkasse-Upload (Reviews, nicht merge-blockierend)
+
+**Abnahme nach Merge (Inhaber)**
+- Je einen echten CSV- und CAMT-Export hochladen, Vorschau prüfen; `RETURN_TEXTS`, `RETURN_BANK_CODES`, `CSV_COLUMNS` und die Annahme „ganze Buchungstage“ gegen die echten Dateien prüfen; Hash-Gleichheit CSV/CAMT prüfen (CSV danach CAMT darf nichts doppeln).
+
+**Funktion**
+- Drag-and-drop fehlt (Spec 4.5 „wählen/ziehen“, umgesetzt nur Dateifeld).
+- CSV-MT940 nicht umgesetzt (eigenes Format, kein Mehrwert ohne echte Datei).
+- Sammelzahlung und „in Lexware bezahlt“ nur für Zulassung; NEXUS bei Bedarf nachziehen.
+- Überzahlungs-Rest nur Anzeige, kein Ausblenden.
+- „Alle offenen Rechnungen“ ohne Obergrenze; Engine lehnt > 50 ab (`MAX_SPLIT_INVOICES`), Option bei > 50 weglassen. Literal 50 in `state-service.ts` und `engine.ts` zu gemeinsamer Konstante.
+- Erneutes Bestätigen einer in Lexware bezahlten Rechnung mit Rückbuchung: `without` in `engine.ts` bereinigt `followsOriginal` nicht, Allocation kann über Rechnungsbetrag steigen (selten).
+- Rückbuchung trifft bei gleicher Fälligkeit die ältere Rechnung zuerst; Tie-Break nach Nummer absteigend.
+- CAMT `RvslInd=true` bei CRDT (Storno einer Ausgabe) wird als Kundenzahlung importiert; `Amt`-Fallback kann `AmtDtls/InstdAmt/Amt` greifen; selbstschließendes `<Ustrd />` (xml.ts) verschluckt das nächste Element; `account` nur von der ersten Datei im ZIP, keine Warnung bei abweichendem Konto.
+- `bookedOn`-Obergrenze nutzt echte Uhr statt Demo-Uhr; Obergrenze heute+1 Tag, 7-Tage-Hinweis höchstens 1 Tag zu spät.
+- Engine zählt verworfene Rückbuchungen ohne Original als „schon vorhanden“; Upload nur aus solchen setzt Verbindung `connected` mit `cursor: null`.
+- `iban` im Event nur Länge ≤ 34, kein Format.
+- Demo: `StatementUpload` setzt `busy` ohne `try/finally`; Demo-Dispatch liefert kein `ok` (abgelehnter Import zeigt „0 neu“). Verbindungen zeigt für Sparkasse noch „So verbindest du das (Phase 2)“ (`HOW_TO.bank_sparkasse`). `nextStep: 'Verbindung prüfen'` in `sources.ts` besser „Auszug hochladen“.
+
+**Aufräumen und Tests**
+- Dedupe-Filter mit Komma-Ausdruck in `parseSparkasse` schwer lesbar; `SkipReason 'zero'` UI-Text; „zu groß“-Text für Mitglieder neutraler; `createKeyer` wiederholt Basis-Normalisierung von `statementKey` (gemeinsame `keyBase()`); `const n` verdeckt `forEach`-Index.
+- Selektoren: `customerInvoiceRows` rechnet `invoiceOpenCents` doppelt (O(n²)); `invoicePaidCents` bei abdeckendem Vertrag undokumentiert; `partlyAllocatedPayments` nicht auf Bank beschränkt; `statementSummary` O(n·m), `returnIds` O(n²).
+- `PaymentCard`: Optionswert-Kopplung der `invoices`-Option über String fragil.
+- Testlücken: Überzahlung bei Verteilung (`invoiceIds`); Regel 1 mit `paidInLexware`-Treffer; umgekehrte Firmengrenze in `confirmPaymentMatch`; Kontext-NEXUS-Test nur `every`; CAMT-Rückbuchung = CSV-Schlüssel; mehrere `Stmt`; Rangfolge `expense` vs. `before_since`; Doppel-externalId im selben Event; E2E `toContainText('0')` zu schwach (`zulassung.spec.ts`); `briefing.test.ts` ggf. vakuum.
+- Screenshot-Spec ohne Seite `/zulassung/zuordnen`.
+- Prozess: Task 5 ohne TDD-Reihenfolge (RED nachträglich belegt).
+

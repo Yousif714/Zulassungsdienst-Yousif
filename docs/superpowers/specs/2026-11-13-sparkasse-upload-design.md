@@ -1,6 +1,6 @@
 # Sparkasse-Upload mit automatischer Zuordnung (2b-2b) – Design
 
-Stand: 13.11.2026 · Status: Entwurf zur Freigabe (Ansatz A vom Inhaber gewählt)
+Stand: 13.11.2026 · Status: umgesetzt (Branch, wartet auf PR/Merge; Ansatz A vom Inhaber gewählt)
 
 ## 1. Warum
 Beim Zulassungsdienst zeigt die App heute „offen/überfällig“ nur nach dem Lexware-Status. In Lexware Zulassung ist die Sparkasse **nicht** angebunden; Rechnungen bleiben dort offen, obwohl das Geld längst da ist (Inhaber, 13.11.). Ziel: Kontoauszug hochladen → die App erkennt Zahlungen, ordnet sie Rechnungen zu und sagt, was wirklich offen ist. Möglichst alles automatisch, der Inhaber bestätigt nur unsichere Fälle.
@@ -32,7 +32,7 @@ Beim Zulassungsdienst zeigt die App heute „offen/überfällig“ nur nach dem 
 ## 4. Festlegungen
 
 ### 4.1 Lesen (rein, `src/domain/import/sparkasse.ts`)
-- `parseSparkasse(file: { name; bytes }) → { payments: ImportedPayment[]; skipped: {reason; count}[]; from; to; account? }`. ZIP-Entpacken über den vorhandenen Leser in `src/data/xlsx.ts` (`unzip` exportieren, Fehlertexte neutral formulieren, Zip-Bomben-Budget bleibt); da `domain` nicht aus `data` importieren darf, entpackt die Seite und gibt die XML-Texte an die Domain-Funktion.
+- `parseSparkasse(file: { name; bytes }) → { payments: ImportedPayment[]; skipped: {reason; count}[]; from; to; account? }`. ZIP-Entpacken über den vorhandenen Leser in `src/data/xlsx.ts` (`unzip` exportieren, Fehlertexte neutral formulieren, Zip-Bomben-Budget bleibt); da `domain` nicht aus `data` importieren darf, entpackt die Seite und gibt die XML-Texte an die Domain-Funktion. Umgesetzt: `parseSparkasse` bekommt die Dateibytes (bei ZIP entpackt die Data-Schicht vorher; CSV wird in der Domain dekodiert).
 - Text-Dekodierung CSV: `decodeListFile` (UTF-8, sonst Windows-1252). Trennzeichen `;`, Datum `TT.MM.JJ`/`TT.MM.JJJJ`, Betrag `1.234,56`/`-12,00` → Cent nur über eine Parse-Funktion, keine Floats.
 - CAMT.053: je `Ntry` mit `Sts` gebucht (`BOOK`), `Ccy="EUR"`, Buchungsdatum `BookgDt/Dt` (sonst `ValDt`). Sammelbuchungen: je `TxDtls` eine Zahlung (Betrag aus `TxDtls/Amt`, sonst Ntry-Betrag bei genau einem TxDtls). Gegenpartei: bei Eingang `Dbtr/Nm` + `DbtrAcct/Id/IBAN`, Verwendungszweck `RmtInf/Ustrd` (mehrere Zeilen mit Leerzeichen verbunden).
 - Übernommen werden: Eingänge (`CRDT` bzw. Betrag > 0) und Rückbuchungen (Ausgang, der eine Lastschrift/Überweisung zurückgibt: CAMT `RvslInd=true` oder Bank-Transaktionscode Rückgabe; CSV-Buchungstext enthält „Retoure“, „Rücklastschrift“, „Rückbuchung“ – Liste als Konstante, gegen echte Datei prüfen). Alle anderen Ausgänge werden gezählt („übersprungen: 17 Ausgaben“), nicht übernommen. Nur ab `IMPORT_SINCE`.

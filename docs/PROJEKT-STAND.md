@@ -30,6 +30,8 @@ Kernziele:
 | `docs/setup-phase2b2.md` | **Inhaber-Checkliste** Paket 2b-2: Migration, Qonto-Schlüssel, Vercel-Variablen |
 | `docs/superpowers/plans/2026-11-13-phase2b2-qonto.md` | Bauplan Paket 2b-2 (Qonto, Forderungen, Zuordnungs-Härtung) |
 | `docs/setup-ab.md` | **Inhaber-Checkliste** Auftragsbestätigungen und Import ab 01.06. |
+| `docs/superpowers/specs/2026-11-13-sparkasse-upload-design.md` | Spec Sparkasse-Upload (Zulassung: Kontoauszug → Zahlungen → Rechnungen) |
+| `docs/superpowers/plans/2026-11-13-sparkasse-upload.md` | Bauplan Sparkasse-Upload |
 | `docs/NEXUS-Assistent-Prompt.md` | Fachliche Anforderungen (Prompt-Form) |
 | `docs/Codex-Vergleich-Prompt.md` | Zweitmeinungs-Prompt für Codex |
 | `docs/vorschau/README.md` | Anleitung für den Inhaber, Vercel/iPhone |
@@ -63,6 +65,7 @@ Kernziele:
 - **Verbunden:** Lexware NEXUS + Zulassung, Qonto, Stripe (Restricted Key + Webhook „Assistent“, hört auf alle Ereignisse, Inhaber will es so). `ANTHROPIC_API_KEY` jetzt genutzt (Rechnungen lesen). Fehlt: Portal-Supabase-Schlüssel (Agentur; bis dahin Excel-Upload).
 - **Neu live (13.11., PR #13): Rechnungen lesen** – Claude (Opus 5.5) liest je Abgleich bis 5 offene NEXUS-Rechnungen; sicher + Summe passt → Ratenvertrag mit Plakette „Von Claude gelesen“ (Passt/Korrigieren/Löschen), sonst Vorschlag „Lexware (Claude)“. Mehrere Verträge je Kontakt (`kind`: Mitgliedschaft/Ticket-Raten/Ratenzahlung). Limit 100 €/Monat. Spec `2026-11-13-rechnungen-lesen-design.md`.
 - **Als Nächstes prüfen:** erste echte Lesungen (Verbindungen › Claude, Heute-Hinweis, Vorschläge); falsch gelesene Texte → Prompt in `src/ai/claude-invoice-reader.ts` nachschärfen. Außerdem weiter offen: erster AB-Lauf (Lexware-Hinweis), Portal-Mitglieder durchgehen, Zuordnen bestätigen.
-- **Danach:** Sparkasse-Upload → 2b-3 Umstellung Bestandsmitglieder auf Stripe (Backlog „Vor 2b-3“ zuerst).
+- **Sparkasse-Upload (Zulassung): auf Branch fertig, wartet auf PR/Merge.** Kontoauszug (CSV/CAMT, auch ZIP) hochladen → Vorschau → Übernehmen; Zuordnung zu Rechnungen inkl. Sammelzahlung. Nächster Schritt Inhaber: echte CSV- und CAMT-Exporte hochladen und Vorschau prüfen (Backlog „Offen aus Sparkasse-Upload“).
+- **Danach:** 2b-3 Umstellung Bestandsmitglieder auf Stripe (Backlog „Vor 2b-3“ zuerst).
 - **Offen:** Review-Minors „Rechnungen lesen“ (Backlog); Qonto-/Lexware-/Stripe-Feldnamen mit echten Daten prüfen; Supabase auf Pro; überzählige Vercel-Projekte löschen; `npm run test:integration`; zweite WhatsApp-Nummer (2e); Codex-Zweitmeinung.
 - Daten: Echte Mitgliederliste nie ins Repo (öffentlich). Banken: Qonto (NEXUS), Sparkasse Essen (Zulassung, Upload). Kalender Google + iCloud. info@ beim Team.
