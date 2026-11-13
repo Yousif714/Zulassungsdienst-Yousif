@@ -282,7 +282,7 @@ function earliest(dates: string[]): string | null {
 }
 
 /** CSV zerlegen: Trennzeichen = häufigstes aus `;` `,` Tab in der ersten nicht leeren Zeile; `"…"` mit `""`. */
-function splitCsv(text: string): string[][] {
+export function splitCsv(text: string): string[][] {
   const first = text.split(/\r?\n/).find((l) => l.trim() !== '') ?? '';
   const count = (ch: string) => first.split(ch).length - 1;
   const delim = [';', ',', '\t'].reduce((best, ch) => (count(ch) > count(best) ? ch : best), ';');

@@ -1,0 +1,6 @@
+"Auftragskonto";"Buchungstag";"Valutadatum";"Buchungstext";"Verwendungszweck";"Glaeubiger ID";"Mandatsreferenz";"Kundenreferenz (End-to-End)";"Sammlerreferenz";"Lastschrift Ursprungsbetrag";"Auslagenersatz Ruecklastschrift";"Beguenstigter/Zahlungspflichtiger";"Kontonummer/IBAN";"BIC (SWIFT-Code)";"Betrag";"Waehrung";"Info"
+"DE00360501050000009999";"03.11.26";"03.11.26";"GUTSCHR. UEBERWEISUNG";"RE-Z-2026-290 RE-Z-2026-295";"";"";"";"";"";"";"Autohaus Mueller GmbH";"DE00100000000000000001";"XXXXDEXXXXX";"640,00";"EUR";"Umsatz gebucht"
+"DE00360501050000009999";"05.11.26";"05.11.26";"GUTSCHR. UEBERWEISUNG";"Rechnung RE-Z-2026-301";"";"";"";"";"";"";"Autohaus Krause";"DE00100000000000000002";"XXXXDEXXXXX";"99,00";"EUR";"Umsatz gebucht"
+"DE00360501050000009999";"10.11.26";"10.11.26";"GUTSCHR. UEBERWEISUNG";"Umschreibung BOT-MK 456";"";"";"";"";"";"";"AUTOHAUS MUELLER GMBH";"DE00100000000000000001";"XXXXDEXXXXX";"89,00";"EUR";"Umsatz gebucht"
+"DE00360501050000009999";"11.11.26";"11.11.26";"BARGELDEINZAHLUNG";"Einzahlung";"";"";"";"";"";"";"Max Mustermann";"DE00100000000000000003";"XXXXDEXXXXX";"50,00";"EUR";"Umsatz gebucht"
+"DE00360501050000009999";"11.11.26";"11.11.26";"ONLINE-UEBERWEISUNG";"Gebuehren Zulassungsstelle";"";"";"";"";"";"";"Stadt Musterstadt";"DE00100000000000000004";"XXXXDEXXXXX";"-45,00";"EUR";"Umsatz gebucht"
