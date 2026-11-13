@@ -9,6 +9,7 @@ import { detectUnmatchedPayments } from './payments';
 import { detectSubscriptionChanges } from './subscriptions';
 import { detectReplies } from './replies';
 import { detectStaleSources } from './sources';
+import { detectPortalNoInvoice } from './portal';
 
 export { memberView } from './members';
 
@@ -25,6 +26,7 @@ export function runDetectors(s: AppState, now: Date): Insight[] {
     ...detectCallSlides(s, now),
     ...detectCommitments(s, now),
     ...detectStaleSources(s, now),
+    ...detectPortalNoInvoice(s),
   ];
   return all.filter((i) => areaStale(i.needsSources, s.connections, now).length === 0);
 }
