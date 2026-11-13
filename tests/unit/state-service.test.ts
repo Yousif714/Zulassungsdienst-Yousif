@@ -128,7 +128,9 @@ describe('Zustands-Dienst', () => {
     expect(r.state.actions.find((a) => a.id === 'a-1')?.status).toBe('executed');
   });
 
-  test.each([[{ paymentId: 'p', contractId: 'c' }, true], [{ paymentId: 'p', invoiceId: 'i' }, true], [{ paymentId: 'p', contractId: 'c', invoiceId: 'i' }, false], [{ paymentId: 'p' }, false]])(
+  test.each([[{ paymentId: 'p', contractId: 'c' }, true], [{ paymentId: 'p', invoiceId: 'i' }, true], [{ paymentId: 'p', contractId: 'c', invoiceId: 'i' }, false], [{ paymentId: 'p' }, false],
+    [{ paymentId: 'p', invoiceIds: ['a', 'b'] }, true], [{ paymentId: 'p', invoiceIds: [] }, false], [{ paymentId: 'p', invoiceIds: ['a', 'a'] }, false], [{ paymentId: 'p', invoiceId: 'a', invoiceIds: ['b'] }, false],
+    [{ paymentId: 'p', invoiceIds: Array.from({ length: 51 }, (_, i) => `i${i}`) }, false], [{ paymentId: 'p', invoiceIds: ['a', 1] }, false]])(
     'confirmPaymentMatch %j erlaubt: %s', (e, ok) => expect(isClientEvent({ type: 'confirmPaymentMatch', ...e })).toBe(ok));
   test('dismissPayment erlaubt', () => {
     expect(isClientEvent({ type: 'dismissPayment', paymentId: 'p' })).toBe(true);

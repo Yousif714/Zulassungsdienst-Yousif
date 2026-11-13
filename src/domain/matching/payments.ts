@@ -1,4 +1,5 @@
 import type { ImportedPayment } from '@/domain/import/batch';
+import { distributeInOrder } from '@/domain/ledger/distribute';
 import type { Allocation, AppState, Company, Contact, IbanLink, IsoDate, Payment } from '@/domain/types';
 
 const STRIPE_WORDS = new Set(['stripe', 'payments', 'technologies', 'technology', 'europe', 'ltd', 'limited', 'uk', 'ie', 'inc']);
@@ -90,7 +91,11 @@ export function amountFitsContract(a: number, e: ExpectedContract): boolean {
 /** contractId = abdeckender Vertrag (coveringContract), sonst null. */
 export interface MatchInvoice { id: string; number: string; contactId: string | null; openCents: number; contractId: string | null; dueDate: IsoDate; totalCents: number; paidInLexware?: true }
 export interface MatchContext { company: Company; contacts: Contact[]; ibanLinks: IbanLink[]; expected: Expected; invoices: MatchInvoice[] }
-export type MatchTarget = { kind: 'contract'; id: string; contactId: string } | { kind: 'invoice'; id: string; contactId: string | null };
+export type MatchTarget =
+  | { kind: 'contract'; id: string; contactId: string }
+  | { kind: 'invoice'; id: string; contactId: string | null }
+  /** Sammelzahlung (nur Zulassung): `id` = `invoiceIds.join(',')`. */
+  | { kind: 'invoices'; id: string; contactId: string; invoiceIds: string[] };
 export type MatchResult = { target: MatchTarget | null; candidates: MatchTarget[]; confidence: 'high' | 'medium' | 'low'; reason: string };
 
 const same = (a: MatchTarget, b: MatchTarget) => a.kind === b.kind && a.id === b.id;
@@ -111,8 +116,13 @@ export function matchBankPayment(p: Payment, ctx: MatchContext): MatchResult {
       const e = ctx.expected.get(t.id);
       return !!e && amountFitsContract(p.amountCents, e);
     }
-    return ctx.invoices.find((i) => i.id === t.id)?.openCents === p.amountCents;
+    const i = ctx.invoices.find((x) => x.id === t.id);
+    return !!i && (i.paidInLexware ? i.totalCents : i.openCents) === p.amountCents;
   };
+  // Sammelziel über mehrere offene Rechnungen eines Kontakts; Summe = Betrag → high, sonst Verteilung prüfen.
+  const invoicesTarget = (contactId: string, list: MatchInvoice[]): MatchTarget => ({ kind: 'invoices', id: list.map((i) => i.id).join(','), contactId, invoiceIds: list.map((i) => i.id) });
+  const sumFits = (list: MatchInvoice[]) => list.reduce((n, i) => n + i.openCents, 0) === p.amountCents;
+  const zulassung = ctx.company === 'zulassung';
   const targetsOf = (contactId: string): MatchTarget[] => [
     ...[...ctx.expected].filter(([, e]) => e.contactId === contactId).map(([id]) => contractTarget(id, contactId)),
     ...ctx.invoices.filter((i) => i.contactId === contactId && i.contractId === null && i.openCents > 0).map(invoiceTarget),
@@ -121,9 +131,21 @@ export function matchBankPayment(p: Payment, ctx: MatchContext): MatchResult {
   if (p.reference) {
     const hits = ctx.invoices.filter((i) => referenceHasNumber(p.reference!, i.number));
     if (hits.length > 0) {
+      const open = hits.filter((i) => i.openCents > 0);
+      const contactId = open[0]?.contactId;
+      if (zulassung && open.length >= 2 && contactId && open.every((i) => i.contactId === contactId && i.contractId === null)) {
+        return sumFits(open)
+          ? result([invoicesTarget(contactId, open)], 'high', 'Mehrere Rechnungsnummern im Verwendungszweck, Summe passt.')
+          : result([invoicesTarget(contactId, open)], 'medium', 'Mehrere Rechnungsnummern, Summe weicht ab – Verteilung prüfen.');
+      }
       const asTarget = (i: MatchInvoice) => (i.contractId ? contractTarget(i.contractId, i.contactId) : invoiceTarget(i));
       const all = distinct(hits.map(asTarget));
       if (all.length > 1) return result(all, 'medium', 'Mehrere Rechnungen passen zur Nummer, bitte auswählen.');
+      if (zulassung && hits.length === 1 && hits[0].paidInLexware) {
+        return fits(all[0])
+          ? result(all, 'high', 'Rechnungsnummer im Verwendungszweck, in Lexware schon bezahlt.')
+          : result(all, 'medium', 'Rechnungsnummer gefunden, Betrag weicht ab (Teilzahlung?).');
+      }
       return all.some(fits)
         ? result(all, 'high', 'Rechnungsnummer im Verwendungszweck, Betrag passt.')
         : result(all, 'medium', 'Rechnungsnummer gefunden, Betrag weicht ab (Teilzahlung?).');
@@ -143,6 +165,12 @@ export function matchBankPayment(p: Payment, ctx: MatchContext): MatchResult {
     const fitting = all.filter(fits);
     if (fitting.length === 1) return result(fitting, 'high', 'Bestätigte IBAN und Betrag passen.');
     if (fitting.length > 1) return result(fitting, 'medium', 'Mehrere Verträge oder Rechnungen passen, bitte auswählen.');
+    const open = ctx.invoices.filter((i) => i.contactId === linkedContactIds[0] && i.contractId === null && i.openCents > 0);
+    if (zulassung && open.length >= 2) {
+      return sumFits(open)
+        ? result([invoicesTarget(linkedContactIds[0], open)], 'high', 'Bestätigte IBAN, Summe aller offenen Rechnungen passt.')
+        : result([invoicesTarget(linkedContactIds[0], open)], 'medium', 'Bestätigte IBAN, Betrag auf offene Rechnungen verteilt – bitte prüfen.');
+    }
     return result(all, 'medium', 'Bestätigte IBAN, aber der Betrag weicht ab.');
   }
 
@@ -185,20 +213,41 @@ export function linkBankReturns(payments: Payment[], incoming: ImportedPayment[]
   return out;
 }
 
-/** Rückbuchungen der Bank (Betrag < 0, `refundOf`) folgen dem Ziel der Originalzahlung; ohne Zuordnung des Originals entsteht nichts. */
+/**
+ * Rückbuchungen der Bank (Betrag < 0, `refundOf`) folgen den Zielen der Originalzahlung; ohne Zuordnung des Originals entsteht nichts.
+ * Das Original kann mehrere Zuordnungen haben (Sammelzahlung): gegengebucht wird jüngste Rechnung zuerst, je Ziel höchstens
+ * die Zuordnung des Originals minus schon vorhandene Rückbuchungen darauf (nie mehr storniert als zugeordnet).
+ */
 export function bankReturnAllocations(s: AppState): Allocation[] {
   const allocated = new Set(s.allocations.map((a) => a.paymentId));
   const out: Allocation[] = [];
+  const keyOf = (a: Allocation) => (a.invoiceId ? `invoice:${a.invoiceId}` : `contract:${a.contractId}`);
+  const due = (a: Allocation) => (a.invoiceId ? s.invoices.find((i) => i.id === a.invoiceId)?.dueDate ?? '' : '');
   for (const p of s.payments) {
     if (p.source !== 'bank' || p.amountCents >= 0 || !p.refundOf || allocated.has(p.id)) continue;
     const original = s.payments.find((x) => x.id !== p.id && x.connectionId === p.connectionId && x.externalId === p.refundOf);
-    const a = original ? s.allocations.find((x) => x.paymentId === original.id) : undefined;
-    if (!a) continue;
-    // Höchstens der zugeordnete Betrag des Originals (bei Überzahlung auf eine Rechnung kleiner als die Zahlung).
-    const amountCents = Math.max(p.amountCents, -a.amountCents);
-    out.push(a.invoiceId
-      ? { paymentId: p.id, invoiceId: a.invoiceId, amountCents, method: 'auto' }
-      : { paymentId: p.id, contractId: a.contractId!, amountCents, method: 'auto' });
+    if (!original) continue;
+    // Je Ziel zusammengefasst: Zuordnung des Originals plus (negative) Rückbuchungen aller Rückbuchungen desselben Originals.
+    const returnIds = new Set(s.payments.filter((x) => x.connectionId === p.connectionId && x.refundOf === p.refundOf).map((x) => x.id));
+    const targets = new Map<string, { a: Allocation; capCents: number }>();
+    for (const a of s.allocations) {
+      if (a.paymentId !== original.id || a.amountCents <= 0) continue;
+      const t = targets.get(keyOf(a));
+      targets.set(keyOf(a), { a, capCents: (t?.capCents ?? 0) + a.amountCents });
+    }
+    if (targets.size === 0) continue;
+    for (const a of [...s.allocations, ...out]) {
+      const t = returnIds.has(a.paymentId) && a.amountCents < 0 ? targets.get(keyOf(a)) : undefined;
+      if (t) t.capCents += a.amountCents;
+    }
+    const ordered = [...targets.values()].sort((x, y) => due(y.a).localeCompare(due(x.a)));
+    const { shares } = distributeInOrder(-p.amountCents, ordered.map((t, i) => ({ id: String(i), capCents: t.capCents })));
+    for (const sh of shares) {
+      const a = ordered[Number(sh.id)].a;
+      out.push(a.invoiceId
+        ? { paymentId: p.id, invoiceId: a.invoiceId, amountCents: -sh.amountCents, method: 'auto' }
+        : { paymentId: p.id, contractId: a.contractId!, amountCents: -sh.amountCents, method: 'auto' });
+    }
   }
   return out;
 }

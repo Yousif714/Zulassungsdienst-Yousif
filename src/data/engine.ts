@@ -19,7 +19,7 @@ import { mergeBatch } from '@/domain/import/merge';
 import { mergePortalList, normalizePortalEntries } from '@/domain/import/portal-list';
 import { deriveProposals, findContactFor, type ContractProposal } from '@/domain/import/proposals';
 import { portalProposal, portalViews } from '@/domain/portal';
-import { coveringContract, invoiceOpenCents } from '@/domain/ledger/receivables';
+import { coveringContract, invoiceAllocatableCents, splitPaymentOverInvoices } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
 import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Company, Connection, ContractKind, Contact, Invoice, InvoiceReading, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
@@ -41,20 +41,27 @@ function autoAllocate(s: AppState, at: Date, isDemo: boolean): AppState {
     // Nur bei genau einem Ziel; mehrdeutig bleibt für die Bestätigung offen.
     if (m.confidence !== 'high' || !m.target || m.candidates.length !== 1) continue;
     const t = m.target;
-    let allocation: Allocation;
+    let fresh: Allocation[];
     let text: string;
     if (t.kind === 'contract') {
       const contract = st.contracts.find((c) => c.id === t.id);
       if (!contract) continue;
-      allocation = { paymentId: p.id, contractId: contract.id, amountCents: p.amountCents, method: 'auto' };
+      fresh = [{ paymentId: p.id, contractId: contract.id, amountCents: p.amountCents, method: 'auto' }];
       text = `Automatisch zugeordnet: ${contactName(st, contract.contactId)}`;
+    } else if (t.kind === 'invoices') {
+      // Sammelzahlung: nur wenn der Betrag ohne Rest auf die Rechnungen aufgeht.
+      const split = splitPaymentOverInvoices(st, p.amountCents, t.invoiceIds);
+      if (split.restCents !== 0 || split.shares.length === 0) continue;
+      fresh = split.shares.map((x) => ({ paymentId: p.id, invoiceId: x.invoiceId, amountCents: x.amountCents, method: 'auto' as const }));
+      text = `Automatisch aufgeteilt: Rechnungen ${split.shares.map((x) => invoiceNumber(st, x.invoiceId)).join(', ')}`;
     } else {
       const invoice = st.invoices.find((i) => i.id === t.id);
       if (!invoice) continue;
-      allocation = { paymentId: p.id, invoiceId: invoice.id, amountCents: p.amountCents, method: 'auto' };
-      text = `Automatisch zugeordnet: Rechnung ${invoice.number}`;
+      const paidInLexware = contexts.get(p.company)!.invoices.find((i) => i.id === t.id)?.paidInLexware;
+      fresh = [{ paymentId: p.id, invoiceId: invoice.id, amountCents: p.amountCents, method: 'auto' }];
+      text = `Automatisch zugeordnet: Rechnung ${invoice.number}${paidInLexware ? ' (in Lexware schon bezahlt)' : ''}`;
     }
-    st = { ...st, allocations: [...st.allocations, allocation], audit: [...st.audit, { at: at.toISOString(), actor: 'system', text, isDemo }] };
+    st = { ...st, allocations: [...st.allocations, ...fresh], audit: [...st.audit, { at: at.toISOString(), actor: 'system', text, isDemo }] };
     contexts.delete(p.company);
   }
   return st;
@@ -122,8 +129,10 @@ export function refresh(s: AppState, at: Date, isDemo = true): AppState {
 type Mutation = { state: AppState; text: string };
 
 const contactName = (s: AppState, id: string | null | undefined) => s.contacts.find((c) => c.id === id)?.name ?? 'Unbekannt';
+const invoiceNumber = (s: AppState, id: string) => s.invoices.find((i) => i.id === id)?.number ?? id;
 
-type MatchTargetArg = { contractId?: string; invoiceId?: string };
+type MatchTargetArg = { contractId?: string; invoiceId?: string; invoiceIds?: string[] };
+const MAX_SPLIT_INVOICES = 50;
 
 function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTargetArg, at: Date): Mutation {
   const p = s.payments.find((x) => x.id === paymentId);
@@ -131,19 +140,33 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
   const inv = target.invoiceId ? s.invoices.find((x) => x.id === target.invoiceId) : undefined;
   const fail = { state: s, text: `Zuordnung nicht möglich: ${paymentId}` };
   // Rückbuchungen (Betrag <= 0) folgen ihrer Originalzahlung und werden nie direkt bestätigt.
-  if (!p || p.amountCents <= 0 || (!!target.contractId === !!target.invoiceId)) return fail;
-  let allocation: Allocation;
+  const ids = target.invoiceIds;
+  if (!p || p.amountCents <= 0 || [!!target.contractId, !!target.invoiceId, ids !== undefined].filter(Boolean).length !== 1) return fail;
+  // Vorhandene Zuordnungen dieser Zahlung werden ersetzt, zählen also beim Verteilen nicht mit.
+  const without: AppState = { ...s, allocations: s.allocations.filter((a) => a.paymentId !== paymentId) };
+  const ownInvoice = (i: Invoice | undefined): i is Invoice => !!i && i.company === p.company && i.connectionId === LEXWARE_OF[p.company];
+  let fresh: Allocation[];
   let contactId: string | null;
   let text: string;
   if (c && s.contacts.some((x) => x.id === c.contactId && x.company === p.company)) {
-    allocation = { paymentId, contractId: c.id, amountCents: p.amountCents, method: 'confirmed' };
+    fresh = [{ paymentId, contractId: c.id, amountCents: p.amountCents, method: 'confirmed' }];
     contactId = c.contactId;
     text = `Zahlung über ${formatEuro(p.amountCents)} ${contactName(s, c.contactId)} zugeordnet`;
-  } else if (inv && inv.company === p.company && inv.connectionId === LEXWARE_OF[p.company] && invoiceOpenCents(s, inv) > 0) {
-    // Überzahlung: höchstens der offene Betrag geht auf die Rechnung.
-    allocation = { paymentId, invoiceId: inv.id, amountCents: Math.min(p.amountCents, invoiceOpenCents(s, inv)), method: 'confirmed' };
+  } else if (ownInvoice(inv) && invoiceAllocatableCents(without, inv) > 0) {
+    // Überzahlung: höchstens der offene (bzw. bei in Lexware bezahlten: der noch nicht zugeordnete) Betrag geht auf die Rechnung.
+    fresh = [{ paymentId, invoiceId: inv.id, amountCents: Math.min(p.amountCents, invoiceAllocatableCents(without, inv)), method: 'confirmed' }];
     contactId = inv.contactId;
     text = `Zahlung über ${formatEuro(p.amountCents)} Rechnung ${inv.number} zugeordnet`;
+  } else if (ids && ids.length >= 1 && ids.length <= MAX_SPLIT_INVOICES && new Set(ids).size === ids.length) {
+    // Sammelzahlung: alle Rechnungen der Firma der Zahlung, ein gemeinsamer Kontakt; älteste zuerst, Rest bleibt offen bzw. nicht zugeordnet.
+    const invoices = ids.map((id) => s.invoices.find((i) => i.id === id));
+    if (!invoices.every(ownInvoice)) return fail;
+    contactId = invoices[0].contactId;
+    if (!contactId || invoices.some((i) => i.contactId !== contactId)) return fail;
+    const split = splitPaymentOverInvoices(without, p.amountCents, ids);
+    if (split.shares.length === 0) return fail;
+    fresh = split.shares.map((x) => ({ paymentId, invoiceId: x.invoiceId, amountCents: x.amountCents, method: 'confirmed' as const }));
+    text = `Zahlung über ${formatEuro(p.amountCents)} aufgeteilt: ${split.shares.map((x) => `${invoiceNumber(s, x.invoiceId)} (${formatEuro(x.amountCents)})`).join(', ')}`;
   } else return fail;
   const iban = p.iban ? normalizeIban(p.iban) : '';
   const ibanLinks = iban && contactId && !s.ibanLinks.some((l) => normalizeIban(l.iban) === iban && l.contactId === contactId)
@@ -157,7 +180,7 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
     const { ignoredAt: _drop, ...rest } = x;
     return rest;
   });
-  return { state: { ...s, payments, allocations: [...s.allocations.filter((a) => a.paymentId !== paymentId && !followsOriginal(a)), allocation], ibanLinks }, text };
+  return { state: { ...s, payments, allocations: [...s.allocations.filter((a) => a.paymentId !== paymentId && !followsOriginal(a)), ...fresh], ibanLinks }, text };
 }
 
 function dismissPayment(s: AppState, paymentId: string, at: Date): Mutation | null {

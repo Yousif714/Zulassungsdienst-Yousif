@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { applyEvent, refresh } from '@/data/engine';
 import { matchOptions, unallocatedBankPayments } from '@/data/selectors';
 import { PAID_LOOKBACK_DAYS, buildMatchContext, detectUnmatchedPayments } from '@/domain/detectors/payments';
+import { invoiceOpenCents, paymentRestCents } from '@/domain/ledger/receivables';
 import type { StoreEvent } from '@/domain/events';
 import { matchBankPayment } from '@/domain/matching/payments';
 import { IBAN_KAYA, IBAN_MUELLER, NOW_0930, base, ibanLinks, inv, sptx, stateWith, tx, workshop } from '../helpers';
@@ -68,4 +69,122 @@ describe('Zulassung: in Lexware bezahlte Rechnungen', () => {
   });
   test('NEXUS-Kontext bekommt keine bezahlten Rechnungen', () =>
     expect(buildMatchContext(stateWith({ invoices: [{ ...workshop, status: 'paid' }] }), NOW_0930).invoices).toEqual([]));
+});
+
+describe('Zulassung: Sammelzahlung, Teil- und Überzahlung, Rückbuchung', () => {
+  const z290 = inv('i-z-290', 39000, { number: 'RE-Z-2026-290', dueDate: '2026-10-20' });
+  const z295 = inv('i-z-295', 25000, { number: 'RE-Z-2026-295', dueDate: '2026-10-28' });
+  const z301 = inv('i-z-301', 9900, { number: 'RE-Z-2026-301', contactId: 'd-schmidt', status: 'paid', openCents: 0, issuedOn: '2026-11-03' });
+  test('Sammelzahlung: zwei Nummern, Summe exakt → automatisch auf beide', () => {
+    const s = stateWith({ invoices: [z290, z295], payments: [sptx({ amountCents: 64000, reference: 'RE-Z-2026-290 RE-Z-2026-295' })] });
+    expect(matchBankPayment(s.payments[0], buildMatchContext(s, NOW_0930, 'zulassung'))).toMatchObject({
+      confidence: 'high', reason: 'Mehrere Rechnungsnummern im Verwendungszweck, Summe passt.',
+      target: { kind: 'invoices', id: 'i-z-290,i-z-295', contactId: 'd-mueller', invoiceIds: ['i-z-290', 'i-z-295'] } });
+    const r = refresh(s, NOW_0930);
+    expect(r.allocations).toEqual([
+      { paymentId: 'sp1', invoiceId: 'i-z-290', amountCents: 39000, method: 'auto' },
+      { paymentId: 'sp1', invoiceId: 'i-z-295', amountCents: 25000, method: 'auto' }]);
+    expect(r.audit.at(-1)?.text).toBe('Automatisch aufgeteilt: Rechnungen RE-Z-2026-290, RE-Z-2026-295');
+  });
+  test('Sammelzahlung mit Abweichung (Skonto) → Vorschlag, nicht automatisch', () => {
+    const s = stateWith({ invoices: [z290, z295], payments: [sptx({ amountCents: 63000, reference: 'RE-Z-2026-290 RE-Z-2026-295' })] });
+    expect(refresh(s, NOW_0930).allocations).toEqual([]);
+    expect(matchBankPayment(s.payments[0], buildMatchContext(s, NOW_0930, 'zulassung'))).toMatchObject({
+      confidence: 'medium', reason: 'Mehrere Rechnungsnummern, Summe weicht ab – Verteilung prüfen.', target: { kind: 'invoices', invoiceIds: ['i-z-290', 'i-z-295'] } });
+  });
+  test('Nummern verschiedener Kontakte → Auswahl, keine Sammelzahlung', () => {
+    const s = stateWith({ invoices: [z290, { ...z295, contactId: 'd-schmidt' }], payments: [sptx({ amountCents: 64000, reference: 'RE-Z-2026-290 RE-Z-2026-295' })] });
+    const m = matchBankPayment(s.payments[0], buildMatchContext(s, NOW_0930, 'zulassung'));
+    expect(m).toMatchObject({ confidence: 'medium', target: null, reason: 'Mehrere Rechnungen passen zur Nummer, bitte auswählen.' });
+    expect(m.candidates.map((c) => `${c.kind}:${c.id}`)).toEqual(['invoice:i-z-290', 'invoice:i-z-295']);
+  });
+  test('Bestätigte IBAN, Summe aller offenen Rechnungen → automatisch', () => {
+    const s = stateWith({ invoices: [z290, z295], ibanLinks: [muellerLink], payments: [sptx({ iban: IBAN_MUELLER, amountCents: 64000 })] });
+    expect(matchBankPayment(s.payments[0], buildMatchContext(s, NOW_0930, 'zulassung'))).toMatchObject({
+      confidence: 'high', reason: 'Bestätigte IBAN, Summe aller offenen Rechnungen passt.', target: { kind: 'invoices', invoiceIds: ['i-z-290', 'i-z-295'] } });
+    expect(refresh(s, NOW_0930).allocations).toHaveLength(2);
+  });
+  test('Bestätigte IBAN, Betrag passt zu keiner und nicht zur Summe → Verteilungsvorschlag', () => {
+    const s = stateWith({ invoices: [z290, z295], ibanLinks: [muellerLink], payments: [sptx({ iban: IBAN_MUELLER, amountCents: 50000 })] });
+    expect(matchBankPayment(s.payments[0], buildMatchContext(s, NOW_0930, 'zulassung'))).toMatchObject({
+      confidence: 'medium', reason: 'Bestätigte IBAN, Betrag auf offene Rechnungen verteilt – bitte prüfen.', target: { kind: 'invoices', invoiceIds: ['i-z-290', 'i-z-295'] } });
+    expect(refresh(s, NOW_0930).allocations).toEqual([]);
+  });
+  test('Bestätigte IBAN, Betrag passt zu einer Rechnung → Einzeltreffer bleibt', () => {
+    const s = stateWith({ invoices: [z290, z295], ibanLinks: [muellerLink], payments: [sptx({ iban: IBAN_MUELLER, amountCents: 25000 })] });
+    expect(matchBankPayment(s.payments[0], buildMatchContext(s, NOW_0930, 'zulassung')).target).toEqual({ kind: 'invoice', id: 'i-z-295', contactId: 'd-mueller' });
+  });
+  test('NEXUS: bestätigte IBAN mit zwei offenen Rechnungen bleibt ohne Sammelziel', () => {
+    const a = inv('i-n1', 10000, { company: 'nexus', connectionId: 'lexware_nexus', contactId: 'm-kaya', number: 'RE-N-1' });
+    const b = inv('i-n2', 20000, { company: 'nexus', connectionId: 'lexware_nexus', contactId: 'm-kaya', number: 'RE-N-2' });
+    const s = stateWith({ invoices: [a, b], ibanLinks, payments: [tx({ iban: IBAN_KAYA, amountCents: 30000 })] });
+    expect(matchBankPayment(s.payments[0], buildMatchContext(s, NOW_0930))).toMatchObject({ confidence: 'medium', reason: 'Bestätigte IBAN, aber der Betrag weicht ab.', target: null });
+  });
+  test('Bestätigen der Verteilung bei Unterzahlung: Rest bleibt an jüngster Rechnung offen', () => {
+    const r = apply(stateWith({ invoices: [z290, z295], payments: [sptx({ amountCents: 50000 })] }), { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceIds: ['i-z-295', 'i-z-290'] });
+    expect(r.allocations.map((a) => [a.invoiceId, a.amountCents])).toEqual([['i-z-290', 39000], ['i-z-295', 11000]]);
+    expect(r.allocations.every((a) => a.method === 'confirmed')).toBe(true);
+    expect(invoiceOpenCents(r, z295)).toBe(14000);
+  });
+  test('Bestätigen der Verteilung: Text, IBAN gelernt, alte Zuordnung ersetzt', () => {
+    const s = stateWith({ invoices: [z290, z295], payments: [sptx({ amountCents: 64000, iban: IBAN_MUELLER })],
+      allocations: [{ paymentId: 'sp1', invoiceId: 'i-z-290', amountCents: 39000, method: 'confirmed' }] });
+    const r = applyEvent(s, { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceIds: ['i-z-290', 'i-z-295'] }, { at: NOW_0930, isDemo: true, newId: () => 'n1' }).state;
+    expect(r.allocations).toEqual([
+      { paymentId: 'sp1', invoiceId: 'i-z-290', amountCents: 39000, method: 'confirmed' },
+      { paymentId: 'sp1', invoiceId: 'i-z-295', amountCents: 25000, method: 'confirmed' }]);
+    expect(r.audit.at(-1)?.text).toBe('Zahlung über 640,00 € aufgeteilt: RE-Z-2026-290 (390,00 €), RE-Z-2026-295 (250,00 €)');
+    expect(r.ibanLinks).toContainEqual(expect.objectContaining({ iban: IBAN_MUELLER, contactId: 'd-mueller' }));
+  });
+  test('Bestätigen der Verteilung abgelehnt: verschiedene Kontakte, fremde Firma, doppelte IDs', () => {
+    const s = stateWith({ invoices: [z290, { ...z295, contactId: 'd-schmidt' }, workshop], payments: [sptx({ amountCents: 64000 })] });
+    expect(apply(s, { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceIds: ['i-z-290', 'i-z-295'] }).allocations).toEqual([]);
+    expect(apply(s, { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceIds: ['i-z-290', 'i-ws'] }).allocations).toEqual([]);
+    expect(apply(s, { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceIds: ['i-z-290', 'i-z-290'] }).allocations).toEqual([]);
+  });
+  test('Überzahlung beim Bestätigen: Rest bleibt nicht zugeordnet', () => {
+    const r = apply(stateWith({ invoices: [z290], payments: [sptx({ amountCents: 40000 })] }), { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceId: 'i-z-290' });
+    expect(r.allocations).toEqual([{ paymentId: 'sp1', invoiceId: 'i-z-290', amountCents: 39000, method: 'confirmed' }]);
+    expect(paymentRestCents(r, r.payments[0])).toBe(1000);
+  });
+  test('Teilzahlung: Nummer gefunden, Betrag kleiner → Vorschlag; nach Bestätigung 180 € offen', () => {
+    const s = stateWith({ invoices: [z290], payments: [sptx({ amountCents: 21000, reference: 'RE-Z-2026-290' })] });
+    expect(matchBankPayment(s.payments[0], buildMatchContext(s, NOW_0930, 'zulassung')).confidence).toBe('medium');
+    expect(invoiceOpenCents(apply(s, { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceId: 'i-z-290' }), z290)).toBe(18000);
+  });
+  test('Lexware schon bezahlt: Nummer + Gesamtbetrag → automatisch, offen bleibt 0', () => {
+    const r = refresh(stateWith({ invoices: [z301], payments: [sptx({ amountCents: 9900, reference: 'Rechnung RE-Z-2026-301' })] }), NOW_0930);
+    expect(r.allocations).toEqual([{ paymentId: 'sp1', invoiceId: 'i-z-301', amountCents: 9900, method: 'auto' }]);
+    expect(invoiceOpenCents(r, z301)).toBe(0);
+    expect(r.audit.at(-1)?.text).toBe('Automatisch zugeordnet: Rechnung RE-Z-2026-301 (in Lexware schon bezahlt)');
+  });
+  test('Lexware schon bezahlt, Betrag weicht ab → Vorschlag; Bestätigen höchstens bis Gesamtbetrag', () => {
+    const s = stateWith({ invoices: [z301], payments: [sptx({ amountCents: 12000, reference: 'RE-Z-2026-301' })] });
+    expect(matchBankPayment(s.payments[0], buildMatchContext(s, NOW_0930, 'zulassung'))).toMatchObject({ confidence: 'medium', reason: 'Rechnungsnummer gefunden, Betrag weicht ab (Teilzahlung?).' });
+    expect(refresh(s, NOW_0930).allocations).toEqual([]);
+    expect(apply(s, { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceId: 'i-z-301' }).allocations).toEqual([{ paymentId: 'sp1', invoiceId: 'i-z-301', amountCents: 9900, method: 'confirmed' }]);
+  });
+  test('Lexware bezahlt, älter als 180 Tage → kein Treffer', () =>
+    expect(buildMatchContext(stateWith({ invoices: [{ ...z301, issuedOn: '2026-05-01' }] }), NOW_0930, 'zulassung').invoices).toEqual([]));
+  const refundOfSp1 = (id: string, n: number, amountCents: number) =>
+    sptx({ id, externalId: `spk-000000000000000${n}`, amountCents, iban: IBAN_MUELLER, refundOf: 'spk-0000000000000001', bookedOn: '2026-11-12' });
+  test('Rückbuchung einer Sammelzahlung: anteilig, jüngste Rechnung zuerst', () => {
+    const s = stateWith({ invoices: [z290, z295],
+      payments: [sptx({ amountCents: 64000, reference: 'RE-Z-2026-290 RE-Z-2026-295', iban: IBAN_MUELLER }), refundOfSp1('sp2', 2, -30000)] });
+    const r = refresh(s, NOW_0930);
+    expect(r.allocations.filter((a) => a.paymentId === 'sp2').map((a) => [a.invoiceId, a.amountCents])).toEqual([['i-z-295', -25000], ['i-z-290', -5000]]);
+    expect(invoiceOpenCents(r, z295)).toBe(25000);
+    expect(invoiceOpenCents(r, z290)).toBe(5000);
+  });
+  test('zwei Teil-Rückbuchungen: nie mehr storniert als zugeordnet', () => {
+    const s = stateWith({ invoices: [z290, z295],
+      payments: [sptx({ amountCents: 64000, reference: 'RE-Z-2026-290 RE-Z-2026-295', iban: IBAN_MUELLER }), refundOfSp1('sp2', 2, -30000), refundOfSp1('sp3', 3, -40000)] });
+    const r = refresh(s, NOW_0930);
+    expect(r.allocations.filter((a) => a.paymentId === 'sp2').map((a) => [a.invoiceId, a.amountCents])).toEqual([['i-z-295', -25000], ['i-z-290', -5000]]);
+    expect(r.allocations.filter((a) => a.paymentId === 'sp3').map((a) => [a.invoiceId, a.amountCents])).toEqual([['i-z-290', -34000]]);
+    expect(r.allocations.filter((a) => a.paymentId !== 'sp1').reduce((n, a) => n + a.amountCents, 0)).toBe(-64000);
+    expect(invoiceOpenCents(r, z290)).toBe(39000);
+    expect(invoiceOpenCents(r, z295)).toBe(25000);
+    expect(refresh(r, NOW_0930).allocations).toEqual(r.allocations);
+  });
 });

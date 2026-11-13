@@ -65,9 +65,13 @@ const isPortalEntry = (x: unknown) =>
   && (x.emails === undefined || (Array.isArray(x.emails) && x.emails.length >= 1 && x.emails.length <= 10 && x.emails.every(isPortalMail) && String(x.emails[0]).toLowerCase() === String(x.email).toLowerCase()))
   && optDate(x.joinedOn) && optDate(x.lastActiveOn) && optStr(x.joinedText, 100) && optStr(x.lastActiveText, 100);
 
+/** Sammelzahlung: 1–50 eindeutige Rechnungs-IDs. */
+const isInvoiceIds = (v: unknown) => Array.isArray(v) && v.length >= 1 && v.length <= 50 && v.every(isStr) && new Set(v).size === v.length;
+
 /** Pflichtfelder je erlaubtem Ereignis (Grundform; die Fachregeln prüft die Engine). */
 const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
-  confirmPaymentMatch: (e) => isStr(e.paymentId) && (isStr(e.contractId) !== isStr(e.invoiceId)),
+  confirmPaymentMatch: (e) => isStr(e.paymentId) && [isStr(e.contractId), isStr(e.invoiceId), e.invoiceIds !== undefined].filter(Boolean).length === 1
+    && (e.invoiceIds === undefined || isInvoiceIds(e.invoiceIds)),
   dismissPayment: (e) => isStr(e.paymentId),
   settleInvoice: (e) => isStr(e.invoiceId) && isStr(e.paymentId),
   linkInvoiceToJob: (e) => isStr(e.jobId) && isStr(e.invoiceId),
