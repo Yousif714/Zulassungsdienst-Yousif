@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useAppStore } from '@/data/store';
-import { PULL_THRESHOLD, pullProgress } from '@/data/refresh';
+import { PULL_THRESHOLD, pullBlocked, pullProgress } from '@/data/refresh';
 
 /**
  * Herunterziehen zum Aktualisieren (die installierte iPhone-App hat es nicht von Haus aus). Nur im Echtmodus,
@@ -25,9 +25,9 @@ export function PullToRefresh() {
     if (mode !== 'real') return;
     const onStart = (e: TouchEvent) => {
       const t = e.touches[0];
-      // Nur am oberen Rand und nicht in waagerecht scrollenden Bereichen.
-      const inner = e.target instanceof Element && e.target.closest('[data-no-pull], input, textarea, select');
-      start.current = window.scrollY <= 0 && !inner && e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY } : null;
+      // Nur am oberen Rand, nicht in Dialogen, Eingaben oder bereits gescrollten Bereichen.
+      const blocked = e.target instanceof Element && pullBlocked(e.target);
+      start.current = window.scrollY <= 0 && !blocked && e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY } : null;
     };
     const onMove = (e: TouchEvent) => {
       const t = e.touches[0];

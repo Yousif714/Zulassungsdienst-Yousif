@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createReloadGate, pullProgress, PULL_THRESHOLD } from '@/data/refresh';
+import { createReloadGate, createWriteTracker, pullBlocked, pullProgress, PULL_THRESHOLD, type PullNode } from '@/data/refresh';
 import { UnauthorizedError, createRealClient } from '@/data/real-client';
 
 describe('createReloadGate (höchstens alle 10 s)', () => {
@@ -50,4 +50,47 @@ describe('RealClient.syncNow', () => {
     const c = createRealClient((async () => json(401, {})) as unknown as typeof fetch);
     await expect(c.syncNow()).rejects.toBeInstanceOf(UnauthorizedError);
   });
+});
+
+describe('createWriteTracker', () => {
+  it('Laden ohne Zwischenfall wird übernommen', () => {
+    const w = createWriteTracker();
+    expect(w.canApply(w.snapshot())).toBe(true);
+  });
+  it('Schreibzugriff während des Ladens (auch abgeschlossen) verwirft das Ergebnis', () => {
+    const w = createWriteTracker();
+    const snap = w.snapshot();
+    w.begin();
+    expect(w.canApply(snap)).toBe(false);
+    w.end();
+    expect(w.canApply(snap)).toBe(false);
+    expect(w.canApply(w.snapshot())).toBe(true);
+  });
+  it('bump (KI-Antwort, Abgleich) verwirft ein laufendes Laden', () => {
+    const w = createWriteTracker();
+    const snap = w.snapshot();
+    w.bump();
+    expect(w.canApply(snap)).toBe(false);
+  });
+  it('laufender Schreibzugriff blockiert, pending ist sichtbar', () => {
+    const w = createWriteTracker();
+    w.begin();
+    expect(w.pending).toBe(1);
+    expect(w.canApply(w.snapshot())).toBe(false);
+  });
+});
+
+const node = (o: Partial<{ tag: string; scrollTop: number; attrs: Record<string, string>; parent: PullNode | null }> = {}): PullNode => ({
+  parentElement: o.parent ?? null, scrollTop: o.scrollTop ?? 0, tagName: o.tag ?? 'DIV',
+  getAttribute: (n) => o.attrs?.[n] ?? null, hasAttribute: (n) => !!o.attrs && n in o.attrs,
+});
+
+describe('pullBlocked', () => {
+  it('freier Bereich: nicht blockiert', () => expect(pullBlocked(node({ parent: node() }))).toBe(false));
+  it('gescrollter Vorfahr blockiert', () => expect(pullBlocked(node({ parent: node({ scrollTop: 40 }) }))).toBe(true));
+  it('Dialog und data-no-pull blockieren', () => {
+    expect(pullBlocked(node({ parent: node({ attrs: { role: 'dialog' } }) }))).toBe(true);
+    expect(pullBlocked(node({ attrs: { 'data-no-pull': '' } }))).toBe(true);
+  });
+  it('Eingabefelder blockieren', () => expect(pullBlocked(node({ tag: 'TEXTAREA' }))).toBe(true));
 });

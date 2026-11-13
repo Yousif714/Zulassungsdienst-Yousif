@@ -14,7 +14,7 @@ import { createEmptyState } from './empty-state';
 import { OFFLINE_NOTICE, reloadTo, useMode, type AppMode } from './mode';
 import { UnauthorizedError, createRealClient } from './real-client';
 import { createDemoState } from './seed';
-import { createReloadGate } from './refresh';
+import { createReloadGate, createWriteTracker } from './refresh';
 
 const RELOAD_MIN_GAP_MS = 10_000;
 
@@ -135,7 +135,7 @@ function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; child
   const [notice, setNotice] = useState(mode === 'offline' ? OFFLINE_NOTICE : '');
   const loaded = useRef(false);
   // Schreibzugriffe laufen: ein gleichzeitig geladener Zustand wäre älter als die Antwort und wird verworfen.
-  const writes = useRef({ pending: 0, epoch: 0 });
+  const [writes] = useState(createWriteTracker);
   const gate = useRef(createReloadGate(RELOAD_MIN_GAP_MS));
 
   useEffect(() => {
@@ -149,9 +149,8 @@ function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; child
   }, [client, mode]);
 
   const dispatch = useCallback<Dispatch>(async (e) => {
-    const w = writes.current;
-    w.pending += 1;
-    w.epoch += 1;
+    const w = writes;
+    w.begin();
     try {
       const r = await client.dispatch(e);
       setState(r.state);
@@ -162,41 +161,43 @@ function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; child
       else setNotice(SAVE_FAILED);
       return { created: [] };
     } finally {
-      w.pending -= 1;
-      w.epoch += 1;
+      w.end();
     }
-  }, [client]);
+  }, [client, writes]);
 
   /** Holt den Zustand neu; Fehler lassen den alten Stand stehen. Läuft zwischendurch ein Schreibzugriff, gewinnt dessen Antwort. */
   const reload = useCallback(async () => {
-    const w = writes.current;
-    if (w.pending > 0) return;
-    const epoch = w.epoch;
+    if (writes.pending > 0) return;
+    const snap = writes.snapshot();
     try {
       const s = await client.load();
-      if (w.pending === 0 && w.epoch === epoch) setState(s);
+      if (writes.canApply(snap)) setState(s);
     } catch (err) {
       if (err instanceof UnauthorizedError) reloadTo('/anmelden');
     }
-  }, [client]);
+  }, [client, writes]);
 
   const syncNow = useCallback(async (): Promise<SyncResult> => {
+    const snap = writes.snapshot();
     try {
       const r = await client.syncNow();
       if (!r.ok) return 'wait';
-      if (writes.current.pending === 0) setState(r.state);
+      if (writes.canApply(snap)) {
+        writes.bump();
+        setState(r.state);
+      }
       return 'ok';
     } catch (err) {
       if (err instanceof UnauthorizedError) reloadTo('/anmelden');
       return 'error';
     }
-  }, [client]);
+  }, [client, writes]);
 
   // Die installierte App bleibt im Hintergrund am Leben: beim Zurückkehren neu laden (höchstens alle 10 s).
   useEffect(() => {
     if (mode === 'offline') return;
     const back = () => {
-      if (document.visibilityState === 'visible' && gate.current()) void reload();
+      if (document.visibilityState === 'visible' && writes.pending === 0 && gate.current()) void reload();
     };
     document.addEventListener('visibilitychange', back);
     window.addEventListener('focus', back);
@@ -204,12 +205,13 @@ function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; child
       document.removeEventListener('visibilitychange', back);
       window.removeEventListener('focus', back);
     };
-  }, [mode, reload]);
+  }, [mode, reload, writes]);
 
   const adopt = useCallback((s: AppState) => {
+    writes.bump();
     setState(s);
     setNotice('');
-  }, []);
+  }, [writes]);
 
   if (!state) return null;
   return (

@@ -17,13 +17,14 @@ export async function POST() {
   if (!(await repos.state.claimJobRun('manual-sync:' + minuteKey, at))) {
     return NextResponse.json({ error: 'Bitte kurz warten, der letzte Abgleich ist gerade erst gelaufen.' }, { status: 429 });
   }
-  const deps = getSyncDeps();
+  let secrets: string[] = [];
   try {
+    const deps = getSyncDeps();
+    secrets = Object.values(deps.keys).filter((k): k is string => !!k);
     await syncConnections(repos, deps);
+    const state = await loadState(repos, realNow());
+    return NextResponse.json({ state }, { headers: { 'cache-control': 'no-store' } });
   } catch (err) {
-    const secrets = Object.values(deps.keys).filter((k): k is string => !!k);
     return NextResponse.json({ error: `Abgleich fehlgeschlagen: ${sanitizeError(err, secrets)}` }, { status: 502 });
   }
-  const state = await loadState(repos, realNow());
-  return NextResponse.json({ state }, { headers: { 'cache-control': 'no-store' } });
 }
