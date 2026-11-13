@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { lexwareRoutes, stripeRoutes } from '../fixtures';
+import { lexwareRoutes, qontoRoutes, stripeRoutes } from '../fixtures';
 
 // Erstanmeldung mit virtuellem Passkey: Einrichtung, Echtmodus, Demo-Schalter, Abmelden, erneute Anmeldung.
 test.describe.configure({ mode: 'serial' });
@@ -118,6 +118,27 @@ test('Echtmodus: Verwerfen bleibt verworfen, Lexware-Vertrag zeigt „Bank nicht
   await expect(page.getByTestId('bank-missing')).toHaveText(/Bank nicht verbunden/);
   await page.goto('/nexus');
   await expect(page.getByText('Überweisung · Bank nicht verbunden')).toBeVisible();
+});
+
+test('Echtmodus: Qonto-Import → Vorschlag → Ja → zweite Zahlung derselben IBAN automatisch; Offen ohne Doppelzählung', async () => {
+  const r = await page.request.post('/api/test/import', { data: { qonto: true, routes: { ...stripeRoutes, ...lexwareRoutes, ...qontoRoutes } } });
+  expect(r.ok()).toBe(true);
+  await page.goto('/verbindungen');
+  await expect(page.getByTestId('setup-bank_qonto')).toContainText(/Verbunden · Stand vor \d+ Min/);
+  await expect(page.getByText('Sparkasse (Zulassung)')).toBeVisible();
+  await expect(page.getByText(/Kommt als Upload/)).toBeVisible();
+  await page.goto('/nexus/zuordnen');
+  const cards = page.locator('[data-testid^="match-"]').filter({ has: page.getByRole('button', { name: /Ja, gehört zu Murat Demir/ }) }); // Vorschlag-Karten (Auswahllisten anderer Karten nennen den Namen auch)
+  await expect(cards).toHaveCount(2);
+  await expect(page.locator('[data-testid^="match-"]', { hasText: 'Stripe Technologies' })).toHaveCount(0);
+  await cards.first().getByRole('button', { name: /Ja, gehört zu Murat Demir/ }).click();
+  await expect(cards).toHaveCount(0);
+  await page.goto('/nexus');
+  await expect(page.getByText('Überweisung · Bank nicht verbunden')).toHaveCount(0);
+  await page.getByTestId('open-link').click();
+  await expect(page.locator('[data-testid^="receivable-"]', { hasText: 'RE-1101' })).toHaveCount(0);
+  await expect(page.locator('[data-testid^="receivable-"]', { hasText: 'RE-1043' })).toHaveCount(0);
+  await expect(page.locator('[data-testid^="receivable-"]', { hasText: 'RE-1110' })).toHaveCount(1);
 });
 
 test('Echtmodus: Gesamtrechnung ohne Tag ist zum Monatsende fällig; leerer Tag sperrt Übernehmen, Ergänzen gibt frei', async () => {
