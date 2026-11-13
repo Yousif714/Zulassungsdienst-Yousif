@@ -6,19 +6,21 @@ import { runCoach } from '@/domain/coach';
 import { detectCommitment } from '@/domain/commitments';
 import { reconcileInsights, runDetectors } from '@/domain/detectors';
 import { buildMatchContext } from '@/domain/detectors/payments';
-import type { StoreEvent } from '@/domain/events';
+import type { NewInvoiceReading, StoreEvent } from '@/domain/events';
 import { areaStale } from '@/domain/freshness';
 import { normalizePhone, validPhone } from '@/domain/matching/messages';
 import { bankReturnAllocations, classifyBankTx, matchBankPayment, normalizeIban, type MatchContext } from '@/domain/matching/payments';
 import { stripeAllocations } from '@/domain/matching/stripe';
-import { validateContractDraft } from '@/domain/import/contract-draft';
+import { validateContractDraft, type ContractDraft } from '@/domain/import/contract-draft';
+import { READ_LIMITS, limitReached, planFromReading, readingProposalId, textSearchDismissed } from '@/domain/import/invoice-reading';
+import { invoiceRef, membershipContractOf, retargetAllocations } from '@/domain/ledger/contracts';
 import { mergeBatch } from '@/domain/import/merge';
 import { mergePortalList, normalizePortalEntries } from '@/domain/import/portal-list';
 import { deriveProposals, findContactFor, type ContractProposal } from '@/domain/import/proposals';
 import { portalProposal, portalViews } from '@/domain/portal';
-import { invoiceOpenCents } from '@/domain/ledger/receivables';
+import { coveringContract, invoiceOpenCents } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
-import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Connection, Contact, MemberContract, Message, Settings } from '@/domain/types';
+import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Connection, ContractKind, Contact, Invoice, InvoiceReading, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
 export interface EngineContext { at: Date; isDemo: boolean; newId: () => string }
@@ -393,6 +395,12 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       if (errors.length) return { state: s, audit: { actor: 'owner', text: `Vertrag nicht angelegt: ${errors.join(' ')}` } };
       const contractId = ctx.newId(); // zuerst: created[0] ist die Vertrags-ID
       const { contacts, contactId } = attachContact(s, p, e.contactId, ctx.newId);
+      const inv = p.reading ? s.invoices.find((x) => x.id === p.reading!.invoiceId) : undefined;
+      if (inv && p.reading) {
+        const r = contractFromReading(inv, e.draft, contractId, contactId, p.reading.kind, p.reading.quote, true);
+        const state = { ...s, contacts, contracts: [...s.contracts, r], allocations: retargetAllocations(s.allocations, { invoiceId: inv.id }, { contractId }) };
+        return owner({ state, text: `Vertrag übernommen: ${p.name}, ${e.draft.installments} × ${formatEuro(e.draft.installmentCents)}` });
+      }
       const contract: MemberContract = { ...e.draft, id: contractId, contactId, billing: p.billing, origin: p.sources };
       const isSource = (x: { connectionId: string; externalId: string }) => p.sources.some((r) => r.connectionId === x.connectionId && r.externalId === x.externalId);
       const subscriptions = s.subscriptions.map((x) => (isSource(x) ? { ...x, contractId, confirmedPriceCents: x.priceCents, confirmedEndDate: x.endDate } : x));
@@ -424,8 +432,8 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       const hit = view.contactIds[0] ?? null;
       const found = hit !== null ? { match: 'ref' as const, contactId: hit, name: null } : view.nameMatch ? { match: 'name' as const, contactId: view.nameMatch.contactId, name: view.nameMatch.name } : { match: 'none' as const, contactId: null, name: null };
       const { contacts, contactId } = attachContact(s, p, e.contactId, ctx.newId, { found, emails: mails });
-      // Hat der zugeordnete Kontakt schon einen Vertrag, entsteht kein zweiter: Mitglied nur verknüpfen.
-      if (s.contracts.some((c) => c.contactId === contactId)) {
+      // Hat der zugeordnete Kontakt schon einen Mitgliedsvertrag, entsteht kein zweiter: Mitglied nur verknüpfen.
+      if (membershipContractOf(s, contactId)) {
         const name = contacts.find((c) => c.id === contactId)?.name ?? view.member.name;
         return owner({ state: { ...s, contacts }, text: `Vertrag nicht angelegt: ${name} hat schon einen Vertrag, Mitglied mit dem Kontakt verknüpft.` });
       }
@@ -441,6 +449,35 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       if (!s.ignoredPortalMembers.includes(e.externalId)) return { state: s };
       const m = s.portalMembers.find((x) => x.externalId === e.externalId);
       return owner({ state: { ...s, ignoredPortalMembers: s.ignoredPortalMembers.filter((x) => x !== e.externalId) }, text: `Mitglied wieder eingeblendet: ${m?.name ?? e.externalId}` });
+    }
+    case 'invoicesRead':
+      return applyReadings(s, e.readings, e.warning, e.error, ctx);
+    case 'confirmReadContract':
+    case 'correctContract':
+    case 'deleteReadContract': {
+      const c = s.contracts.find((x) => x.id === e.contractId);
+      if (!c?.readBy) return { state: s, audit: { actor: 'owner', text: 'Nur für von Claude gelesene Verträge' } };
+      const readBy = { ...c.readBy, confirmed: true };
+      if (e.type === 'confirmReadContract') {
+        return owner({ state: { ...s, contracts: s.contracts.map((x) => (x.id === c.id ? { ...x, readBy } : x)) }, text: `Ratenplan bestätigt: Rechnung ${c.readBy.invoiceNumber}` });
+      }
+      if (e.type === 'correctContract') {
+        const errors = validateContractDraft(e.draft);
+        if (errors.length) return { state: s, audit: { actor: 'owner', text: `Vertrag nicht geändert: ${errors.join(' ')}` } };
+        const { totalCents, installments, installmentCents, dueDay, startDate, catchUpMode } = e.draft;
+        const contracts = s.contracts.map((x) => (x.id === c.id ? { ...x, totalCents, installments, installmentCents, dueDay, startDate, catchUpMode, readBy } : x));
+        return owner({ state: { ...s, contracts }, text: `Ratenplan korrigiert: Rechnung ${c.readBy.invoiceNumber}, ${installments} × ${formatEuro(installmentCents)}` });
+      }
+      const inv = s.invoices.find((x) => x.id === c.readBy!.invoiceId);
+      const exceptions = { ...s.exceptions };
+      delete exceptions[c.id];
+      const dismissed = inv ? readingProposalId(inv) : null;
+      const state: AppState = {
+        ...s, exceptions, contracts: s.contracts.filter((x) => x.id !== c.id),
+        allocations: retargetAllocations(s.allocations, { contractId: c.id }, { invoiceId: c.readBy.invoiceId }),
+        dismissedProposals: dismissed && !s.dismissedProposals.includes(dismissed) ? [...s.dismissedProposals, dismissed] : s.dismissedProposals,
+      };
+      return owner({ state, text: `Ratenvertrag gelöscht: Rechnung ${c.readBy.invoiceNumber}` });
     }
     case 'dismissProposal':
       return s.dismissedProposals.includes(e.proposalId) ? { state: s } : { state: { ...s, dismissedProposals: [...s.dismissedProposals, e.proposalId] } };
@@ -483,6 +520,63 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     case 'resetDemo':
       return { state: createDemoState() };
   }
+}
+
+/** Ratenvertrag aus einer gelesenen Rechnung (automatisch oder per „Übernehmen“). */
+function contractFromReading(inv: Invoice, d: ContractDraft, id: string, contactId: string, kind: ContractKind, quote: string, confirmed: boolean): MemberContract {
+  const memberRef = kind === 'membership' && inv.contactExternalId ? [{ connectionId: 'lexware_nexus' as const, externalId: inv.contactExternalId }] : [];
+  return {
+    id, contactId, totalCents: d.totalCents, installments: d.installments, installmentCents: d.installmentCents, dueDay: d.dueDay, startDate: d.startDate,
+    billing: 'legacy', catchUpMode: d.catchUpMode, kind, readBy: { invoiceId: inv.id, invoiceNumber: inv.number, quote, confirmed },
+    origin: [invoiceRef(inv), ...memberRef],
+  };
+}
+
+/** Lesungen der Reihe nach auf dem laufenden Stand bewerten (Review 2: höchstens ein Vertrag je Rechnung). */
+function applyReadings(s0: AppState, readings: NewInvoiceReading[], warning: string | undefined, error: string | undefined, ctx: EngineContext): { state: AppState; audit?: Omit<AuditEntry, 'at' | 'isDemo'> } {
+  let s = s0;
+  let applied = 0;
+  let proposals = 0;
+  for (const nr of readings) {
+    const inv = s.invoices.find((x) => x.id === nr.invoiceId);
+    let r: InvoiceReading;
+    if (nr.error) {
+      const fails = (s.invoiceReadings ?? []).filter((x) => x.invoiceId === nr.invoiceId && x.sourceUpdatedAt === nr.sourceUpdatedAt && x.outcome === 'error').length + 1;
+      r = fails >= READ_LIMITS.maxAttempts ? { ...nr, outcome: 'none', error: `Nach ${READ_LIMITS.maxAttempts} Versuchen aufgegeben: ${nr.error}` } : { ...nr, outcome: 'error' };
+    } else if (!inv || !nr.result || coveringContract(s, inv) !== null || s.dismissedProposals.includes(readingProposalId(inv)) || textSearchDismissed(s, inv)) {
+      r = { ...nr, outcome: 'none' };
+    } else {
+      const plan = planFromReading(s, inv, nr.result);
+      const v = plan.values;
+      if (plan.decision === 'apply' && inv.contactId && v.installments !== null && v.installmentCents !== null && v.dueDay !== null && v.startDate !== null && v.totalCents !== null) {
+        const id = ctx.newId();
+        const draft: ContractDraft = { totalCents: v.totalCents, installments: v.installments, installmentCents: v.installmentCents, dueDay: v.dueDay, startDate: v.startDate, catchUpMode: 'first_rate' };
+        const contract = contractFromReading(inv, draft, id, inv.contactId, plan.kind, nr.result.quote, false);
+        s = { ...s, contracts: [...s.contracts, contract], allocations: retargetAllocations(s.allocations, { invoiceId: inv.id }, { contractId: id }) };
+        r = { ...nr, outcome: 'applied', contractId: id };
+        applied++;
+      } else {
+        r = { ...nr, outcome: plan.decision === 'proposal' ? 'proposal' : 'none' };
+        if (r.outcome === 'proposal') proposals++;
+      }
+    }
+    s = { ...s, invoiceReadings: [...(s.invoiceReadings ?? []), r] };
+  }
+  const at = ctx.at.toISOString();
+  const connections = s.connections.map((c) => {
+    if (c.id !== 'claude_invoices') return c;
+    const failures = c.sync?.failures ?? 0;
+    if (error) return { ...c, status: 'error' as const, lastError: error, sync: { cursor: null, complete: false, failures: failures + 1 } };
+    const next: Connection = { ...c, status: 'connected', lastSuccessAt: at, sync: { cursor: null, complete: true, failures: 0 } };
+    delete next.lastError;
+    const note = warning ?? (limitReached(s, ctx.at) ? 'Monatslimit erreicht' : undefined);
+    if (note) next.lastError = note;
+    return next;
+  });
+  const state = { ...s, connections };
+  return readings.length > 0
+    ? { state, audit: { actor: 'system', text: `Claude: ${readings.length} Rechnungen gelesen, ${applied} Ratenverträge angelegt, ${proposals} Vorschläge` } }
+    : { state };
 }
 
 /** Kontakt zu einem Vorschlag: vorhandenen (Ref, E-Mail, bestätigter Namenstreffer) um Refs ergänzen, sonst neu anlegen. */

@@ -1,4 +1,5 @@
 import 'server-only';
+import { createClaudeInvoiceReader } from '@/ai/claude-invoice-reader';
 import { demoAI } from '@/ai/demo-ai';
 import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { ActionProvider } from '@/domain/actions/machine';
@@ -52,5 +53,6 @@ export function getSyncDeps(o: { only?: ConnectionId[]; budgetMs?: number } = {}
     budgetMs: o.budgetMs ?? 40_000,
     provider,
     ...(o.only ? { only: o.only } : {}),
+    ...(env.anthropicApiKey ? { reader: createClaudeInvoiceReader({ apiKey: env.anthropicApiKey }) } : {}),
   };
 }

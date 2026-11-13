@@ -13,6 +13,8 @@ import invRE1101 from './lexware/invoice-RE-1101.json';
 import invRE1102 from './lexware/invoice-RE-1102.json';
 import invRE1110 from './lexware/invoice-RE-1110.json';
 import invRZ500 from './lexware/invoice-RZ-500.json';
+import invRE1200 from './lexware/invoice-RE-1200.json';
+import invRE1201 from './lexware/invoice-RE-1201.json';
 import voucherlistNexus from './lexware/voucherlist-nexus.json';
 import voucherlistZulassung from './lexware/voucherlist-zulassung.json';
 import ab2001 from './lexware/order-confirmation-AB-2001.json';
@@ -84,6 +86,14 @@ export const lexwareRoutes: Record<string, unknown> = {
   ...Object.fromEntries(['AB-2001', 'AB-2002', 'AB-2003'].map((n) => [`/v1/order-confirmations/${lexOrderConfirmation(n).id}`, lexOrderConfirmation(n)])),
   '/v1/contacts': contactsNexus,
   ...Object.fromEntries(lexInvoices('nexus').map((d) => [`/v1/invoices/${d.id}`, d])),
+};
+/** Wie `lexwareRoutes`, zusätzlich zwei erfundene Ticket-Rechnungen mit Ratenabsprache (Rechnungen lesen): RE-1200 (c-85, 6 Monatsraten) · RE-1201 (c-84, Raten nach Absprache). */
+const ratenEntry = (d: typeof invRE1200) => ({ id: d.id, voucherType: 'invoice', voucherStatus: 'open', voucherNumber: d.voucherNumber, voucherDate: d.voucherDate, updatedDate: d.updatedDate, dueDate: d.dueDate, contactName: '', totalAmount: d.totalPrice.totalGrossAmount, openAmount: d.totalPrice.totalGrossAmount, currency: 'EUR' });
+export const lexwareRoutesRaten: Record<string, unknown> = {
+  ...lexwareRoutes,
+  '/v1/voucherlist': { ...voucherlistNexus, content: [...voucherlistNexus.content, ratenEntry(invRE1200), ratenEntry(invRE1201)] },
+  [`/v1/invoices/${invRE1200.id}`]: invRE1200,
+  [`/v1/invoices/${invRE1201.id}`]: invRE1201,
 };
 export const lexwareRoutesZulassung: Record<string, unknown> = {
   '/v1/voucherlist': voucherlistZulassung,

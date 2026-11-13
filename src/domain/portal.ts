@@ -1,4 +1,5 @@
 import { normalizeNameStrict } from './matching/payments';
+import { isMembershipContract } from './ledger/contracts';
 import { deriveProposals, findContactFor, type ContractProposal } from './import/proposals';
 import { isMembership } from './import/membership';
 import { formatEuro } from './money';
@@ -45,7 +46,8 @@ export function portalViews(s: AppState): PortalView[] {
     const { contactIds, nameMatch } = linkPortalMember(member, s.contacts);
     const ids = new Set(contactIds);
     const mails = new Set(memberEmails(member));
-    const contract = s.contracts.find((c) => ids.has(c.contactId) || (c.origin ?? []).some((o) => o.connectionId === 'portal_nexus' && o.externalId === member.externalId));
+    // Portal-Status nur über den Mitgliedsvertrag (Ticket- und Ratenverträge zählen nicht).
+    const contract = s.contracts.find((c) => isMembershipContract(c) && (ids.has(c.contactId) || (c.origin ?? []).some((o) => o.connectionId === 'portal_nexus' && o.externalId === member.externalId)));
     const proposal = proposals.find((p) => {
       const f = proposalContact.get(p.id)!;
       return ((f.match === 'ref' || f.match === 'email') && f.contactId !== null && ids.has(f.contactId)) || (p.email !== null && mails.has(p.email.toLowerCase()));

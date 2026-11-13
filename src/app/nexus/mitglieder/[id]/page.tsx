@@ -10,6 +10,7 @@ import { Figure, Figures } from '@/components/Figures';
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
+import { ReadContractPanel } from '@/components/ReadContractPanel';
 import { Segmented } from '@/components/Segmented';
 import { TRAFFIC_LABEL, TrafficDot } from '@/components/TrafficDot';
 import { useAI } from '@/data/ai-client';
@@ -18,6 +19,7 @@ import { reminderAction, reminderActionId } from '@/domain/action-factory';
 import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
 import { contractSources, notConnected } from '@/domain/connections';
 import { memberView } from '@/domain/detectors';
+import { contractOnHold, sourceInvoiceOf } from '@/domain/ledger/contracts';
 import { formatEuro } from '@/domain/money';
 import type { Action, InstallmentState, IsoDate } from '@/domain/types';
 
@@ -101,13 +103,18 @@ export default function MemberPage() {
 
   const showSheet = open || !!stored;
   const missing = notConnected(contractSources(contract), state.connections);
+  const onHold = contractOnHold(state, contract);
 
   return (
     <>
       <PageHeader title={name} subtitle={missing
         ? <span className="member-subtitle">{contract.billing === 'legacy' ? 'Überweisung' : 'Stripe'}</span>
-        : <span className="member-subtitle"><TrafficDot traffic={status.traffic} />{TRAFFIC_LABEL(status.traffic)} · {contract.billing === 'legacy' ? 'Überweisung' : 'Stripe'}</span>}
+        : <span className="member-subtitle"><TrafficDot traffic={onHold ? 'grey' : status.traffic} />{TRAFFIC_LABEL(onHold ? 'grey' : status.traffic)} · {contract.billing === 'legacy' ? 'Überweisung' : 'Stripe'}</span>}
         trailing={<BackLink href="/nexus" label="NEXUS" />} />
+
+      {onHold && <p className="note-card" data-testid="on-hold">Rechnung {sourceInvoiceOf(state, contract)?.number} storniert: Dieser Vertrag zählt bis zu Ihrer Entscheidung nicht als überfällig.</p>}
+
+      <ReadContractPanel state={state} contract={contract} dispatch={dispatch} />
 
       {missing && <p className="note-card" data-testid="bank-missing">{contract.billing === 'legacy' ? 'Bank nicht verbunden' : 'Stripe nicht verbunden'}: Der Stand dieses Vertrags ist unbekannt.</p>}
 

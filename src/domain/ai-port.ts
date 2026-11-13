@@ -1,4 +1,4 @@
-import type { Call, Commitment, Contact, Job, Message } from './types';
+import type { Call, Commitment, Contact, InvoiceReadResult, IsoDate, Job, Message } from './types';
 import type { MemberStatus } from './ledger/status';
 
 export interface ChatAnswer { text: string; links: { label: string; href: string }[] }
@@ -42,3 +42,15 @@ export interface AIProvider {
   slidesFor(call: Call): Promise<Call['slides']>;
   detectCommitment(text: string, sentAt: string): Promise<{ kind: Commitment['kind']; dueAt: string } | null>;
 }
+
+/** Rechnung lesen: nur diese Felder gehen an den Leser (kein Kontaktname, keine E-Mail). */
+export interface InvoiceReadInput { number: string; totalCents: number; issuedOn: IsoDate; dueDate: IsoDate; text: string }
+export interface InvoiceReadOutput { result: InvoiceReadResult; model: string; inputTokens: number; outputTokens: number }
+/** fatal = Schlüssel ungültig oder ohne Rechte (weitere Versuche im selben Lauf sinnlos). */
+export class InvoiceReadError extends Error {
+  constructor(message: string, readonly fatal: boolean) {
+    super(message);
+    this.name = 'InvoiceReadError';
+  }
+}
+export interface InvoiceReader { readonly model: string; read(i: InvoiceReadInput, o: { timeoutMs: number }): Promise<InvoiceReadOutput> }

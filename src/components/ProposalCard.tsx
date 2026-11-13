@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { formatIsoDe } from '@/domain/clock';
 import { draftFromProposal, validateContractDraft, type ContractDraft } from '@/domain/import/contract-draft';
 import { findContactFor, MONTH_END, type ContractProposal, type ProposalValues } from '@/domain/import/proposals';
+import { contractKindLabel } from '@/domain/ledger/contracts';
 import { formatEuro, parseEuroInput } from '@/domain/money';
 import type { Contact } from '@/domain/types';
 
@@ -39,12 +40,13 @@ const money = (c: number | undefined) => (c === undefined ? '' : formatEuro(c));
 const num = (n: number | undefined) => (n === undefined ? '' : String(n));
 const whole = (s: string) => (/^\d+$/.test(s.trim()) ? Number(s) : 0);
 
-export function ProposalCard({ proposal: p, contacts, onConfirm, onDismiss, dismissLabel = 'Verwerfen' }: {
+export function ProposalCard({ proposal: p, contacts, onConfirm, onDismiss, dismissLabel = 'Verwerfen', confirmLabel = 'Übernehmen' }: {
   proposal: ContractProposal;
   contacts: Contact[];
   onConfirm: (draft: ContractDraft, contactId: string | null) => void;
   onDismiss: () => void;
   dismissLabel?: string;
+  confirmLabel?: string;
 }) {
   const base = draftFromProposal(p);
   const found = findContactFor(p, contacts);
@@ -80,6 +82,13 @@ export function ProposalCard({ proposal: p, contacts, onConfirm, onDismiss, dism
           <span className="chip" data-confidence={p.complete ? 'high' : 'low'}>{p.complete ? 'vollständig' : 'bitte ergänzen'}</span>
         </p>
         {p.possibleMatch && <p className="list-row-subtitle">gehört evtl. zu {p.possibleMatch.name}</p>}
+        {p.reading && (
+          <>
+            <p className="list-row-subtitle"><span className="chip">{contractKindLabel(p.reading.kind)}</span></p>
+            {p.reading.quote && <blockquote className="list-row-subtitle" data-testid={`proposal-${id}-quote`}>„{p.reading.quote}“</blockquote>}
+            <ol className="steps">{p.steps.map((x) => <li key={x}>{x}</li>)}</ol>
+          </>
+        )}
         {found.match === 'name' && (
           <div role="group" aria-label={`Ist das ${found.name}?`} data-testid={`proposal-${id}-same`}>
             <p className="list-row-subtitle">Ist das {found.name}?</p>
@@ -105,7 +114,7 @@ export function ProposalCard({ proposal: p, contacts, onConfirm, onDismiss, dism
           <button type="button" className="btn btn-secondary" onClick={() => setEditing((v) => !v)}>Bearbeiten</button>
           <button type="button" className="btn btn-secondary" onClick={onDismiss}>{dismissLabel}</button>
           <button type="button" className="btn btn-primary" disabled={blocker !== null}
-            onClick={() => onConfirm(draft, found.match === 'name' && same === true ? found.contactId : null)}>Übernehmen</button>
+            onClick={() => onConfirm(draft, found.match === 'name' && same === true ? found.contactId : null)}>{confirmLabel}</button>
         </div>
       </div>
     </article>

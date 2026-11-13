@@ -12,6 +12,7 @@ import { portalViews, type PortalView } from '@/domain/portal';
 import { monthForecast } from '@/domain/ledger/forecast';
 import type { AppState, Invoice, IsoDate, MemberContract, Payment, StoredInsight } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
+import { contractKindLabel, contractOnHold } from '@/domain/ledger/contracts';
 
 export const openInsights = (s: AppState): StoredInsight[] => s.insights.filter((i) => i.status === 'open');
 
@@ -24,6 +25,10 @@ export type MemberRow = {
   billing: MemberContract['billing'];
   /** Die Quelle des Vertrags (Bank bzw. Stripe) ist nicht verbunden: der Stand ist unbekannt. */
   notConnected: boolean;
+  /** „Mitgliedschaft“, „Ticket-Raten“ oder „Ratenzahlung“. */
+  kindLabel: string;
+  /** Quellrechnung storniert: Vertrag ruht bis zur Entscheidung des Inhabers. */
+  onHold: boolean;
 };
 
 export function memberRows(s: AppState, today: IsoDate): MemberRow[] {
@@ -37,6 +42,8 @@ export function memberRows(s: AppState, today: IsoDate): MemberRow[] {
       openCents: v.status.openCents,
       billing: c.billing,
       notConnected: notConnected(contractSources(c), s.connections),
+      kindLabel: contractKindLabel(c.kind),
+      onHold: contractOnHold(s, c),
     };
   });
 }
@@ -54,15 +61,19 @@ export function overdueMembers(
   s: AppState,
   today: IsoDate,
 ): { contractId: string; contactId: string; name: string; arrearsCents: number; traffic: 'yellow' | 'red' }[] {
-  return memberRows(s, today)
-    .filter((r): r is MemberRow & { traffic: 'yellow' | 'red' } => !r.notConnected && (r.traffic === 'yellow' || r.traffic === 'red'))
-    .map((r) => ({
-      contractId: r.contractId,
-      contactId: s.contracts.find((c) => c.id === r.contractId)!.contactId,
-      name: r.name,
-      arrearsCents: r.arrearsCents,
-      traffic: r.traffic,
-    }))
+  // Je Kontakt ein Eintrag: Summe aller Verträge, Link auf den mit dem höchsten Rückstand, schlechteste Ampel.
+  const byContact = new Map<string, { contractId: string; contactId: string; name: string; arrearsCents: number; traffic: 'yellow' | 'red'; top: number }>();
+  for (const r of memberRows(s, today)) {
+    if (r.notConnected || r.onHold || (r.traffic !== 'yellow' && r.traffic !== 'red')) continue;
+    const contactId = s.contracts.find((c) => c.id === r.contractId)!.contactId;
+    const prev = byContact.get(contactId);
+    if (!prev) { byContact.set(contactId, { contractId: r.contractId, contactId, name: r.name, arrearsCents: r.arrearsCents, traffic: r.traffic, top: r.arrearsCents }); continue; }
+    prev.arrearsCents += r.arrearsCents;
+    if (r.traffic === 'red') prev.traffic = 'red';
+    if (r.arrearsCents > prev.top) { prev.top = r.arrearsCents; prev.contractId = r.contractId; }
+  }
+  return [...byContact.values()]
+    .map((x) => ({ contractId: x.contractId, contactId: x.contactId, name: x.name, arrearsCents: x.arrearsCents, traffic: x.traffic }))
     .sort((a, b) => b.arrearsCents - a.arrearsCents);
 }
 

@@ -87,7 +87,7 @@ test('Verbindungen: Anleitung für Phase 2 je Verbindung', async ({ page }) => {
   await expect(bank).toContainText('Stand vor 10 Min.');
   await page.getByTestId('conn-help-bank_qonto').getByText('So verbindest du das (Phase 2)').click();
   await expect(page.getByTestId('conn-help-bank_qonto')).toContainText('QONTO_LOGIN');
-  await expect(page.getByText('So verbindest du das (Phase 2)')).toHaveCount(12);
+  await expect(page.getByText('So verbindest du das (Phase 2)')).toHaveCount(13);
 });
 
 test('Protokoll: jeder Eintrag, neueste zuerst, mit Demo-Etikett', async ({ page }) => {

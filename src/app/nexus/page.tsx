@@ -29,7 +29,7 @@ export default function NexusPage() {
   const money = buildBriefing(state, 'morning', at).money.find((m) => m.company === 'nexus')!;
   const forecast = nexusForecast(state, today);
   const rows = memberRows(state, today).sort((a, b) => b.arrearsCents - a.arrearsCents || a.name.localeCompare(b.name, 'de'));
-  const shown = filter === 'overdue' ? rows.filter((r) => r.traffic !== 'green') : rows;
+  const shown = filter === 'overdue' ? rows.filter((r) => r.traffic !== 'green' && !r.onHold) : rows;
   const receivables = nexusReceivables(state, today);
   const toMatch = unallocatedBankPayments(state).length + stripeLexCases(state).length;
   const openProposals = deriveProposals(state).length;
@@ -72,8 +72,12 @@ export default function NexusPage() {
           {shown.map((r) => (
             <li key={r.contractId}>
               <ListRow href={`/nexus/mitglieder/${r.contractId}`} testId={`member-row-${r.contractId}`}
-                leading={r.notConnected ? undefined : <TrafficDot traffic={r.traffic} />} title={r.name}
-                subtitle={r.billing === 'legacy' ? (r.notConnected ? 'Überweisung · Bank nicht verbunden' : 'Überweisung') : (r.notConnected ? 'Stripe · nicht verbunden' : 'Stripe')}
+                leading={r.notConnected ? undefined : <TrafficDot traffic={r.onHold ? 'grey' : r.traffic} />} title={r.name}
+                subtitle={[
+                  ...(r.kindLabel !== 'Mitgliedschaft' ? [r.kindLabel] : []),
+                  r.billing === 'legacy' ? (r.notConnected ? 'Überweisung · Bank nicht verbunden' : 'Überweisung') : (r.notConnected ? 'Stripe · nicht verbunden' : 'Stripe'),
+                  ...(r.onHold ? ['ruht'] : []),
+                ].join(' · ')}
                 value={!r.notConnected && r.arrearsCents > 0 ? <span className="amount arrears-value">{formatEuro(r.arrearsCents)}</span> : undefined} />
             </li>
           ))}

@@ -2,7 +2,9 @@ import { daysBetween, formatIsoDe, type IsoDate } from '../clock';
 import { monthDate } from '../ledger/schedule';
 import { nameMatches, normalizeNameStrict } from '../matching/payments';
 import { formatEuro } from '../money';
-import type { AppState, Contact, ExternalRef, Invoice, OrderConfirmation, Subscription } from '../types';
+import type { AppState, Contact, ContractKind, ExternalRef, Invoice, OrderConfirmation, Subscription } from '../types';
+import { invoiceRef } from '../ledger/contracts';
+import { readingProposals } from './invoice-reading';
 import { isMembership, parseMembership } from './membership';
 
 export interface ProposalValues { totalCents: number | null; installments: number | null; installmentCents: number | null; dueDay: number | null; startDate: IsoDate | null }
@@ -10,11 +12,12 @@ export interface ContractProposal extends ProposalValues {
   id: string; name: string; email: string | null; billing: 'stripe' | 'legacy';
   sources: ExternalRef[]; // Abo bzw. Lexware-Kontakt → Vorschlags-ID und später MemberContract.origin
   contactRefs: ExternalRef[]; // stripe_nexus:cus_…, lexware_nexus:c-…
-  sourceLabel: 'Stripe' | 'Lexware' | 'Lexware (AB)' | 'Stripe + Lexware' | 'Portal';
+  sourceLabel: 'Stripe' | 'Lexware' | 'Lexware (AB)' | 'Lexware (Claude)' | 'Stripe + Lexware' | 'Portal';
   references: string[]; // 'Abo sub_A', 'Rechnung RE-1043', 'Auftragsbestätigung AB-2001'
   complete: boolean; // vollständig / bitte ergänzen
   steps: string[]; // Rechenweg
   possibleMatch: { id: string; name: string } | null; // „gehört evtl. zu …“
+  reading?: { invoiceId: string; invoiceNumber: string; kind: ContractKind; quote: string; note: string | null }; // aus einer Claude-Lesung
 }
 
 const refKey = (r: ExternalRef) => `${r.connectionId}:${r.externalId}`;
@@ -87,17 +90,19 @@ function fromInvoices(contactExternalId: string, invs: Invoice[], contact: Conta
   };
 }
 
+/** Erste Fälligkeit am Tag `dueDay` ab dem Belegdatum: im selben Monat, sonst im Folgemonat. */
+export function firstDueOnOrAfter(issuedOn: IsoDate, dueDay: number): IsoDate {
+  const [y, m, d] = issuedOn.split('-').map(Number);
+  return monthDate(y, m - 1 + (dueDay >= d ? 0 : 1), dueDay);
+}
+
 /** Ein Beleg über die ganze Laufzeit (Gesamtrechnung oder AB): Gesamt ÷ Monate; ohne Tag im Text zum Monatsende. */
 function fromSingleDocument(doc: { number: string; totalCents: number; issuedOn: IsoDate; text?: string }, kind: string, textLabel: string, dateLabel: string): { values: ProposalValues; steps: string[] } {
   const parsedDoc = parseMembership(doc.text ?? '')!;
   const { months } = parsedDoc;
   // Ohne Tag im Text: fällig zum Monatsende (31 = letzter Tag des Monats). Inhaber: „Hauptsache im Monat gezahlt“.
   const dueDay = parsedDoc.dueDay ?? MONTH_END;
-  let startDate: IsoDate = doc.issuedOn;
-  if (parsedDoc.dueDay !== null) {
-    const [y, m, d] = doc.issuedOn.split('-').map(Number);
-    startDate = monthDate(y, m - 1 + (dueDay >= d ? 0 : 1), dueDay);
-  }
+  const startDate: IsoDate = parsedDoc.dueDay !== null ? firstDueOnOrAfter(doc.issuedOn, dueDay) : doc.issuedOn;
   const values = {
     totalCents: doc.totalCents, installments: months, installmentCents: months ? Math.floor(doc.totalCents / months) : null,
     dueDay, startDate,
@@ -136,6 +141,7 @@ export function deriveProposals(s: AppState): ContractProposal[] {
     if (i.connectionId !== 'lexware_nexus' || i.status === 'void' || !i.contactExternalId) continue;
     if (!parseMembership(i.text ?? '')) continue;
     if (consumed.has(refKey({ connectionId: 'lexware_nexus', externalId: i.contactExternalId }))) continue;
+    if (consumed.has(refKey(invoiceRef(i)))) continue; // schon Ratenvertrag aus Claude-Lesung (Final-Review I2)
     byContact.set(i.contactExternalId, [...(byContact.get(i.contactExternalId) ?? []), i]);
   }
   const lexContact = (id: string) => s.contacts.find((c) => (c.externalRefs ?? []).some((r) => r.connectionId === 'lexware_nexus' && r.externalId === id));
@@ -179,7 +185,11 @@ export function deriveProposals(s: AppState): ContractProposal[] {
     if (a) b.possibleMatch = { id: a.id, name: a.name };
   }
 
-  return [...mergedStripe.values(), ...unmatchedStripe, ...unmatchedLex]
+  // Claude-Lesungen: nicht für Rechnungen, die schon im Textsuche-Vorschlag stecken (Review 1).
+  const inTextSearch = new Set([...byContact.values()].flat().map((i) => i.id));
+  const read = readingProposals(s).filter((p) => !inTextSearch.has(p.reading!.invoiceId));
+
+  return [...mergedStripe.values(), ...unmatchedStripe, ...unmatchedLex, ...read]
     .filter((p) => !dismissed.has(p.id))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 }

@@ -54,3 +54,9 @@ describe('readEnv', () => {
     expect(() => readEnv({ ...FULL, SESSION_SECRET: 's'.repeat(31) })).toThrow(/SESSION_SECRET/);
   });
 });
+
+test('ANTHROPIC_API_KEY optional', () => {
+  expect(readEnv(FULL).anthropicApiKey).toBeUndefined();
+  expect(readEnv({ ...FULL, ANTHROPIC_API_KEY: ' ' }).anthropicApiKey).toBeUndefined();
+  expect(readEnv({ ...FULL, ANTHROPIC_API_KEY: 'sk-ant-x' }).anthropicApiKey).toBe('sk-ant-x');
+});

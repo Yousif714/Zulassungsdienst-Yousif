@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { lexwareRoutes, portalListCsv, portalListText, qontoRoutes, stripeRoutes } from '../fixtures';
+import { lexwareRoutes, lexwareRoutesRaten, portalListCsv, portalListText, qontoRoutes, stripeRoutes } from '../fixtures';
 
 // Erstanmeldung mit virtuellem Passkey: Einrichtung, Echtmodus, Demo-Schalter, Abmelden, erneute Anmeldung.
 test.describe.configure({ mode: 'serial' });
@@ -39,11 +39,11 @@ test('Einrichtung: Passkey anlegen, 10 Codes, danach leerer Echtmodus', async ()
   await expect(page.getByTestId('reply-row')).toHaveCount(0);
 });
 
-test('Verbindungen: Einrichtungs-Liste mit 12 offenen Einträgen', async () => {
+test('Verbindungen: Einrichtungs-Liste mit 13 offenen Einträgen', async () => {
   await page.goto('/verbindungen');
   const list = page.getByTestId('setup-checklist');
   await expect(list.getByRole('heading', { name: 'Einrichtung' })).toBeVisible();
-  await expect(list.locator('li')).toHaveCount(12);
+  await expect(list.locator('li')).toHaveCount(13);
   await expect(list.getByTestId('setup-check')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /simulieren|Wieder verbinden/ })).toHaveCount(0);
 });
@@ -245,3 +245,30 @@ test('Echtmodus: „Jetzt abgleichen“ gleicht ab, zweiter Klick binnen einer M
   await page.getByRole('button', { name: 'Jetzt abgleichen' }).click();
   await expect(page.getByTestId('sync-now-msg')).toHaveText('Bitte kurz warten');
 });
+
+test('Echtmodus: Claude liest „6 Monatsraten“ → Ratenvertrag mit Plakette, Offen zeigt Rate; „Passt“ entfernt die Plakette; unsicher → Vorschlag', async () => {
+  const r = await page.request.post('/api/test/import', { data: { qonto: true, claude: true, routes: { ...stripeRoutes, ...lexwareRoutesRaten, ...qontoRoutes } } });
+  expect((await r.json()).claude_invoices).toBe('ok');
+  await page.goto('/nexus/offen');
+  const row = page.locator('[data-testid^="receivable-contract:"]').filter({ hasText: 'Ticket-Raten' });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('100,00 €');
+  await expect(row).not.toContainText('600,00 €');
+  await expect(page.locator('[data-testid="receivable-invoice:"]').filter({ hasText: 'RE-1200' })).toHaveCount(0);
+  await row.click();
+  await expect(page.getByTestId('read-badge')).toContainText('Von Claude gelesen');
+  await expect(page.getByTestId('read-quote')).toContainText('Zahlbar in 6 Monatsraten.');
+  await page.getByRole('button', { name: 'Passt' }).click();
+  await expect(page.getByTestId('read-badge')).toHaveCount(0);
+  await page.goto('/nexus/mitglieder/vorschlaege');
+  const card = page.locator('article', { hasText: 'Lexware (Claude)' });
+  await expect(card).toContainText('Rechnung RE-1201');
+  await expect(card).toContainText('Anzahl der Raten fehlt');
+  await expect(card).toContainText('bitte ergänzen');
+});
+
+test('Echtmodus: Verbindungen zeigt Claude (Rechnungen lesen) verbunden mit Kosten', async () => {
+  await page.goto('/verbindungen');
+  await expect(page.getByTestId('setup-claude_invoices')).toContainText('Kosten diesen Monat');
+});
+

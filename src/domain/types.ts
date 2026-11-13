@@ -1,13 +1,18 @@
 export type Company = 'nexus' | 'zulassung';
 export type IsoDate = string; // 'YYYY-MM-DD'
-export type ConnectionId = 'lexware_nexus'|'lexware_zulassung'|'stripe_nexus'|'bank_qonto'|'bank_sparkasse'|'gmail'|'icloud'|'info_mail'|'calendar'|'whatsapp_kunden'|'whatsapp_assistent'|'portal_nexus';
+export type ConnectionId = 'lexware_nexus'|'lexware_zulassung'|'stripe_nexus'|'bank_qonto'|'bank_sparkasse'|'gmail'|'icloud'|'info_mail'|'calendar'|'whatsapp_kunden'|'whatsapp_assistent'|'portal_nexus'|'claude_invoices';
 export interface ExternalRef { connectionId: ConnectionId; externalId: string }
 export interface Connection { id: ConnectionId; company: Company | null; label: string; status: 'connected'|'missing'|'error'; lastSuccessAt: string | null; lastError?: string; sync?: { cursor: string | null; complete: boolean; failures: number } }
 export interface PortalMember { id: string; connectionId: 'portal_nexus'; externalId: string; email: string; name: string; firstSeenAt: string; lastSeenInListAt: string
   /** Alle Adressen des Mitglieds (Hauptadresse = `email`); fehlt der Wert, gilt `[email]`. */
   emails?: string[]; joinedOn?: string | null; joinedText?: string; lastActiveOn?: string | null; lastActiveText?: string }
 export interface Contact { id: string; company: Company; kind: 'member'|'private'|'dealer'; name: string; phones: string[]; emails: string[]; externalRefs?: ExternalRef[]; contactPersons?: string[] }
-export interface MemberContract { id: string; contactId: string; totalCents: number; installments: number; installmentCents: number; dueDay: number; startDate: IsoDate; billing: 'legacy'|'stripe'; specialTerms?: string; catchUpMode: 'first_rate'|'spread'; origin?: ExternalRef[] }
+export type ContractKind = 'membership' | 'ticket' | 'other';
+/** kind fehlt = Mitgliedschaft (alte Daten). readBy = von Claude aus einer Rechnung gelesen. */
+export interface MemberContract { id: string; contactId: string; totalCents: number; installments: number; installmentCents: number; dueDay: number; startDate: IsoDate; billing: 'legacy'|'stripe'; specialTerms?: string; catchUpMode: 'first_rate'|'spread'; origin?: ExternalRef[]; kind?: ContractKind; readBy?: { invoiceId: string; invoiceNumber: string; quote: string; confirmed: boolean } }
+/** Strukturierte Lesung einer Rechnung durch Claude (Beträge in Cent). */
+export interface InvoiceReadResult { hasPlan: boolean; kind: ContractKind; installments: number | null; installmentCents: number | null; firstDueDate: IsoDate | null; dueDay: number | null; quote: string; certain: boolean; note: string | null }
+export interface InvoiceReading { id: string; invoiceId: string; sourceUpdatedAt: string; readAt: string; model: string; result: InvoiceReadResult | null; outcome: 'applied'|'proposal'|'none'|'error'; error?: string; contractId?: string; inputTokens: number; outputTokens: number; costMicroCents: number }
 export type ContractException =
   | { kind: 'deferral'; from: IsoDate; to: IsoDate }
   | { kind: 'pause'; from: IsoDate; months: number }
@@ -28,7 +33,7 @@ export interface Call { id: string; series: string; startsAt: string; topic: str
 export interface ContentItem { id: string; title: string; stage: 'idea'|'raw'|'edit'|'approval'|'published'; due?: IsoDate }
 export interface Vehicle { id: string; contactId: string; vin: string; plate: string; model: string }
 export interface Job { id: string; vehicleId: string; contactId: string; service: string; location: 'bottrop'|'essen'|'online'|'onsite'; priceCents: number; status: 'open'|'waiting_customer'|'done'|'invoiced'|'paid'; doneAt: string | null; invoiceIds: string[]; notes?: string }
-export type InsightType = 'reply_waiting'|'member_overdue'|'unmatched_payment'|'stripe_paid_lexware_open'|'double_invoice'|'job_not_invoiced'|'invoice_overdue'|'call_slides_missing'|'commitment_broken'|'stale_source'|'coach_quick_reply'|'coach_due_day'|'coach_onsite_surcharge'|'coach_invoice_delay'|'subscription_changed'|'portal_no_invoice'|'portal_ab_no_invoice';
+export type InsightType = 'reply_waiting'|'member_overdue'|'unmatched_payment'|'stripe_paid_lexware_open'|'double_invoice'|'job_not_invoiced'|'invoice_overdue'|'call_slides_missing'|'commitment_broken'|'stale_source'|'coach_quick_reply'|'coach_due_day'|'coach_onsite_surcharge'|'coach_invoice_delay'|'subscription_changed'|'portal_no_invoice'|'portal_ab_no_invoice'|'contract_read_review'|'read_invoice_changed';
 export interface Ref { kind: 'member'|'message'|'thread'|'invoice'|'job'|'call'|'payment'|'connection'; id: string; href: string; label: string }
 export interface Insight { dedupeKey: string; type: InsightType; company: Company | null; priority: 'now'|'today'|'info'; title: string; body: string; amountCents?: number; refs: Ref[]; nextStep: string; needsSources: ConnectionId[] }
 export interface StoredInsight extends Insight { status: 'open'|'done'|'snoozed'|'dismissed'|'stale'; createdAt: string; resolvedAt?: string }
@@ -52,4 +57,4 @@ export interface Subscription {
   disputes: string[];
   contractId: string | null; confirmedPriceCents: number | null; confirmedEndDate: IsoDate | null;
 }
-export interface AppState { connections: Connection[]; contacts: Contact[]; contracts: MemberContract[]; exceptions: Record<string, ContractException[]>; payments: Payment[]; allocations: Allocation[]; ibanLinks: IbanLink[]; invoices: Invoice[]; messages: Message[]; commitments: Commitment[]; events: CalendarEvent[]; calls: Call[]; content: ContentItem[]; vehicles: Vehicle[]; jobs: Job[]; insights: StoredInsight[]; actions: Action[]; audit: AuditEntry[]; assistantChat: AssistantMessage[]; subscriptions: Subscription[]; dismissedProposals: string[]; portalMembers: PortalMember[]; ignoredPortalMembers: string[]; orderConfirmations: OrderConfirmation[]; settings: Settings }
+export interface AppState { connections: Connection[]; contacts: Contact[]; contracts: MemberContract[]; exceptions: Record<string, ContractException[]>; payments: Payment[]; allocations: Allocation[]; ibanLinks: IbanLink[]; invoices: Invoice[]; messages: Message[]; commitments: Commitment[]; events: CalendarEvent[]; calls: Call[]; content: ContentItem[]; vehicles: Vehicle[]; jobs: Job[]; insights: StoredInsight[]; actions: Action[]; audit: AuditEntry[]; assistantChat: AssistantMessage[]; subscriptions: Subscription[]; dismissedProposals: string[]; portalMembers: PortalMember[]; ignoredPortalMembers: string[]; orderConfirmations: OrderConfirmation[]; invoiceReadings: InvoiceReading[]; settings: Settings }

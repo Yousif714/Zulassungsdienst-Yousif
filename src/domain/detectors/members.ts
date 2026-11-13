@@ -6,6 +6,7 @@ import { memberStatus, type MemberStatus } from '../ledger/status';
 import { formatEuro } from '../money';
 import type { AppState, ConnectionId, Contact, Insight, InstallmentState, Installment, IsoDate, MemberContract } from '../types';
 import { memberRef } from './refs';
+import { contractOnHold } from '../ledger/contracts';
 
 export function memberView(
   s: AppState,
@@ -35,18 +36,19 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
   const today = todayBerlin(now);
   const out: Insight[] = [];
   let sum = 0;
-  let count = 0;
   // Sammelhinweis: nur Verträge, deren Quelle verbunden ist (wie in den Selektoren)
   const sources = new Set<ConnectionId>();
   const summaryRefs: Insight['refs'] = [];
+  const overdueContacts = new Set<string>();
   for (const c of s.contracts) {
+    if (contractOnHold(s, c)) continue; // stornierte Quellrechnung: ruht, kein Hinweis
     const v = memberView(s, c.id, today);
     if (!v.contact || v.status.traffic === 'green') continue;
     const name = v.contact.name;
     const arrears = v.status.arrearsCents;
     if (!notConnected(contractSources(c), s.connections)) {
       sum += arrears;
-      count++;
+      overdueContacts.add(c.contactId);
       contractSources(c).forEach((x) => sources.add(x));
       summaryRefs.push(memberRef(c.id, name));
     }
@@ -63,6 +65,7 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
       needsSources: contractSources(c),
     });
   }
+  const count = overdueContacts.size;
   if (count >= 2) {
     out.push({
       dedupeKey: `overdue:all:${today}`,

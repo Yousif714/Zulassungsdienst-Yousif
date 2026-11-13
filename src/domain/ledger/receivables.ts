@@ -3,14 +3,20 @@ import { contractSources, notConnected } from '../connections';
 import { memberView } from '../detectors/members';
 import { parseMembership } from '../import/membership';
 import type { AppState, Invoice, IsoDate } from '../types';
+import { contractKindLabel, contractOnHold, invoiceRef, isMembershipContract } from './contracts';
 import { trafficFor } from './status';
 
 /** Vertrag, der diese Mitgliedsrechnung bereits abdeckt (nur über `origin`), sonst null. */
 export function coveringContract(s: AppState, inv: Invoice): string | null {
-  if (inv.connectionId !== 'lexware_nexus' || inv.status === 'void') return null;
+  if (inv.connectionId !== 'lexware_nexus') return null;
+  // Ratenvertrag aus dieser Rechnung (Claude-Lesung): deckt sie immer ab, auch ohne Mitgliedschaftstext.
+  const ref = invoiceRef(inv);
+  const fromInvoice = s.contracts.find((k) => k.origin?.some((o) => o.connectionId === ref.connectionId && o.externalId === ref.externalId));
+  if (fromInvoice) return fromInvoice.id;
+  if (inv.status === 'void') return null;
   if (!inv.text || parseMembership(inv.text) === null) return null;
   if (!inv.contactExternalId) return null;
-  const c = s.contracts.find((k) => k.origin?.some((o) => o.connectionId === 'lexware_nexus' && o.externalId === inv.contactExternalId));
+  const c = s.contracts.find((k) => isMembershipContract(k) && k.origin?.some((o) => o.connectionId === 'lexware_nexus' && o.externalId === inv.contactExternalId));
   return c?.id ?? null;
 }
 
@@ -38,13 +44,13 @@ export interface Receivable {
 export function nexusReceivables(s: AppState, today: IsoDate): { items: Receivable[]; totalCents: number; overdueCents: number } {
   const items: Receivable[] = [];
   for (const c of s.contracts) {
-    if (notConnected(contractSources(c), s.connections)) continue;
+    if (notConnected(contractSources(c), s.connections) || contractOnHold(s, c)) continue;
     const v = memberView(s, c.id, today);
     if (v.status.arrearsCents <= 0 || !v.status.oldestUnpaidDue) continue;
     items.push({
       key: `contract:${c.id}`, kind: 'contract', id: c.id,
       name: v.contact?.name ?? 'Unbekannter Kontakt', contactId: c.contactId,
-      label: 'Mitgliedschaft', source: 'Vertrag',
+      label: contractKindLabel(c.kind), source: 'Vertrag',
       amountCents: v.status.arrearsCents, dueDate: v.status.oldestUnpaidDue,
       daysOverdue: v.status.daysOverdue, traffic: v.status.traffic,
     });

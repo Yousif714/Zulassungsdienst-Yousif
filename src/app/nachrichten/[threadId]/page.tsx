@@ -15,12 +15,13 @@ import { useAppStore } from '@/data/store';
 import { replyAction, replyActionId } from '@/domain/action-factory';
 import { formatBerlin, now, todayBerlin } from '@/domain/clock';
 import type { Action, AppState, Contact, Message } from '@/domain/types';
+import { contractsOfContact, membershipContractOf } from '@/domain/ledger/contracts';
 
 const CHANNEL_LABEL: Record<Message['channel'], string> = { whatsapp: 'WhatsApp', email: 'E-Mail' };
 
 function contactHref(s: AppState, c: Contact): string | null {
   if (c.company === 'zulassung') return `/zulassung/kunden/${c.id}`;
-  const contract = s.contracts.find((x) => x.contactId === c.id);
+  const contract = membershipContractOf(s, c.id) ?? contractsOfContact(s, c.id)[0];
   return contract ? `/nexus/mitglieder/${contract.id}` : null;
 }
 

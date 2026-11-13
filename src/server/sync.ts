@@ -1,5 +1,6 @@
 import 'server-only';
 import type { ActionProvider } from '@/domain/actions/machine';
+import type { InvoiceReader } from '@/domain/ai-port';
 import type { ConnectionId } from '@/domain/types';
 import type { LexwareConnection } from '@/domain/import/lexware';
 import type { Repos } from './db/repository';
@@ -7,6 +8,7 @@ import { pullQonto } from './connectors/qonto';
 import { pullLexware } from './connectors/lexware';
 import { pullStripe } from './connectors/stripe';
 import { ConnectorError, type PullContext, type PullResult } from './connectors/types';
+import { readInvoices } from './read-invoices';
 import { dispatchEvents } from './state-service';
 
 export type SyncId = 'stripe_nexus' | 'lexware_nexus' | 'bank_qonto' | 'lexware_zulassung';
@@ -20,6 +22,8 @@ export interface SyncDeps {
   budgetMs: number;
   provider: ActionProvider;
   only?: ConnectionId[];
+  /** Claude-Leser für „Rechnungen lesen“; fehlt = Schritt übersprungen. */
+  reader?: InvoiceReader;
 }
 export type SyncOutcome = 'ok' | 'partial' | 'error' | 'skipped';
 
@@ -70,6 +74,10 @@ export async function syncConnections(repos: Repos, deps: SyncDeps): Promise<Par
         : await pullLexware(id as LexwareConnection, cursor, ctx);
       await dispatchEvents(repos, [{ type: 'importBatch', connectionId: id, batch: r.batch, cursor: r.cursor, complete: r.complete, ...(r.warning ? { warning: sanitizeError(new ConnectorError(r.warning), secrets) } : {}) }], { at: deps.at, provider: deps.provider });
       out[id] = r.complete ? 'ok' : 'partial';
+      if (id === 'lexware_nexus' && deps.reader) {
+        // Eigener Fehlerbereich: ein Problem beim Lesen ist kein Lexware-Fehler (Final-Review I4).
+        out.claude_invoices = await readInvoices(repos, { at: deps.at, now: deps.now, deadline, reader: deps.reader, provider: deps.provider }).catch(() => 'error' as const);
+      }
     } catch (err) {
       out[id] = 'error';
       try {
@@ -77,5 +85,6 @@ export async function syncConnections(repos: Repos, deps: SyncDeps): Promise<Par
       } catch { /* Speichern des Fehlers scheitert: andere Verbindungen laufen weiter */ }
     }
   }
+  if (!deps.only || deps.only.includes('claude_invoices')) out.claude_invoices ??= 'skipped';
   return out;
 }

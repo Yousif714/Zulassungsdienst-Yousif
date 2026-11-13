@@ -6,6 +6,7 @@ import { createEmptyState } from '@/data/empty-state';
 import type { OrderConfirmation, PortalMember, Subscription } from '@/domain/types';
 
 import { NOW_0930 as NOW, stateWith } from './helpers';
+import { reading } from './import/reading-fixtures';
 
 const demo = () => {
   const s = createDemoState();
@@ -140,4 +141,13 @@ it('Auftragsbestätigungen überstehen toRows/fromRows, eigene Tabelle mit Schl�
   expect(rows.order_confirmations[0]).toMatchObject({ id: 'ab1', connection_id: 'lexware_nexus', external_id: 'oc-1' });
   expect(fromRows(rows).orderConfirmations).toEqual([ab]);
   expect(fromRows({}).orderConfirmations).toEqual([]);
+});
+
+it('invoiceReadings: Tabelle invoice_readings, Rundreise, fehlt = []', () => {
+  const r = reading();
+  const rows = toRows({ ...createEmptyState(), invoiceReadings: [r] });
+  expect(TABLES.invoiceReadings).toBe('invoice_readings');
+  expect(rows.invoice_readings[0]).toMatchObject({ id: 'r1', ord: 0 });
+  expect(fromRows(rows).invoiceReadings).toEqual([r]);
+  expect(fromRows({}).invoiceReadings).toEqual([]);
 });
