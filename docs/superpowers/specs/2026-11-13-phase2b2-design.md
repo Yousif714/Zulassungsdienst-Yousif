@@ -1,6 +1,6 @@
 # Design-Spec Paket 2b-2: Qonto und Zuordnung
 
-**Stand:** 13.11.2026 · **Status:** Entwurf, wartet auf Freigabe
+**Stand:** 13.11.2026 · **Status:** vom Inhaber freigegeben (13.11., „Mach du erstmal“), inkl. 4a
 **Baut auf:** `2026-11-12-phase2b-design.md` (Abschnitt 11) und Paket 2b-1 (live). Die Regeln aus Spec 4a gelten unverändert.
 
 ## 1. Warum
@@ -15,6 +15,7 @@
 **Nicht-Ziele**
 - Sparkasse-Upload (CAMT/CSV) kommt als eigener PR danach (2b-2b).
 - Abgleich mit dem NEXUS-Portal (Mitgliederliste) ist eigenes Thema, siehe Abschnitt 8.
+- Sonderkonditionen aus Rechnungstexten lesen (Claude) ist das nächste Paket.
 - Kein Schreiben bei Qonto.
 
 **Anti-Ziele**
@@ -42,6 +43,30 @@
   - `external_id` = Qonto-`transaction_id`.
 - **Nur Eingänge:** `side = credit` wird importiert. Ausgänge bleiben weg. Eine Rückbuchung einer Lastschrift ist ein Ausgang, sie wird als negative Zahlung importiert, wenn sie sich auf eine importierte Zahlung bezieht. Sonst wird sie ignoriert.
 - **Stripe-Auszahlung erkennen:** Gegenpartei oder Verwendungszweck enthält „STRIPE“ **und** der Absender ist Stripe (Name „Stripe“ / „Stripe Payments“, keine Mitglieds-IBAN). Ein „Stripe“ im Verwendungszweck eines Mitglieds reicht nicht. Auszahlungen bekommen `kind: 'stripe_payout'` und werden nie gutgeschrieben.
+
+## 4a. Alle NEXUS-Rechnungen als Forderungen (Inhaber, 13.11.)
+Der Inhaber will **alle** offenen Lexware-NEXUS-Rechnungen im Blick haben, nicht nur Mitgliedschaften: Event-Tickets, Dienstleistungen, sonstige Rechnungen.
+- **Forderung:**
+  - Jede Lexware-NEXUS-Rechnung, die nicht Entwurf oder storniert ist, ist eine offene Forderung mit `openCents` und `dueDate`.
+  - Mitgliedschafts-Rechnungen, die zu einem bestätigten Vertrag gehören (`origin`), zählen nicht doppelt. Ihre Forderung ist der Vertrag mit seinen Raten.
+- **Bezahlt-Status:**
+  - Maßgeblich bleibt Regel 4a, also Gutschrift nur aus Zahlungen.
+  - Eine Qonto-Zahlung kann einer offenen Rechnung zugeordnet werden (`Allocation` auf Rechnung).
+  - Meldet Lexware eine Rechnung als `paid`, gilt sie als erledigt, auch ohne zugeordnete Zahlung. Der Inhaber hat sie dann in Lexware ausgeglichen. Das ist keine Gutschrift für Verträge.
+- **Zuordnung:**
+  - Kandidaten für eine Qonto-Zahlung sind Verträge **und** offene Rechnungen.
+  - Bei Rechnungen passt der Betrag, wenn er genau dem offenen Betrag entspricht.
+  - Teilzahlungen werden nur nach Bestätigung zugeordnet.
+  - Ist die Rechnungsnummer im Verwendungszweck, gilt das als starkes Signal: automatisch, wenn der Betrag passt.
+  - Mehrdeutigkeit: Es gibt immer nur einen Vorschlag mit Auswahl.
+- **Übersicht NEXUS → Offen:**
+  - Alle offenen Forderungen (Vertragsraten fällig/überfällig plus offene Rechnungen) mit Name, Betrag, fällig seit, Quelle.
+  - Sortiert nach Überfälligkeit, Summe oben.
+  - Ampel wie bei Mitgliedern (Regel 4a).
+- **Heute:**
+  - Hinweis „N Rechnungen überfällig (Summe)“ für NEXUS.
+  - Bestehende Detektoren (`invoice_overdue`) nutzen, keine zweite Logik.
+- **Nicht in 2b-2:** Sonderkonditionen aus dem Rechnungstext lesen (z. B. „Ticket in 2 Raten bis …“). Das kommt im nächsten Paket mit Claude (Rechnungen lesen, Plan mit Rechenweg, Inhaber bestätigt). Bis dahin gilt die Lexware-Fälligkeit.
 
 ## 5. Zuordnung (Härtung)
 - **IBAN** wird normalisiert (Leerzeichen raus, Großbuchstaben) beim Import, beim Verknüpfen und beim Vergleich.
@@ -83,7 +108,12 @@
 - E2E (Echtmodus, Memory-DB): Qonto-Import → Vorschlag auf „Zuordnen“ → Ja → zweite Zahlung derselben IBAN automatisch.
 
 ## 8. Ausblick: Abgleich mit dem NEXUS-Portal (eigenes Paket)
-Der Inhaber will die Mitgliederliste des Portals (Name, E-Mail) gegen Verträge und Lexware-Rechnungen abgleichen: „Wem habe ich keine Rechnung geschrieben?“ Wie die Liste ins System kommt (Export-Datei oder Schnittstelle), hängt von der Portal-Software ab und wird separat geklärt.
+Der Inhaber will die Mitgliederliste des Portals (Name, E-Mail) gegen Verträge und Lexware-Rechnungen abgleichen: „Wem habe ich keine Rechnung geschrieben?“
+- Das Portal `portal.nexusnetzwerk.de` ist eine eigene Web-App auf einer eigenen Supabase (Tabelle `profiles` mit `display_name`, E-Mails in den Auth-Konten).
+- Zugriff nur lesend über Projekt-URL und service_role-Schlüssel als Vercel-Secret.
+- Eigenes Paket nach „Rechnungen lesen“.
+
+**Reihenfolge danach (Inhaber, 13.11.):** 2b-2 → Rechnungen lesen (Claude) → Portal-Abgleich → Sparkasse-Upload → 2b-3 Umstellung auf Stripe.
 
 ## 9. Dem Bauenden überlassen
 - Genaue Qonto-Felder und Parameter (vorher gegen die Doku prüfen; im Session-Netz evtl. gesperrt → Feldnamen markieren, Fehlertexte zeigen den Grund wie bei Lexware).
