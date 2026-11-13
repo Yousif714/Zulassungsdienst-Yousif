@@ -5,7 +5,7 @@ import { toRows, fromRows, diffState, TABLES } from '@/server/db/tables';
 import { createEmptyState } from '@/data/empty-state';
 import type { Subscription } from '@/domain/types';
 
-import { NOW_0930 as NOW } from './helpers';
+import { NOW_0930 as NOW, stateWith } from './helpers';
 
 const demo = () => {
   const s = createDemoState();
@@ -98,5 +98,13 @@ describe('Verträge-Tabellen', () => {
     const s = fromRows({});
     expect(s.subscriptions).toEqual([]);
     expect(s.dismissedProposals).toEqual([]);
+  });
+});
+
+describe('Zuordnung auf Rechnung', () => {
+  it('eigene Zeilen-ID, Rundreise', () => {
+    const s = stateWith({ allocations: [{ paymentId: 'p', invoiceId: 'i1', amountCents: 1, method: 'auto' }] });
+    expect(toRows(s).allocations[0].id).toBe('p:inv:i1:0');
+    expect(fromRows(toRows(s)).allocations).toEqual(s.allocations);
   });
 });

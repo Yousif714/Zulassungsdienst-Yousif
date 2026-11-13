@@ -47,7 +47,7 @@ export function toRows(s: AppState): Record<TableName, Row[]> {
   r.assistant_messages = s.assistantChat.map((x, i) => ({ id: x.id, ord: i, data: x }));
   const seen = new Map<string, number>();
   r.allocations = s.allocations.map((x, i) => {
-    const pair = `${x.paymentId}:${x.contractId}`;
+    const pair = `${x.paymentId}:${x.contractId ?? `inv:${x.invoiceId}`}`;
     const n = seen.get(pair) ?? 0;
     seen.set(pair, n + 1);
     return { id: `${pair}:${n}`, ord: i, data: x };

@@ -20,6 +20,10 @@ function formatDe(d: IsoDate): string {
   return `${day}.${m}.${y}`;
 }
 
+export function trafficFor(arrearsCents: number, daysOverdue: number): 'green' | 'yellow' | 'red' {
+  return arrearsCents === 0 ? 'green' : daysOverdue <= 7 ? 'yellow' : 'red';
+}
+
 export function memberStatus(states: InstallmentState[], overpaidCents: number, today: IsoDate): MemberStatus {
   const due = states.filter((s) => s.dueDate <= today);
   const future = states.filter((s) => s.dueDate > today);
@@ -34,7 +38,7 @@ export function memberStatus(states: InstallmentState[], overpaidCents: number, 
   const oldest = due.find((s) => s.paidCents < s.amountCents) ?? null;
   const oldestUnpaidDue = oldest ? oldest.dueDate : null;
   const daysOverdue = oldest ? daysBetween(oldest.dueDate, today) : 0;
-  const traffic: MemberStatus['traffic'] = arrearsCents === 0 ? 'green' : daysOverdue <= 7 ? 'yellow' : 'red';
+  const traffic = trafficFor(arrearsCents, daysOverdue);
   const next = future.find((s) => s.paidCents < s.amountCents) ?? null;
   const nextDue = next ? { no: next.no, dueDate: next.dueDate, amountCents: next.amountCents } : null;
 

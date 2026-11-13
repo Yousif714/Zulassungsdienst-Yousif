@@ -53,6 +53,8 @@ export function stateWith(p: Partial<AppState> = {}): AppState {
 export function inv(id: string, totalCents: number, p: Partial<Invoice> = {}): Invoice {
   return { id, company: 'zulassung', source: 'lexware', connectionId: 'lexware_zulassung', externalId: `x-${id}`, contactId: 'd-mueller', number: `RE-${id}`, totalCents, openCents: totalCents, issuedOn: '2026-11-10', dueDate: '2026-12-10', status: 'open', ...p };
 }
+export const workshop = inv('i-ws', 14900, { company: 'nexus', connectionId: 'lexware_nexus', contactId: 'm-kaya', number: 'RE-1101', dueDate: '2026-09-26', status: 'overdue', text: 'Workshop' });
+export const member = (id: string) => inv(id, 30000, { company: 'nexus', connectionId: 'lexware_nexus', contactId: 'm-x', contactExternalId: 'c-77', number: id, text: 'NEXUS-Mitgliedschaft 6 Monate, Rate 1' });
 export function ins(dedupeKey: string, p: Partial<Insight> = {}): Insight {
   return { dedupeKey, type: 'reply_waiting', company: null, priority: 'today', title: dedupeKey, body: '', refs: [], nextStep: 'Antwort senden', needsSources: [], ...p };
 }
