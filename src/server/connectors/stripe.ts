@@ -98,7 +98,9 @@ export async function pullStripe(cursor: string | null, ctx: PullContext): Promi
             const invoiceId = await invoiceIdOf(x);
             resolved.push({ ...x, invoiceId });
             const have = [...raw.invoices, ...extra].some((i) => i.id === invoiceId);
-            if (phase === 'refunds' && invoiceId && !have) extra.push(await get(`/v1/invoices/${encodeURIComponent(invoiceId)}`));
+            // Rechnung außerhalb des Fensters nachladen: sonst gehen Erstattung bzw. Streitfall ohne Zahlung verloren.
+            // Erstattungen brauchen die Rechnung im Batch (Mapper); Streitfälle nur die schon importierte Zahlung.
+            if (invoiceId && !have && (phase === 'refunds' || !ctx.known.has(invoiceId))) extra.push(await get(`/v1/invoices/${encodeURIComponent(invoiceId)}`));
           }
           raw.invoices.push(...extra);
           raw[phase].push(...resolved);

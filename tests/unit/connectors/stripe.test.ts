@@ -81,9 +81,10 @@ describe('pullStripe', () => {
     expect(first.batch.disputes).toEqual([]);
     expect(JSON.parse(first.cursor!)).toMatchObject({ phase: 'disputes', startingAfter: null });
     const calls: string[] = [];
-    const second = await pullStripe(first.cursor, ctx({ fetch: fixtureFetch(stripeRoutesPaged, { calls }) }));
+    const known = new Map(ids(first).map((i) => [i, undefined]));
+    const second = await pullStripe(first.cursor, ctx({ fetch: fixtureFetch(stripeRoutesPaged, { calls }), known }));
     expect(second.complete).toBe(true);
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(1); // in_A3 ist schon importiert → kein Nachladen
     expect(second.batch.disputes).toEqual([{ externalId: 'dp_1', invoiceExternalId: 'in_A3' }]);
   });
 
@@ -131,6 +132,15 @@ describe('pullStripe', () => {
     const r = await pullStripe(null, ctx({ fetch: fixtureFetch(routes, { calls }) }));
     expect(calls).toContain('/v1/invoices/in_B1');
     expect(ids(r)).toContain('re_B1');
+  });
+
+  test('Streitfall zu einer Rechnung außerhalb des Fensters: Rechnung wird nachgeladen, Streitfall bleibt zuordenbar', async () => {
+    const calls: string[] = [];
+    const routes = { ...stripeRoutesPaged, [`/v1/invoices?${new URLSearchParams({ status: 'paid', 'created[gte]': String(sinceSec), limit: '100' })}`]: { data: [], has_more: false } };
+    const r = await pullStripe(null, ctx({ fetch: fixtureFetch(routes, { calls }) }));
+    expect(calls).toContain('/v1/invoices/in_A3');
+    expect(ids(r)).toContain('in_A3');
+    expect(r.batch.disputes).toEqual([{ externalId: 'dp_1', invoiceExternalId: 'in_A3' }]);
   });
 
   test('Fehler tragen den Schlüssel nicht', async () => {
