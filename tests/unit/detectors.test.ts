@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { reconcileInsights, runDetectors, selectTop } from '@/domain/detectors';
 import { buildMatchContext } from '@/domain/detectors/payments';
+import { detectInvoiceOverdue } from '@/domain/detectors/invoices';
 import { detectMemberOverdue, memberView } from '@/domain/detectors/members';
 import type { Connection } from '@/domain/types';
 import { detectStaleSources } from '@/domain/detectors/sources';
@@ -87,6 +88,24 @@ describe('Detektoren', () => {
     expect(r).toHaveLength(1);
     expect(r[0].amountCents).toBe(3000);
     expect(r[0].dedupeKey).toBe('inv-over:d-mueller');
+  });
+  test('NEXUS: ein Sammelhinweis mit Anzahl und Summe', () => {
+    const r = detectInvoiceOverdue(stateWith({ invoices: [workshop, { ...workshop, id: 'i-2', number: 'RE-1102', openCents: 60000, totalCents: 60000, text: 'Event-Ticket' }] }), NOW_0930).filter((i) => i.company === 'nexus');
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ dedupeKey: 'inv-over:nexus', title: '2 Rechnungen überfällig, zusammen 749,00 €', priority: 'today', needsSources: ['lexware_nexus'], amountCents: 74900, nextStep: 'Offene Forderungen ansehen' });
+    expect(r[0].refs).toHaveLength(2);
+    expect(r[0].refs.every((x) => x.href === '/nexus/offen')).toBe(true);
+  });
+  test('NEXUS: abgedeckte Mitgliedsrechnung und bezahlte zählen nicht', () => {
+    const covered = { ...member('RE-1043'), contactExternalId: 'c-77', dueDate: '2026-10-01', status: 'overdue' as const };
+    const st = stateWith({
+      contracts: [{ ...base, id: 'k77', contactId: 'm-kaya', origin: [{ connectionId: 'lexware_nexus', externalId: 'c-77' }] }],
+      invoices: [covered, { ...workshop, status: 'paid', openCents: 0 }],
+    });
+    expect(detectInvoiceOverdue(st, NOW_0930).filter((i) => i.company === 'nexus')).toHaveLength(0);
+    const one = detectInvoiceOverdue({ ...st, invoices: [covered, workshop] }, NOW_0930).filter((i) => i.company === 'nexus');
+    expect(one).toHaveLength(1);
+    expect(one[0].title).toBe('1 Rechnung überfällig, zusammen 149,00 €');
   });
   test('call_slides_missing: heute now, morgen today', () => {
     const call = (id: string, startsAt: string) => ({ id, series: 's', startsAt, topic: 'T', slideCount: 5, slidesStatus: 'todo' as const, slides: [] });

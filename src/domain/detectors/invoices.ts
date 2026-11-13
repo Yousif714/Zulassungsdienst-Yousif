@@ -1,7 +1,8 @@
 import { daysBetween, formatIsoDe, todayBerlin } from '../clock';
 import { formatEuro } from '../money';
 import type { AppState, ConnectionId, Insight, Invoice } from '../types';
-import { invoiceRef, paymentRef } from './refs';
+import { invoiceOpenCents } from '../ledger/receivables';
+import { invoiceRef, paymentRef, receivableRef } from './refs';
 
 const isOpen = (i: Invoice) => i.status === 'open' || i.status === 'overdue';
 
@@ -53,25 +54,44 @@ export function detectDoubleInvoices(s: AppState): Insight[] {
 
 export function detectInvoiceOverdue(s: AppState, now: Date): Insight[] {
   const today = todayBerlin(now);
-  const groups = new Map<string, Invoice[]>();
+  const groups = new Map<string, { inv: Invoice; open: number }[]>();
   for (const i of s.invoices) {
-    if (!isOpen(i) || i.openCents <= 0 || i.dueDate >= today) continue;
-    const k = i.contactId ?? 'unbekannt';
-    groups.set(k, [...(groups.get(k) ?? []), i]);
+    const open = invoiceOpenCents(s, i);
+    if (!isOpen(i) || open <= 0 || i.dueDate >= today) continue;
+    const k = i.company === 'nexus' ? 'nexus' : (i.contactId ?? 'unbekannt');
+    groups.set(k, [...(groups.get(k) ?? []), { inv: i, open }]);
   }
   const out: Insight[] = [];
-  for (const [key, list] of groups) {
-    const sum = list.reduce((n, i) => n + i.openCents, 0);
-    const name = s.contacts.find((c) => c.id === key)?.name ?? 'Unbekannter Kontakt';
+  for (const [key, entries] of groups) {
+    const list = entries.map((e) => e.inv);
+    const sum = entries.reduce((n, e) => n + e.open, 0);
     const oldest = list.reduce((a, b) => (a.dueDate <= b.dueDate ? a : b));
     const sources = [...new Set(list.map((i) => i.connectionId))] as ConnectionId[];
+    const noun = list.length === 1 ? 'Rechnung' : 'Rechnungen';
+    const body = `Älteste Fälligkeit ${formatIsoDe(oldest.dueDate)} (${daysBetween(oldest.dueDate, today)} Tage überfällig).`;
+    if (key === 'nexus') {
+      out.push({
+        dedupeKey: 'inv-over:nexus',
+        type: 'invoice_overdue',
+        company: 'nexus',
+        priority: 'today',
+        title: `${list.length} ${noun} überfällig, zusammen ${formatEuro(sum)}`,
+        body,
+        amountCents: sum,
+        refs: list.map((i) => receivableRef(i.id, i.number)),
+        nextStep: 'Offene Forderungen ansehen',
+        needsSources: sources,
+      });
+      continue;
+    }
+    const name = s.contacts.find((c) => c.id === key)?.name ?? 'Unbekannter Kontakt';
     out.push({
       dedupeKey: `inv-over:${key}`,
       type: 'invoice_overdue',
       company: list[0].company,
       priority: 'info',
-      title: `${name}: ${list.length} ${list.length === 1 ? 'Rechnung' : 'Rechnungen'} überfällig, zusammen ${formatEuro(sum)}`,
-      body: `Älteste Fälligkeit ${formatIsoDe(oldest.dueDate)} (${daysBetween(oldest.dueDate, today)} Tage überfällig).`,
+      title: `${name}: ${list.length} ${noun} überfällig, zusammen ${formatEuro(sum)}`,
+      body,
       amountCents: sum,
       refs: list.map((i) => invoiceRef(i, i.number)),
       nextStep: 'Erinnerung vorbereiten',
