@@ -69,6 +69,26 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 - Wenn das Speichern von `actionExecuted` dreimal am Konflikt scheitert, kommt der Fehler erst nach dem Anbieter-Aufruf. Der Sweep fängt das ab. Besser wäre ein eigener Retry nur für dieses Event.
 - `recentJobRuns` und der Supabase-Client sind nur gegen Fake/Memory getestet: einmal `npm run test:integration` gegen „nexus-test“ laufen lassen.
 
+## Offen aus Paket 2b-2 (Reviews, nicht merge-blockierend)
+
+**Mit der ersten echten Qonto-Lieferung prüfen**
+- Die Feldnamen sind nicht gegen die Doku geprüft (Konstanten `QF`/`QO`, „gegen Doku prüfen“). Zu prüfen:
+  - ob die Gegenpartei-IBAN bei Eingängen mitkommt; fehlt sie, lernt die App nie eine IBAN,
+  - welche `operation_type`-Werte eine Rückbuchung trägt; ein falscher Wert lässt die Originalzahlung fälschlich gutgeschrieben,
+  - `local_currency` für Fremdwährung.
+
+**Sonstiges**
+- F12: Eine Gutschrift auf einer Rechnung, die später durch einen bestätigten Vertrag abgedeckt wird, bleibt bei der Rechnung. Der Vertragsrückstand ist dann zu hoch, bis der Inhaber die Zahlung neu zuordnet.
+- Ein neues Qonto-Konto, das während eines Teillaufs vor dem Cursor einsortiert wird, verliert ältere Buchungen (3 Tage Überlappung). Das ist selten. Abhilfe: den Cursor zurücksetzen.
+- `referenceHasNumber` ist asymmetrisch: „RE1101“ gespeichert findet „RE-1101“ im Verwendungszweck nicht.
+- `dismissPayment` ist nicht auf Bank/NEXUS/Eingänge beschränkt.
+- `linkBankReturns` wählt gierig in Eingabereihenfolge statt nach Datum.
+- Testlücken:
+  - Der next_page-Test braucht ein Aufruf-Limit.
+  - Task 8: Payout-Test mit Stripe-Schlüssel, `sanitizeError` entfernt Login und Secret, `api-sync` mit `syncSecrets`.
+- Schichtung: `ledger/receivables.ts` importiert aus `detectors/members`.
+- E2E „Kommt als Upload“ ist nicht an die Sparkassen-Zeile gebunden.
+
 ## Offen aus Paket 2b-1 (Reviews, nicht merge-blockierend)
 
 **Vor 2b-3 (Umstellung auf Stripe) fällig**
