@@ -57,8 +57,8 @@ test('Lexware-Ratenrechnungen', () => expect(P(lexState, 'lexware_nexus:c-77')).
   installmentCents: 30000, installments: 6, totalCents: 180000, startDate: '2026-09-01', dueDay: 1, billing: 'legacy', complete: true,
   references: ['Rechnung RE-1043', 'Rechnung RE-1051', 'Rechnung RE-1060'] }));
 test('Lexware-Gesamtrechnung mit Tag im Text', () => expect(P(lexState, 'lexware_nexus:c-81')).toMatchObject({ totalCents: 120000, installments: 12, installmentCents: 10000, dueDay: 15, startDate: '2026-09-15', complete: true }));
-test('Gesamtrechnung ohne Tag → bitte ergänzen, Start = Rechnungsdatum (F8)', () => expect(P(withText(lexState, 'RE-1100', 'NEXUS-Mitgliedschaft 12 Monate'), 'lexware_nexus:c-81')).toMatchObject({ dueDay: null, startDate: '2026-09-10', complete: false }));
-test('c-83: Gesamtrechnung ohne Tag', () => expect(P(lexState, 'lexware_nexus:c-83')).toMatchObject({ totalCents: 60000, installments: 6, installmentCents: 10000, dueDay: null, startDate: '2026-10-05', complete: false }));
+test('Gesamtrechnung ohne Tag → fällig zum Monatsende (31 = letzter Tag), Start = Rechnungsdatum, vollständig', () => expect(P(withText(lexState, 'RE-1100', 'NEXUS-Mitgliedschaft 12 Monate'), 'lexware_nexus:c-81')).toMatchObject({ dueDay: 31, startDate: '2026-09-10', complete: true }));
+test('c-83: Gesamtrechnung ohne Tag', () => expect(P(lexState, 'lexware_nexus:c-83')).toMatchObject({ totalCents: 60000, installments: 6, installmentCents: 10000, dueDay: 31, startDate: '2026-10-05', complete: true }));
 test('Tag vor Rechnungstag → Folgemonat', () => expect(P(withText(lexState, 'RE-1100', 'NEXUS-Mitgliedschaft 12 Monate, fällig jeweils zum 5. des Monats'), 'lexware_nexus:c-81')!.startDate).toBe('2026-10-05'));
 test('kein Ratenmuster → alle Werte null', () => {
   const s = mergeBatch(lexState, { ...emptyBatch(), invoices: [{ ...memberInvoice('c-77', 'RE-9'), totalCents: 11100, issuedOn: '2026-11-20' }] }, seq()).state;
