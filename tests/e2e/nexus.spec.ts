@@ -170,5 +170,28 @@ test('NEXUS → Offen: Summe oben, sortiert nach Überfälligkeit', async ({ pag
   await page.getByTestId('open-link').click();
   await expect(page).toHaveURL(/\/nexus\/offen$/);
   await expect(page.getByTestId('receivables-total')).toContainText('Summe offen');
-  await expect(page.locator('[data-testid^="receivable-"]').first()).toBeVisible();
+  const rows = page.locator('[data-testid^="receivable-"]');
+  await expect(rows.first()).toBeVisible();
+  const texts = await rows.allInnerTexts();
+  const overdue = texts.map((t) => /fällig seit (\d{2})\.(\d{2})\.(\d{4})/.exec(t)).filter((m) => m !== null)
+    .map((m) => `${m![3]}-${m![2]}-${m![1]}`);
+  expect(overdue.length).toBeGreaterThan(0);
+  expect(overdue).toEqual([...overdue].sort());
+  const contractRow = page.locator('a[data-testid^="receivable-contract:"]').first();
+  await expect(contractRow).toHaveAttribute('href', /\/nexus\/mitglieder\/.+/);
+});
+
+test('NEXUS → Offen: bei veralteten Daten nur Hinweis, keine Summe, kein „Nichts offen“', async ({ page }) => {
+  await page.goto('/nexus?reset=1');
+  await expect(page.getByTestId('open-link')).toBeVisible();
+  await page.evaluate(() => {
+    const key = 'nexus-demo-v1';
+    const s = JSON.parse(localStorage.getItem(key)!);
+    s.connections = s.connections.map((c: { id: string }) => (c.id === 'bank_qonto' ? { ...c, status: 'missing', lastSuccessAt: null } : c));
+    localStorage.setItem(key, JSON.stringify(s));
+  });
+  await page.goto('/nexus/offen');
+  await expect(page.getByTestId('stale-note')).toContainText('Datenstand zu alt');
+  await expect(page.getByTestId('receivables-total')).toHaveCount(0);
+  await expect(page.getByText('Nichts offen.')).toHaveCount(0);
 });

@@ -22,22 +22,26 @@ export default function OffenPage() {
     <>
       <PageHeader title="Offen" subtitle="Alle offenen Forderungen" trailing={<BackLink href="/nexus" label="NEXUS" />} />
 
-      {stale && <p className="note-card" data-testid="stale-note">Datenstand zu alt, um das zu beurteilen.</p>}
+      {stale ? (
+        <p className="note-card" data-testid="stale-note">Datenstand zu alt, um das zu beurteilen.</p>
+      ) : (
+        <>
+          <ListGroup title="Summe">
+            <ListRow testId="receivables-total" title="Summe offen" value={<span className="amount">{formatEuro(totalCents)}</span>}
+              subtitle={<>davon überfällig <span className="amount">{formatEuro(overdueCents)}</span></>} />
+          </ListGroup>
 
-      <ListGroup title="Summe">
-        <ListRow testId="receivables-total" title="Summe offen" value={<span className="amount">{formatEuro(totalCents)}</span>}
-          subtitle={<>davon überfällig <span className="amount">{formatEuro(overdueCents)}</span></>} />
-      </ListGroup>
-
-      <ListGroup title="Forderungen">
-        {items.length === 0 && !stale && <ListRow title="Nichts offen." />}
-        {items.map((r) => (
-          <ListRow key={r.key} testId={`receivable-${r.key}`} href={r.kind === 'contract' ? `/nexus/mitglieder/${r.id}` : undefined}
-            leading={<TrafficDot traffic={r.traffic} />} title={r.name}
-            subtitle={`${r.source} · ${r.label} · ${r.daysOverdue > 0 ? `fällig seit ${formatIsoDe(r.dueDate)}` : `fällig am ${formatIsoDe(r.dueDate)}`}`}
-            value={<span className="amount">{formatEuro(r.amountCents)}</span>} />
-        ))}
-      </ListGroup>
+          <ListGroup title="Forderungen">
+            {items.length === 0 && <ListRow title="Nichts offen." />}
+            {items.map((r) => (
+              <ListRow key={r.key} testId={`receivable-${r.key}`} href={r.kind === 'contract' ? `/nexus/mitglieder/${r.id}` : undefined}
+                leading={<TrafficDot traffic={r.traffic} />} title={r.name}
+                subtitle={`${r.source} · ${r.label} · ${r.daysOverdue > 0 ? `fällig seit ${formatIsoDe(r.dueDate)}` : `fällig am ${formatIsoDe(r.dueDate)}`}`}
+                value={<span className="amount">{formatEuro(r.amountCents)}</span>} />
+            ))}
+          </ListGroup>
+        </>
+      )}
     </>
   );
 }

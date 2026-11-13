@@ -13,8 +13,8 @@ import { useAppStore } from '@/data/store';
 import { MONEY_SOURCES, buildBriefing } from '@/domain/briefing';
 import { formatBerlin, formatBerlinDe, now, todayBerlin } from '@/domain/clock';
 import { areaStale } from '@/domain/freshness';
-import { nexusReceivables } from '@/domain/ledger/receivables';
 import { deriveProposals } from '@/domain/import/proposals';
+import { nexusReceivables } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
 
 type Filter = 'all' | 'overdue';
