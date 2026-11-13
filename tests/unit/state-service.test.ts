@@ -158,12 +158,14 @@ describe('Zustands-Dienst', () => {
     const draft = { totalCents: 60000, installments: 6, installmentCents: 10000, dueDay: 1, startDate: '2026-10-01', catchUpMode: 'first_rate' };
     expect(isClientEvent({ type: 'ignorePortalMember', externalId: 'a@b.de' })).toBe(true);
     expect(isClientEvent({ type: 'ignorePortalMember' })).toBe(false);
+    expect(isClientEvent({ type: 'unignorePortalMember', externalId: 'a@b.de' })).toBe(true);
+    expect(isClientEvent({ type: 'unignorePortalMember' })).toBe(false);
     expect(isClientEvent({ type: 'createPortalContract', externalId: 'a@b.de', draft, contactId: null })).toBe(true);
     expect(isClientEvent({ type: 'createPortalContract', externalId: 'a@b.de', draft: { ...draft, dueDay: 'x' }, contactId: null })).toBe(false);
   });
 
   test('isClientEvent: nur erlaubte Ereignisse mit Grundform', () => {
-    expect(CLIENT_EVENTS.size).toBe(20);
+    expect(CLIENT_EVENTS.size).toBe(21);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);
     expect(isClientEvent({ type: 'dismissInsight', key: 'reply:m-1' })).toBe(true);
     for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {

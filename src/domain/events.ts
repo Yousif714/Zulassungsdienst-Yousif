@@ -45,4 +45,6 @@ export type StoreEvent =
   | { type: 'createPortalContract'; externalId: string; draft: ContractDraft; contactId: string | null }
   /** „Kein zahlendes Mitglied“: Mitglied aus der Arbeitsliste ausblenden (idempotent). */
   | { type: 'ignorePortalMember'; externalId: string }
+  /** „Wieder einblenden“: macht „Kein zahlendes Mitglied“ rückgängig (idempotent). */
+  | { type: 'unignorePortalMember'; externalId: string }
   | { type: 'resetDemo' };

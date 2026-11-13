@@ -422,6 +422,11 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       const hit = view.contactIds[0] ?? null;
       const found = hit !== null ? { match: 'ref' as const, contactId: hit, name: null } : view.nameMatch ? { match: 'name' as const, contactId: view.nameMatch.contactId, name: view.nameMatch.name } : { match: 'none' as const, contactId: null, name: null };
       const { contacts, contactId } = attachContact(s, p, e.contactId, ctx.newId, { found, emails: mails });
+      // Hat der zugeordnete Kontakt schon einen Vertrag, entsteht kein zweiter: Mitglied nur verknüpfen.
+      if (s.contracts.some((c) => c.contactId === contactId)) {
+        const name = contacts.find((c) => c.id === contactId)?.name ?? view.member.name;
+        return owner({ state: { ...s, contacts }, text: `Vertrag nicht angelegt: ${name} hat schon einen Vertrag, Mitglied mit dem Kontakt verknüpft.` });
+      }
       const contract: MemberContract = { ...e.draft, id: contractId, contactId, billing: 'legacy', origin: p.sources };
       return owner({ state: { ...s, contacts, contracts: [...s.contracts, contract] }, text: `Vertrag angelegt (Portal): ${view.member.name}, ${e.draft.installments} × ${formatEuro(e.draft.installmentCents)}` });
     }
@@ -429,6 +434,11 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       if (s.ignoredPortalMembers.includes(e.externalId)) return { state: s };
       const m = s.portalMembers.find((x) => x.externalId === e.externalId);
       return owner({ state: { ...s, ignoredPortalMembers: [...s.ignoredPortalMembers, e.externalId] }, text: `Kein zahlendes Mitglied: ${m?.name ?? e.externalId}` });
+    }
+    case 'unignorePortalMember': {
+      if (!s.ignoredPortalMembers.includes(e.externalId)) return { state: s };
+      const m = s.portalMembers.find((x) => x.externalId === e.externalId);
+      return owner({ state: { ...s, ignoredPortalMembers: s.ignoredPortalMembers.filter((x) => x !== e.externalId) }, text: `Mitglied wieder eingeblendet: ${m?.name ?? e.externalId}` });
     }
     case 'dismissProposal':
       return s.dismissedProposals.includes(e.proposalId) ? { state: s } : { state: { ...s, dismissedProposals: [...s.dismissedProposals, e.proposalId] } };

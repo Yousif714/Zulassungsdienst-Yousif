@@ -91,3 +91,26 @@ test('Kein zahlendes Mitglied: idempotent, bleibt nach erneutem Import ausgeblen
   const b = applyEvent(a, { type: 'importPortalList', entries: parsePortalList(portalListText).entries }, ctx()).state;
   expect(portalViews(b).find((v) => v.member.externalId === 'team@nexusnetzwerk.de')!.status).toBe('ignored');
 });
+
+test('Namenstreffer mit bestehendem Vertrag: kein zweiter Vertrag, nur Verknüpfung', () => {
+  const s0 = withContact(portalState, { name: 'Paula Neu', emails: ['andere@example.de'] });
+  const s = { ...s0, contracts: [{ ...draft, id: 'v1', contactId: 'k1', billing: 'legacy' as const }] };
+  const r = applyEvent(s, { ...e, contactId: 'k1' }, ctx());
+  expect(r.state.contracts).toHaveLength(1);
+  expect(r.state.contacts).toHaveLength(s.contacts.length);
+  expect(r.state.contacts.find((c) => c.id === 'k1')!.externalRefs).toEqual([{ connectionId: 'portal_nexus', externalId: 'neu@example.de' }]);
+  expect(r.state.audit.at(-1)!.text).toBe('Vertrag nicht angelegt: Paula Neu hat schon einen Vertrag, Mitglied mit dem Kontakt verknüpft.');
+  expect(portalViews(r.state).find((v) => v.member.externalId === 'neu@example.de')!.status).toBe('contract');
+});
+
+test('Wieder einblenden: entfernt aus der Ausblendeliste, idempotent', () => {
+  const i = { type: 'ignorePortalMember', externalId: 'team@nexusnetzwerk.de' } as const;
+  const u = { type: 'unignorePortalMember', externalId: 'team@nexusnetzwerk.de' } as const;
+  const hidden = applyEvent(portalState, i, ctx()).state;
+  const r = applyEvent(hidden, u, ctx());
+  expect(r.state.ignoredPortalMembers).toEqual([]);
+  expect(r.state.audit.at(-1)!.text).toBe('Mitglied wieder eingeblendet: team');
+  expect(portalViews(r.state).find((v) => v.member.externalId === 'team@nexusnetzwerk.de')!.status).not.toBe('ignored');
+  const again = applyEvent(r.state, u, ctx());
+  expect(again.state.audit).toHaveLength(r.state.audit.length);
+});

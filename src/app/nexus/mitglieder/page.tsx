@@ -19,7 +19,7 @@ import type { PortalMember } from '@/domain/types';
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
-type Filter = 'all' | 'no_invoice' | 'proposal' | 'contract';
+type Filter = 'all' | 'no_invoice' | 'proposal' | 'contract' | 'ignored';
 
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'Alle' }, { value: 'no_invoice', label: 'Ohne Rechnung' }, { value: 'proposal', label: 'Vorschlag' }, { value: 'contract', label: 'Vertrag' },
@@ -75,7 +75,10 @@ export default function PortalMembersPage() {
     setOpen(false);
   }
 
+  const ignoredCount = rows.filter((r) => r.status === 'ignored').length;
+  const filters = ignoredCount > 0 ? [...FILTERS, { value: 'ignored' as const, label: `Ausgeblendet (${ignoredCount})` }] : FILTERS;
   const visible = rows.filter((r) => {
+    if (filter === 'ignored') return r.status === 'ignored';
     if (r.status === 'ignored') return false;
     if (filter === 'all') return true;
     if (filter === 'no_invoice') return r.status === 'no_invoice' || r.status === 'invoice_only';
@@ -141,7 +144,7 @@ export default function PortalMembersPage() {
         <section className="list-group" aria-labelledby="portal-title">
           <div className="list-group-headline">
             <h2 id="portal-title" className="list-group-title">Mitglieder</h2>
-            <Segmented name="portal-filter" legend="Portal-Mitglieder filtern" value={filter} onChange={setFilter} options={FILTERS} />
+            <Segmented name="portal-filter" legend="Portal-Mitglieder filtern" value={filter} onChange={setFilter} options={filters} />
           </div>
           <ul className="list-group-body">
             {visible.length === 0 && <li><ListRow title="Keine Mitglieder in dieser Ansicht." /></li>}
@@ -166,6 +169,11 @@ export default function PortalMembersPage() {
                     <div className="member-actions">
                       <button type="button" className="btn btn-secondary" aria-label={`Vertrag anlegen für ${m.name}`} onClick={() => setCreating(creating === m.externalId ? null : m.externalId)}>Vertrag anlegen</button>
                       <button type="button" className="btn btn-secondary" aria-label={`Kein zahlendes Mitglied: ${m.name}`} onClick={() => { void dispatch({ type: 'ignorePortalMember', externalId: m.externalId }); }}>Kein zahlendes Mitglied</button>
+                    </div>
+                  )}
+                  {r.status === 'ignored' && (
+                    <div className="member-actions">
+                      <button type="button" className="btn btn-secondary" aria-label={`Wieder einblenden: ${m.name}`} onClick={() => { void dispatch({ type: 'unignorePortalMember', externalId: m.externalId }); }}>Wieder einblenden</button>
                     </div>
                   )}
                   {actionable && creating === m.externalId && (

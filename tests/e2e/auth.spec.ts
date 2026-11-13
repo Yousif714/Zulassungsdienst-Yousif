@@ -170,6 +170,14 @@ test('Echtmodus: Mitgliederliste einfügen, Status, Vertrag anlegen, Kein zahlen
   await expect(page.locator('[data-testid^="portal-row-"]')).toHaveCount(2);
   await page.getByRole('button', { name: 'Kein zahlendes Mitglied: team' }).click();
   await expect(page.getByTestId('portal-row-team@nexusnetzwerk.de')).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Ausgeblendet (1)' }).check();
+  await expect(page.getByTestId('portal-row-team@nexusnetzwerk.de')).toContainText('Kein zahlendes Mitglied');
+  await page.getByRole('button', { name: 'Wieder einblenden: team' }).click();
+  await expect(page.getByRole('radio', { name: /Ausgeblendet/ })).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Ohne Rechnung' }).check();
+  await expect(page.locator('[data-testid^="portal-row-"]')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Kein zahlendes Mitglied: team' }).click();
+  await expect(page.getByTestId('portal-row-team@nexusnetzwerk.de')).toHaveCount(0);
   await page.getByRole('button', { name: 'Vertrag anlegen für Paula Neu' }).click();
   const card = page.getByTestId('proposal-portal_nexus:neu@example.de');
   await expect(card).toContainText('bitte ergänzen');
