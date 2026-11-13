@@ -4,6 +4,22 @@ import { ConnectorError, type PullContext } from './types';
 
 const MAX_RETRY_WAIT_MS = 10_000;
 
+/** Kurzer, bereinigter Grund aus einer 400-Antwort (Lexware `IssueList`/`message`, Stripe `error.message`). Nie der Schlüssel. */
+async function reason(res: Response, key: string): Promise<string> {
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return '';
+  }
+  const b = (body ?? {}) as { IssueList?: { source?: string; i18nKey?: string }[]; message?: string; error?: { message?: string } };
+  const raw = b.IssueList?.length
+    ? b.IssueList.map((i) => [i.source, i.i18nKey].filter(Boolean).join(' ')).join('; ')
+    : (b.message ?? b.error?.message ?? '');
+  const clean = String(raw).split(key).join('***').replace(/[^\p{L}\p{N} .,:;_\-/*]/gu, '').trim().slice(0, 160);
+  return clean ? ` (${clean})` : '';
+}
+
 export function createApiClient(o: {
   label: string;
   baseUrl: string;
@@ -39,7 +55,10 @@ export function createApiClient(o: {
         await o.sleep(Number.isFinite(s) && s > 0 ? Math.min(s * 1000, MAX_RETRY_WAIT_MS) : 1000);
         res = await send(pathAndQuery);
       }
-      if (!res.ok) throw new ConnectorError(`${o.label}: HTTP ${res.status} bei ${path}${res.status === 401 || res.status === 403 ? ' (Schlüssel prüfen)' : ''}`);
+      if (!res.ok) {
+        const hint = res.status === 401 || res.status === 403 ? ' (Schlüssel prüfen)' : res.status === 400 ? await reason(res, o.key) : '';
+        throw new ConnectorError(`${o.label}: HTTP ${res.status} bei ${path}${hint}`);
+      }
       try {
         return await res.json();
       } catch {

@@ -85,7 +85,7 @@ export const stripeRoutesPaged: Record<string, unknown> = {
 };
 
 const vl = (page: number) =>
-  `/v1/voucherlist?${new URLSearchParams({ voucherType: 'invoice', voucherStatus: 'open,paid,paidoff,voided,overdue', voucherDateFrom: '2026-08-01', sort: 'voucherDate,ASC', size: '100', page: String(page) }).toString()}`;
+  `/v1/voucherlist?${new URLSearchParams({ voucherType: 'invoice', voucherStatus: 'any', voucherDateFrom: '2026-08-01', sort: 'voucherDate,ASC', size: '100', page: String(page) }).toString()}`;
 /** Lexware (NEXUS) mit zwei Voucherlist-Seiten: Seite 0 = RE-1043…RE-1100, Seite 1 = RE-1101…RE-1110. */
 export const lexwareRoutesPaged: Record<string, unknown> = {
   ...Object.fromEntries(Object.entries(lexwareRoutes).filter(([k]) => k !== '/v1/voucherlist')),
