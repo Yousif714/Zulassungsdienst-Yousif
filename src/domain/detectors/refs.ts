@@ -13,3 +13,4 @@ export const invoiceRef = (inv: { id: string; company: 'nexus' | 'zulassung'; co
   label,
 });
 export const receivableRef = (invoiceId: string, label: string): Ref => ({ kind: 'invoice', id: invoiceId, href: '/nexus/offen', label });
+export const portalRef = (label: string): Ref => ({ kind: 'member', id: 'portal', href: '/nexus/mitglieder', label });

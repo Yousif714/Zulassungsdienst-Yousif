@@ -2,6 +2,7 @@ import 'server-only';
 import { applyEvent, applyEvents, refresh, type EngineContext } from '@/data/engine';
 import { checkAction, executeApproved, sweepStaleExecutions, type EventSink } from '@/data/executor';
 import type { ActionProvider } from '@/domain/actions/machine';
+import { isPortalEmail } from '@/domain/import/portal-list';
 import type { StoreEvent } from '@/domain/events';
 import { newId } from '@/domain/ids';
 import type { ActionType, AppState, Call, Company, Job, Settings } from '@/domain/types';
@@ -14,7 +15,7 @@ const MAX_ATTEMPTS = 3;
 export const CLIENT_EVENTS: ReadonlySet<StoreEvent['type']> = new Set<StoreEvent['type']>([
   'confirmPaymentMatch', 'dismissPayment', 'settleInvoice', 'linkInvoiceToJob', 'setJobStatus', 'createAction', 'editAction', 'approveAction',
   'retryAction', 'checkAction', 'dismissInsight', 'snoozeInsight', 'suppressCoach', 'setSlides', 'updateSettings',
-  'confirmProposal', 'dismissProposal',
+  'confirmProposal', 'dismissProposal', 'importPortalList', 'createPortalContract', 'ignorePortalMember', 'unignorePortalMember',
 ]);
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -55,6 +56,15 @@ const isContractDraft = (d: unknown) =>
 
 const isSlides = (v: unknown) => Array.isArray(v) && v.every((x) => isObj(x) && Number.isInteger(x.position) && typeof x.title === 'string' && typeof x.body === 'string');
 
+const isPortalMail = (v: unknown) => typeof v === 'string' && v.length <= 254 && isPortalEmail(v);
+const optStr = (v: unknown, max: number) => v === undefined || (typeof v === 'string' && v.length <= max);
+const optDate = (v: unknown) => v === undefined || v === null || isIsoDate(v);
+/** Strenge Form eines Listeneintrags: Typen und Größen aller Felder, `emails[0]` ist die Hauptadresse. */
+const isPortalEntry = (x: unknown) =>
+  isObj(x) && isPortalMail(x.email) && typeof x.name === 'string' && x.name.length <= 200
+  && (x.emails === undefined || (Array.isArray(x.emails) && x.emails.length >= 1 && x.emails.length <= 10 && x.emails.every(isPortalMail) && String(x.emails[0]).toLowerCase() === String(x.email).toLowerCase()))
+  && optDate(x.joinedOn) && optDate(x.lastActiveOn) && optStr(x.joinedText, 100) && optStr(x.lastActiveText, 100);
+
 /** Pflichtfelder je erlaubtem Ereignis (Grundform; die Fachregeln prüft die Engine). */
 const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
   confirmPaymentMatch: (e) => isStr(e.paymentId) && (isStr(e.contractId) !== isStr(e.invoiceId)),
@@ -76,6 +86,10 @@ const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
   updateSettings: (e) => isSettingsPatch(e.patch),
   confirmProposal: (e) => isStr(e.proposalId) && isContractDraft(e.draft) && (e.contactId === null || isStr(e.contactId)),
   dismissProposal: (e) => isStr(e.proposalId),
+  createPortalContract: (e) => isStr(e.externalId) && isContractDraft(e.draft) && (e.contactId === null || isStr(e.contactId)),
+  ignorePortalMember: (e) => isStr(e.externalId),
+  unignorePortalMember: (e) => isStr(e.externalId),
+  importPortalList: (e) => Array.isArray(e.entries) && e.entries.length >= 1 && e.entries.length <= 2000 && e.entries.every(isPortalEntry),
 };
 
 export function isClientEvent(e: unknown): e is StoreEvent {

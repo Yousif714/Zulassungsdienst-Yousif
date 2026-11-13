@@ -13,15 +13,24 @@ function columns(t: TableName): string {
   return 'id,ord,data';
 }
 
-function fail(what: string, error: { message: string }): never {
-  throw new Error(`Supabase ${what}: ${error.message}`);
+/** Tabellen, die fehlen dürfen (Migration noch nicht eingespielt). */
+const OPTIONAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['portal_members', 'ignored_portal_members']);
+
+function fail(what: string, error: { message: string; code?: string }): never {
+  throw Object.assign(new Error(`Supabase ${what}: ${error.message}`), { code: error.code });
+}
+
+/** Nur „Tabelle existiert nicht“ (PostgREST PGRST205, Postgres 42P01); Netz-, Rechte- und Serverfehler nicht. */
+function isMissingTable(e: unknown): boolean {
+  const x = e as { code?: string; message?: string };
+  return x.code === 'PGRST205' || x.code === '42P01' || /could not find the table|schema cache/i.test(x.message ?? '');
 }
 
 /**
  * Liest alle Zeilen seitenweise in stabiler Reihenfolge. Weiter bis eine leere Seite kommt: Ist max-rows im Projekt
  * kleiner als PAGE, liefert der Server weniger Zeilen, ohne dass die Tabelle zu Ende ist.
  */
-async function selectAll<T>(what: string, page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+async function selectAll<T>(what: string, page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string; code?: string } | null }>): Promise<T[]> {
   const out: T[] = [];
   for (;;) {
     const from = out.length;
@@ -50,10 +59,16 @@ export function createSupabaseReposFromClient(db: SupabaseClient): Repos {
       const revision = Number((meta.data as { value: unknown }).value);
       const tables = await Promise.all(
         TABLE_NAMES.map(async (t) => {
-          const rows = await selectAll<Row>(`load ${t}`, (from, to) =>
-            db.from(t).select(columns(t)).order('ord').order('id').range(from, to).overrideTypes<Row[], { merge: false }>(),
-          );
-          return [t, rows] as const;
+          try {
+            const rows = await selectAll<Row>(`load ${t}`, (from, to) =>
+              db.from(t).select(columns(t)).order('ord').order('id').range(from, to).overrideTypes<Row[], { merge: false }>(),
+            );
+            return [t, rows] as const;
+          } catch (e) {
+            // Portal-Tabellen kommen mit einer späteren Migration: läuft sie erst nach dem Deploy, startet die App mit leeren Listen.
+            if (OPTIONAL_TABLES.has(t) && isMissingTable(e)) return [t, [] as Row[]] as const;
+            throw e;
+          }
         }),
       );
       const rows = Object.fromEntries(tables) as Record<TableName, Row[]>;

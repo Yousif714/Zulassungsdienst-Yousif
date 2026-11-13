@@ -3,8 +3,10 @@ import { emptyBatch, type ImportBatch } from '@/domain/import/batch';
 import { mapStripe } from '@/domain/import/stripe';
 import { mergeBatch } from '@/domain/import/merge';
 import type { AppState, MemberContract, Subscription } from '@/domain/types';
-import { lexContacts, lexInvoices, stripeRaw } from '../../fixtures';
-import { stateWith } from '../helpers';
+import { applyEvent } from '@/data/engine';
+import { parsePortalList } from '@/domain/import/portal-list';
+import { lexContacts, lexInvoices, portalListText, stripeRaw } from '../../fixtures';
+import { NOW_0930, stateWith } from '../helpers';
 
 /** Fortlaufende Test-IDs `id-1`, `id-2`, … */
 export const seq = (): (() => string) => { let n = 0; return () => `id-${++n}`; };
@@ -23,6 +25,9 @@ export const lexwareBatch: ImportBatch = {
 export const stripeState: AppState = mergeBatch(emptyState(), stripeBatch, seq()).state;
 /** Zustand nach Lexware-Import (NEXUS) der Fixtures. */
 export const lexState: AppState = mergeBatch(emptyState(), lexwareBatch, seq()).state;
+
+/** Zustand nach Import der Portal-Mitgliederliste (Fixture) um 09:30. */
+export const portalState: AppState = applyEvent(emptyState(), { type: 'importPortalList', entries: parsePortalList(portalListText).entries }, { at: NOW_0930, isDemo: true, newId: seq() }).state;
 
 /** Ersetzt Felder eines Abos (nach `externalId`). */
 export const patchSub = (s: AppState, externalId: string, patch: Partial<Subscription>): AppState => ({

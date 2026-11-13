@@ -36,7 +36,7 @@ export function reducer(s: AppState, e: StoreEvent): AppState {
 
 // ---------- React ----------
 
-type Dispatch = (e: StoreEvent) => Promise<{ created: string[] }>;
+type Dispatch = (e: StoreEvent) => Promise<{ created: string[]; ok?: boolean }>;
 export type SyncResult = 'ok' | 'wait' | 'error';
 type Store = {
   state: AppState; dispatch: Dispatch; mode: AppMode;
@@ -156,11 +156,11 @@ function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; child
       const r = await client.dispatch(e);
       setState(r.state);
       setNotice('');
-      return { created: r.created };
+      return { created: r.created, ok: true };
     } catch (err) {
       if (err instanceof UnauthorizedError) reloadTo('/anmelden');
       else setNotice(SAVE_FAILED);
-      return { created: [] };
+      return { created: [], ok: false };
     } finally {
       w.end();
     }

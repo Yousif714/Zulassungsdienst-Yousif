@@ -135,8 +135,37 @@ describe('Zustands-Dienst', () => {
     expect(isClientEvent({ type: 'dismissPayment' })).toBe(false);
   });
 
+  test('Review 5: importPortalList nur mit gültiger Form', () => {
+    expect(isClientEvent({ type: 'importPortalList', entries: [{ email: 'a@b.de', name: 'A' }] })).toBe(true);
+    expect(isClientEvent({ type: 'importPortalList', entries: [] })).toBe(false);
+    expect(isClientEvent({ type: 'importPortalList', entries: [{ email: 'kaputt', name: 'A' }] })).toBe(false);
+    expect(isClientEvent({ type: 'importPortalList', entries: [{ email: 'a@b.de' }] })).toBe(false);
+    expect(isClientEvent({ type: 'importPortalList', entries: Array.from({ length: 2001 }, (_, i) => ({ email: `u${i}@x.de`, name: '' })) })).toBe(false);
+  });
+
+  test('importPortalList: Zusatzfelder streng geprüft', () => {
+    const ok = (extra: object) => isClientEvent({ type: 'importPortalList', entries: [{ email: 'a@b.de', name: 'A', ...extra }] });
+    expect(ok({ emails: ['a@b.de', 'c@b.de'], joinedOn: '2026-08-01', joinedText: 'x', lastActiveOn: null, lastActiveText: 'y' })).toBe(true);
+    for (const bad of [
+      { emails: [1] }, { emails: 'a@b.de' }, { emails: [] }, { emails: ['c@b.de'] }, { emails: ['a@b.de', 'kaputt'] },
+      { emails: Array.from({ length: 11 }, (_, i) => (i ? `u${i}@b.de` : 'a@b.de')) },
+      { joinedOn: {} }, { joinedOn: '1.8.2026' }, { lastActiveOn: 5 }, { joinedText: 'x'.repeat(101) }, { lastActiveText: 7 },
+      { name: 'x'.repeat(201) },
+    ]) expect(ok(bad), JSON.stringify(bad).slice(0, 40)).toBe(false);
+  });
+
+  test('Portal-Events: Form geprüft', () => {
+    const draft = { totalCents: 60000, installments: 6, installmentCents: 10000, dueDay: 1, startDate: '2026-10-01', catchUpMode: 'first_rate' };
+    expect(isClientEvent({ type: 'ignorePortalMember', externalId: 'a@b.de' })).toBe(true);
+    expect(isClientEvent({ type: 'ignorePortalMember' })).toBe(false);
+    expect(isClientEvent({ type: 'unignorePortalMember', externalId: 'a@b.de' })).toBe(true);
+    expect(isClientEvent({ type: 'unignorePortalMember' })).toBe(false);
+    expect(isClientEvent({ type: 'createPortalContract', externalId: 'a@b.de', draft, contactId: null })).toBe(true);
+    expect(isClientEvent({ type: 'createPortalContract', externalId: 'a@b.de', draft: { ...draft, dueDay: 'x' }, contactId: null })).toBe(false);
+  });
+
   test('isClientEvent: nur erlaubte Ereignisse mit Grundform', () => {
-    expect(CLIENT_EVENTS.size).toBe(17);
+    expect(CLIENT_EVENTS.size).toBe(21);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);
     expect(isClientEvent({ type: 'dismissInsight', key: 'reply:m-1' })).toBe(true);
     for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {

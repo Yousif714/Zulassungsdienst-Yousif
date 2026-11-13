@@ -3,7 +3,8 @@ import { reconcileInsights, runDetectors, selectTop } from '@/domain/detectors';
 import { buildMatchContext } from '@/domain/detectors/payments';
 import { detectInvoiceOverdue } from '@/domain/detectors/invoices';
 import { detectMemberOverdue, memberView } from '@/domain/detectors/members';
-import type { Connection } from '@/domain/types';
+import type { Connection, PortalMember } from '@/domain/types';
+import { detectPortalNoInvoice } from '@/domain/detectors/portal';
 import { detectStaleSources } from '@/domain/detectors/sources';
 import type { StoredInsight } from '@/domain/types';
 import { NOW_0930, base, conn, find, inv, ins, member, muellerDone, schmidtIn, stateWith, tx, types, workshop } from './helpers';
@@ -122,6 +123,11 @@ describe('Detektoren', () => {
     const r = run({ connections: [conn({ id: 'gmail', status: 'error' }), conn({ id: 'icloud', status: 'missing', lastSuccessAt: null })] }).filter((i) => i.type === 'stale_source');
     expect(r.map((i) => i.dedupeKey)).toEqual(['stale:gmail']);
   });
+  test('stale:portal_nexus hat eigenen Text', () => {
+    const r = run({ connections: [conn({ id: 'portal_nexus', status: 'connected', lastSuccessAt: '2026-10-01T08:00:00Z' }), conn({ id: 'gmail', status: 'connected', lastSuccessAt: '2026-11-12T07:00:00Z' })] }).filter((i) => i.type === 'stale_source');
+    expect(r.find((i) => i.dedupeKey === 'stale:portal_nexus')?.body).toBe('Die Mitgliederliste ist älter als 30 Tage. Bitte neu einfügen.');
+    expect(r.find((i) => i.dedupeKey === 'stale:gmail')?.body).toBe('Der letzte erfolgreiche Abruf ist älter als 45 Minuten.');
+  });
 });
 
 describe('Rückstand je Vertragsquelle', () => {
@@ -229,5 +235,46 @@ describe('buildMatchContext', () => {
     expect(c.invoices.map((i) => i.id)).toEqual(['RE-1043', 'i-ws']);
     expect(c.invoices[0]).toMatchObject({ contractId: 'k77', openCents: 0 });
     expect(c.invoices[1]).toMatchObject({ contractId: null, openCents: 14900 });
+  });
+});
+
+describe('Portal: Mitglieder ohne Rechnung', () => {
+  const OLD = '2026-10-01T08:00:00.000Z';
+  const NEW = '2026-11-12T08:00:00.000Z';
+  const pm = (email: string, name: string, lastSeenInListAt = NEW): PortalMember =>
+    ({ id: `pm-${email}`, connectionId: 'portal_nexus', externalId: email, email, name, firstSeenAt: OLD, lastSeenInListAt });
+  const portal = (members: PortalMember[], extra: Parameters<typeof stateWith>[0] = {}) => stateWith({
+    portalMembers: members,
+    connections: [conn({ id: 'portal_nexus', status: 'connected', lastSuccessAt: '2026-11-12T08:00:00Z' }), conn({ id: 'lexware_nexus' })],
+    ...extra,
+  });
+  const murat = { ...base, id: 'c-murat', contactId: 'm-kaya', origin: [{ connectionId: 'portal_nexus' as const, externalId: 'murat@x.de' }] };
+
+  test('ein Sammelhinweis; ignorierte, Verträge und Nicht-mehr-in-Liste zählen nicht', () => {
+    const s = portal(
+      [pm('neu@x.de', 'Neu Eins'), pm('x@x.de', 'Xaver Zwei'), pm('alt@x.de', 'Alt Drei', OLD), pm('team@x.de', 'Team'), pm('murat@x.de', 'Murat')],
+      { ignoredPortalMembers: ['team@x.de'], contracts: [murat] },
+    );
+    const r = detectPortalNoInvoice(s);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      dedupeKey: 'portal-no-invoice', type: 'portal_no_invoice', company: 'nexus', priority: 'info', title: '2 Mitglieder ohne Rechnung',
+      body: 'Neu Eins, Xaver Zwei', nextStep: 'Mitglieder ohne Rechnung ansehen', needsSources: ['portal_nexus', 'lexware_nexus'],
+      refs: [{ kind: 'member', href: '/nexus/mitglieder', label: 'Portal-Mitglieder' }],
+    });
+  });
+  test('keiner ohne Rechnung: kein Hinweis; einer: Einzahl; mehr als drei: und N weitere', () => {
+    expect(detectPortalNoInvoice(portal([]))).toEqual([]);
+    expect(detectPortalNoInvoice(portal([pm('murat@x.de', 'Murat')], { contracts: [murat] }))).toEqual([]);
+    expect(detectPortalNoInvoice(portal([pm('a@x.de', 'Anna')]))[0].title).toBe('1 Mitglied ohne Rechnung');
+    const five = detectPortalNoInvoice(portal(['a', 'b', 'c', 'd', 'e'].map((k) => pm(`${k}@x.de`, `Name ${k}`))))[0];
+    expect(five.title).toBe('5 Mitglieder ohne Rechnung');
+    expect(five.body).toBe('Name a, Name b, Name c und 2 weitere');
+  });
+  test('runDetectors: Hinweis da; Portal-Liste älter als 30 Tage: unterdrückt', () => {
+    const members = [pm('a@x.de', 'Anna')];
+    expect(runDetectors(portal(members), NOW_0930).map((i) => i.dedupeKey)).toContain('portal-no-invoice');
+    const stale = portal(members, { connections: [conn({ id: 'portal_nexus', status: 'connected', lastSuccessAt: '2026-10-12T08:00:00Z' }), conn({ id: 'lexware_nexus' })] });
+    expect(runDetectors(stale, NOW_0930).map((i) => i.dedupeKey)).not.toContain('portal-no-invoice');
   });
 });

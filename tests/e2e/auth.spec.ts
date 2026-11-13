@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { lexwareRoutes, qontoRoutes, stripeRoutes } from '../fixtures';
+import { lexwareRoutes, portalListCsv, portalListText, qontoRoutes, stripeRoutes } from '../fixtures';
 
 // Erstanmeldung mit virtuellem Passkey: Einrichtung, Echtmodus, Demo-Schalter, Abmelden, erneute Anmeldung.
 test.describe.configure({ mode: 'serial' });
@@ -39,11 +39,11 @@ test('Einrichtung: Passkey anlegen, 10 Codes, danach leerer Echtmodus', async ()
   await expect(page.getByTestId('reply-row')).toHaveCount(0);
 });
 
-test('Verbindungen: Einrichtungs-Liste mit 11 offenen Einträgen', async () => {
+test('Verbindungen: Einrichtungs-Liste mit 12 offenen Einträgen', async () => {
   await page.goto('/verbindungen');
   const list = page.getByTestId('setup-checklist');
   await expect(list.getByRole('heading', { name: 'Einrichtung' })).toBeVisible();
-  await expect(list.locator('li')).toHaveCount(11);
+  await expect(list.locator('li')).toHaveCount(12);
   await expect(list.getByTestId('setup-check')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /simulieren|Wieder verbinden/ })).toHaveCount(0);
 });
@@ -153,6 +153,71 @@ test('Echtmodus: Gesamtrechnung ohne Tag ist zum Monatsende fällig; leerer Tag 
   await card.getByLabel('Fälligkeitstag').fill('15');
   await expect(card.getByRole('button', { name: 'Übernehmen' })).toBeEnabled();
   await expect(card).toContainText('am 15.');
+});
+
+test('Echtmodus: Mitgliederliste einfügen, Status, Vertrag anlegen, Kein zahlendes Mitglied, CSV', async () => {
+  await page.goto('/nexus');
+  await expect(page.getByTestId('portal-link')).toContainText('Liste einfügen');
+  await page.getByTestId('portal-link').click();
+  await page.getByLabel('Mitgliederliste', { exact: true }).fill(portalListText);
+  await expect(page.getByTestId('portal-preview')).toHaveText(/5 Mitglieder erkannt · 1 doppelt · 3 Zeilen ohne E-Mail/);
+  await page.getByRole('button', { name: '5 Mitglieder übernehmen' }).click();
+  await expect(page.getByTestId('portal-summary')).toContainText('5 im Portal · 2 mit Vertrag · 1 Vorschlag offen · 2 ohne Rechnung');
+  await expect(page.getByTestId('portal-row-ayse@example.de')).toContainText('Vertrag');
+  await expect(page.getByTestId('portal-row-murat@example.de')).toContainText('Vertrag');
+  await expect(page.getByTestId('portal-row-nina@example.de')).toContainText('Vorschlag offen');
+  await page.getByRole('radio', { name: 'Ohne Rechnung' }).check();
+  await expect(page.locator('[data-testid^="portal-row-"]')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Kein zahlendes Mitglied: team' }).click();
+  await expect(page.getByTestId('portal-row-team@nexusnetzwerk.de')).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Ausgeblendet (1)' }).check();
+  await expect(page.getByTestId('portal-row-team@nexusnetzwerk.de')).toContainText('Kein zahlendes Mitglied');
+  await page.getByRole('button', { name: 'Wieder einblenden: team' }).click();
+  await expect(page.getByRole('radio', { name: /Ausgeblendet/ })).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Ohne Rechnung' }).check();
+  await expect(page.locator('[data-testid^="portal-row-"]')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Kein zahlendes Mitglied: team' }).click();
+  await expect(page.getByTestId('portal-row-team@nexusnetzwerk.de')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Vertrag anlegen für Paula Neu' }).click();
+  const card = page.getByTestId('proposal-portal_nexus:neu@example.de');
+  await expect(card).toContainText('bitte ergänzen');
+  await card.getByRole('button', { name: 'Bearbeiten' }).click();
+  await card.getByLabel('Gesamt').fill('600,00');
+  await card.getByLabel('Raten', { exact: true }).fill('6');
+  await card.getByLabel('Rate', { exact: true }).fill('100,00');
+  await card.getByLabel('Fälligkeitstag').fill('1');
+  await card.getByLabel('Start').fill('2026-10-01');
+  await card.getByRole('button', { name: 'Übernehmen' }).click();
+  await expect(page).toHaveURL(/\/nexus\/mitglieder\/[^/]+\/uebernahme$/);
+  await page.goto('/verbindungen');
+  await expect(page.getByTestId('setup-portal_nexus')).toContainText(/Verbunden · Stand vor \d+ Min/);
+  await page.goto('/nexus/mitglieder');
+  await expect(page.getByTestId('portal-summary')).toContainText('4 im Portal · 3 mit Vertrag · 1 Vorschlag offen · 0 ohne Rechnung');
+  // CSV-Upload: zweite, andere Liste → Fehlende werden nur markiert
+  await page.getByRole('button', { name: 'Mitgliederliste einfügen' }).click();
+  await page.getByLabel('CSV-Datei').setInputFiles({ name: 'mitglieder.csv', mimeType: 'text/csv', buffer: Buffer.from(portalListCsv, 'utf8') });
+  await expect(page.getByTestId('portal-preview')).toHaveText(/3 Mitglieder erkannt · 0 doppelt · 1 Zeilen ohne E-Mail/);
+  await page.getByRole('button', { name: '3 Mitglieder übernehmen' }).click();
+  await expect(page.getByTestId('portal-row-murat@example.de')).toContainText('nicht mehr in Liste');
+  await expect(page.getByTestId('portal-row-team@nexusnetzwerk.de')).toHaveCount(0);
+});
+
+test('Echtmodus: Excel-Export (.xlsx) hochladen, Vorschau, Übernehmen mit Beigetreten und Zuletzt aktiv', async () => {
+  await page.goto('/nexus/mitglieder');
+  await page.getByRole('button', { name: 'Mitgliederliste einfügen' }).click();
+  const input = page.getByLabel('Excel- oder CSV-Datei');
+  await input.setInputFiles({ name: 'gross.csv', mimeType: 'text/csv', buffer: Buffer.alloc(2 * 1024 * 1024 + 1, 'a') });
+  await expect(page.locator('.form-error')).toContainText('zu groß');
+  await input.setInputFiles({ name: 'alt.xls', mimeType: 'application/vnd.ms-excel', buffer: Buffer.from('x') });
+  await expect(page.locator('.form-error')).toContainText('Dateiformat');
+  await input.setInputFiles('tests/fixtures/portal/mitglieder-portal-export.xlsx');
+  await expect(page.getByTestId('portal-preview')).toHaveText(/4 Mitglieder erkannt · 0 doppelt · 0 Zeilen ohne E-Mail/);
+  await page.getByRole('button', { name: '4 Mitglieder übernehmen' }).click();
+  const row = page.getByTestId('portal-row-max@example.de');
+  await expect(row).toContainText('m.mustermann@firma-example.de');
+  await expect(row).toContainText('Beigetreten 10.08.2026');
+  await expect(row).toContainText('Zuletzt aktiv 01.11.2026');
+  await expect(page.getByTestId('portal-row-calvin.beispiel@example.de')).toContainText('Zuletzt aktiv nie');
 });
 
 test('Echtmodus: „Jetzt abgleichen“ gleicht ab, zweiter Klick binnen einer Minute bittet um Geduld', async () => {

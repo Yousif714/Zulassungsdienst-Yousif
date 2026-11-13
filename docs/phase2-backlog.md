@@ -69,6 +69,12 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 - Wenn das Speichern von `actionExecuted` dreimal am Konflikt scheitert, kommt der Fehler erst nach dem Anbieter-Aufruf. Der Sweep fängt das ab. Besser wäre ein eigener Retry nur für dieses Event.
 - `recentJobRuns` und der Supabase-Client sind nur gegen Fake/Memory getestet: einmal `npm run test:integration` gegen „nexus-test“ laufen lassen.
 
+## Offen aus dem Portal-Abgleich (Reviews, nicht merge-blockierend)
+- `OPTIONAL_TABLES` in `src/server/db/supabase.ts` entfernen, sobald die Migration `20261115000000_portal.sql` sicher eingespielt ist.
+- Automatischer Abgleich über die Portal-Supabase (Auth-Admin-API + `profiles`), sobald die Agentur URL und service_role-Schlüssel liefert. Bis dahin wird die Excel-Liste hochgeladen.
+- `unignorePortalMember` prüft nur einen nicht leeren String (keine Längengrenze, keine Existenzprüfung).
+- Übrige Minor-Punkte aus dem Abschlussreview (M1–M8): u. a. `t="d"`-Zellen, Zeitformate, Zip64 im XLSX-Leser, mehrere E-Mails in einer Freitextzeile, Demo-Test für `/nexus/mitglieder`.
+
 ## Offen aus Paket 2b-2 (Reviews, nicht merge-blockierend)
 
 **Mit der ersten echten Qonto-Lieferung prüfen**

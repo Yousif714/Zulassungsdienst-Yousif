@@ -39,11 +39,12 @@ const money = (c: number | undefined) => (c === undefined ? '' : formatEuro(c));
 const num = (n: number | undefined) => (n === undefined ? '' : String(n));
 const whole = (s: string) => (/^\d+$/.test(s.trim()) ? Number(s) : 0);
 
-export function ProposalCard({ proposal: p, contacts, onConfirm, onDismiss }: {
+export function ProposalCard({ proposal: p, contacts, onConfirm, onDismiss, dismissLabel = 'Verwerfen' }: {
   proposal: ContractProposal;
   contacts: Contact[];
   onConfirm: (draft: ContractDraft, contactId: string | null) => void;
   onDismiss: () => void;
+  dismissLabel?: string;
 }) {
   const base = draftFromProposal(p);
   const found = findContactFor(p, contacts);
@@ -102,7 +103,7 @@ export function ProposalCard({ proposal: p, contacts, onConfirm, onDismiss }: {
         {blocker && <p className="list-row-subtitle" data-testid={`proposal-${id}-blocker`}>{blocker}{!editing && errors.length > 0 && ' Zum Ergänzen auf „Bearbeiten“ tippen.'}</p>}
         <div className="member-actions">
           <button type="button" className="btn btn-secondary" onClick={() => setEditing((v) => !v)}>Bearbeiten</button>
-          <button type="button" className="btn btn-secondary" onClick={onDismiss}>Verwerfen</button>
+          <button type="button" className="btn btn-secondary" onClick={onDismiss}>{dismissLabel}</button>
           <button type="button" className="btn btn-primary" disabled={blocker !== null}
             onClick={() => onConfirm(draft, found.match === 'name' && same === true ? found.contactId : null)}>Übernehmen</button>
         </div>

@@ -126,3 +126,4 @@ export const qontoRoutesPaged: Record<string, unknown> = {
   [qtq('acc-main', 1)]: qPage(['t-demir-1', 't-demir-2', 't-krueger-ws'], 1, 2),
   [qtq('acc-main', 2)]: qPage(['t-stripe', 't-kaya-ref', 't-out'], 2, null),
 };
+export { portalListText, portalListCsv } from './portal';

@@ -15,7 +15,7 @@ export function detectStaleSources(s: AppState, now: Date): Insight[] {
       company: c.company,
       priority: 'info',
       title: f === 'error' ? `${c.label}: Verbindungsfehler` : `${c.label}: Datenstand zu alt`,
-      body: f === 'error' ? (c.lastError ?? 'Die Quelle meldet einen Fehler.') : 'Der letzte erfolgreiche Abruf ist älter als 45 Minuten.',
+      body: f === 'error' ? (c.lastError ?? 'Die Quelle meldet einen Fehler.') : c.id === 'portal_nexus' ? 'Die Mitgliederliste ist älter als 30 Tage. Bitte neu einfügen.' : 'Der letzte erfolgreiche Abruf ist älter als 45 Minuten.',
       refs: [connectionRef(c.id, c.label)],
       nextStep: 'Verbindung prüfen',
       needsSources: [],

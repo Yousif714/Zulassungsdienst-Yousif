@@ -63,6 +63,15 @@ describe('migrateState', () => {
     expect(loadInitial(st, '', NOW_0930).state.payments[0].connectionId).toBe('bank_qonto');
   });
 });
+test('alter Stand ohne Portal: Verbindung missing ergänzt, Listen leer', () => {
+  const old = stateWith() as Partial<AppState>;
+  old.connections = old.connections!.filter((c) => c.id !== 'portal_nexus');
+  delete old.portalMembers; delete old.ignoredPortalMembers;
+  const s = loadInitial(memStorage({ [STORE_KEY]: JSON.stringify(old) }), '', NOW_0930).state;
+  expect(s.connections.find((c) => c.id === 'portal_nexus')).toMatchObject({ status: 'missing', lastSuccessAt: null });
+  expect(s.portalMembers).toEqual([]);
+  expect(s.ignoredPortalMembers).toEqual([]);
+});
 test('Katalog: Qonto und Sparkasse', () => {
   expect(CONNECTION_CATALOG.find((c) => c.id === 'bank_sparkasse')).toMatchObject({ company: 'zulassung', label: 'Sparkasse (Zulassung)' });
   expect(HOW_TO.bank_sparkasse).toBe('Kommt als Upload (CAMT- oder CSV-Export).');

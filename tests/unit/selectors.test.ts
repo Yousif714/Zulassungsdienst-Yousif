@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createDemoState } from '@/data/seed';
-import { invoiceCandidates, memberRows, nexusForecast, overdueMembers, matchOptions, stripeLexCases, unallocatedBankPayments, waitingStripePayments, zulassungKpis } from '@/data/selectors';
+import { invoiceCandidates, memberRows, portalRows, nexusForecast, overdueMembers, matchOptions, stripeLexCases, unallocatedBankPayments, waitingStripePayments, zulassungKpis } from '@/data/selectors';
 import { reducer, refresh } from '@/data/store';
 import { jobBilling } from '@/domain/billing';
 import { NOW_0930 as NOW, base, stateWith, tx, workshop } from './helpers';
@@ -111,5 +111,24 @@ describe('Zuordnungsziele', () => {
   test('unallocatedBankPayments: ohne ausgeblendete und Rückbuchungen', () => {
     const s = stateWith({ payments: [tx({ id: 'a' }), tx({ id: 'b', ignoredAt: 'x' }), tx({ id: 'c', amountCents: -100 })] });
     expect(unallocatedBankPayments(s).map((p) => p.id)).toEqual(['a']);
+  });
+});
+
+describe('Portal-Zeilen', () => {
+  test('Ampel und Rückstand nur bei Vertrag', () => {
+    const st = { ...stateWith({}), portalMembers: [
+      { id: 'pm1', connectionId: 'portal_nexus' as const, externalId: 'murat@example.de', email: 'murat@example.de', name: 'Murat Demir', firstSeenAt: NOW.toISOString(), lastSeenInListAt: NOW.toISOString() },
+      { id: 'pm2', connectionId: 'portal_nexus' as const, externalId: 'nobody@example.de', email: 'nobody@example.de', name: 'Nobody Neu', firstSeenAt: NOW.toISOString(), lastSeenInListAt: NOW.toISOString() },
+    ] };
+    const merged = { ...st, contacts: [...st.contacts, { id: 'kx', company: 'nexus' as const, kind: 'member' as const, name: 'Murat Demir', phones: [], emails: ['murat@example.de'] }],
+      contracts: [{ id: 'cx', contactId: 'kx', totalCents: 60000, installments: 6, installmentCents: 10000, dueDay: 1, startDate: '2026-01-01', billing: 'legacy' as const, catchUpMode: 'first_rate' as const }] };
+    const rows = portalRows(merged, '2026-11-12');
+    const c = rows.find((r) => r.member.externalId === 'murat@example.de')!;
+    const n = rows.find((r) => r.member.externalId === 'nobody@example.de')!;
+    expect(c.status).toBe('contract');
+    expect(c.traffic).toBe(memberRows(merged, '2026-11-12')[0].traffic);
+    expect(c.arrearsCents).toBe(memberRows(merged, '2026-11-12')[0].arrearsCents);
+    expect(n.traffic).toBeNull();
+    expect(n.arrearsCents).toBe(0);
   });
 });

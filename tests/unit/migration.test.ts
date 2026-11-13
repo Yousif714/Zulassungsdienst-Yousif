@@ -16,13 +16,13 @@ describe('Migration Fundament', () => {
   });
 
   it.each(ALL)('Tabelle %s: create table und RLS', (t) => {
-    expect(sql).toContain(`create table ${t} (`);
+    expect(sql).toMatch(new RegExp(`create table (if not exists )?${t} \\(`));
     expect(sql).toContain(`alter table ${t} enable row level security;`);
   });
 
   it('jede Zustandstabelle hat eine ord-Spalte', () => {
     for (const t of new Set(Object.values(TABLES))) {
-      expect(sql).toMatch(new RegExp(`create table ${t} \\([^;]*\\bord int not null`));
+      expect(sql).toMatch(new RegExp(`create table (if not exists )?${t} \\([^;]*\\bord int not null`));
     }
   });
 
@@ -86,5 +86,16 @@ describe('Migration Qonto (2b-2)', () => {
     expect(sql).toContain("delete from connections where id = 'bank'");
     expect(sql).toContain("'\"bank_qonto\"'");
     expect(sql).toContain('order by n');
+  });
+});
+
+describe('Migration Portal', () => {
+  it('idempotent, apply_changes kennt beide Tabellen', () => {
+    const p = read(`${DIR}/20261115000000_portal.sql`);
+    expect(p).toContain('create table if not exists portal_members (');
+    expect(p).toContain('create table if not exists ignored_portal_members (');
+    expect(p).toContain('create unique index if not exists portal_members_connection_external_key');
+    expect(p).toMatch(/v_external constant text\[\] := array\[[^\]]*'portal_members'/);
+    expect(p).toMatch(/v_allowed constant text\[\] := array\[[^\]]*'ignored_portal_members'/);
   });
 });

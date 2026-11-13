@@ -1,5 +1,6 @@
 import type { ImportBatch } from './import/batch';
 import type { ContractDraft } from './import/contract-draft';
+import type { PortalListEntry } from './import/portal-list';
 import type { Action, AssistantMessage, Call, Connection, ConnectionId, Job, Settings } from './types';
 
 /** Woher eine Nachricht an den Assistenten kommt: WhatsApp (Absender wird geprüft) oder die angemeldete App. */
@@ -38,4 +39,12 @@ export type StoreEvent =
   /** `contactId`: „Ja“ auf „Ist das … ?“ (Name-Treffer); sonst null. */
   | { type: 'confirmProposal'; proposalId: string; draft: ContractDraft; contactId: string | null }
   | { type: 'dismissProposal'; proposalId: string }
+  /** Mitgliederliste aus dem Portal: zusammenführen, nie löschen. */
+  | { type: 'importPortalList'; entries: PortalListEntry[] }
+  /** Vertrag für ein Portal-Mitglied ohne Vertrag; `created[0]` ist die Vertrags-ID. `contactId`: bestätigter Namenstreffer, sonst null. */
+  | { type: 'createPortalContract'; externalId: string; draft: ContractDraft; contactId: string | null }
+  /** „Kein zahlendes Mitglied“: Mitglied aus der Arbeitsliste ausblenden (idempotent). */
+  | { type: 'ignorePortalMember'; externalId: string }
+  /** „Wieder einblenden“: macht „Kein zahlendes Mitglied“ rückgängig (idempotent). */
+  | { type: 'unignorePortalMember'; externalId: string }
   | { type: 'resetDemo' };
