@@ -125,7 +125,8 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
   const c = target.contractId ? s.contracts.find((x) => x.id === target.contractId) : undefined;
   const inv = target.invoiceId ? s.invoices.find((x) => x.id === target.invoiceId) : undefined;
   const fail = { state: s, text: `Zuordnung nicht möglich: ${paymentId}` };
-  if (!p || (!!target.contractId === !!target.invoiceId)) return fail;
+  // Rückbuchungen (Betrag <= 0) folgen ihrer Originalzahlung und werden nie direkt bestätigt.
+  if (!p || p.amountCents <= 0 || (!!target.contractId === !!target.invoiceId)) return fail;
   let allocation: Allocation;
   let contactId: string | null;
   let text: string;
@@ -134,7 +135,8 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
     contactId = c.contactId;
     text = `Zahlung über ${formatEuro(p.amountCents)} ${contactName(s, c.contactId)} zugeordnet`;
   } else if (inv && inv.connectionId === 'lexware_nexus' && invoiceOpenCents(s, inv) > 0) {
-    allocation = { paymentId, invoiceId: inv.id, amountCents: p.amountCents, method: 'confirmed' };
+    // Überzahlung: höchstens der offene Betrag geht auf die Rechnung.
+    allocation = { paymentId, invoiceId: inv.id, amountCents: Math.min(p.amountCents, invoiceOpenCents(s, inv)), method: 'confirmed' };
     contactId = inv.contactId;
     text = `Zahlung über ${formatEuro(p.amountCents)} Rechnung ${inv.number} zugeordnet`;
   } else return fail;
@@ -142,12 +144,15 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
   const ibanLinks = iban && contactId && !s.ibanLinks.some((l) => normalizeIban(l.iban) === iban)
     ? [...s.ibanLinks, { iban, contactId, confirmedAt: at.toISOString() }]
     : s.ibanLinks;
+  // Auto-Zuordnungen der Rückbuchungen dieser Zahlung fallen weg; refresh leitet sie vom neuen Ziel ab.
+  const returnIds = new Set(s.payments.filter((x) => x.source === 'bank' && x.connectionId === p.connectionId && !!p.externalId && x.refundOf === p.externalId).map((x) => x.id));
+  const followsOriginal = (a: Allocation) => a.method === 'auto' && returnIds.has(a.paymentId);
   const payments = s.payments.map((x) => {
     if (x.id !== paymentId || !x.ignoredAt) return x;
     const { ignoredAt: _drop, ...rest } = x;
     return rest;
   });
-  return { state: { ...s, payments, allocations: [...s.allocations.filter((a) => a.paymentId !== paymentId), allocation], ibanLinks }, text };
+  return { state: { ...s, payments, allocations: [...s.allocations.filter((a) => a.paymentId !== paymentId && !followsOriginal(a)), allocation], ibanLinks }, text };
 }
 
 function dismissPayment(s: AppState, paymentId: string, at: Date): Mutation | null {

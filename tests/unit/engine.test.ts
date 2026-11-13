@@ -162,4 +162,32 @@ describe('Zuordnung Vertrag/Rechnung (Paket 2b-2)', () => {
     const r = applyEvent(stateWith(), { type: 'simulateTransfer', iban: 'de12 3456', payerName: 'X Y', amountCents: 100 }, ctx());
     expect(r.state.payments.at(-1)!.iban).toBe('DE123456');
   });
+  const orig = tx({ id: 'q1', externalId: 't1', iban: 'DE00X', payerName: 'Selin Yilmaz', amountCents: 30000 });
+  const back = tx({ id: 'q2', externalId: 't2', iban: 'DE00X', amountCents: -30000, refundOf: 't1' });
+  test('Original neu auf anderes Ziel bestätigt → Rückbuchung zieht mit', () => {
+    const other = { ...base, id: 'k-other', contactId: 'm-kaya' };
+    let r = stateWith({ contracts: [yilmaz, other], payments: [orig, back] });
+    r = reducer(r, { type: 'confirmPaymentMatch', paymentId: 'q1', contractId: 'k-yilmaz' });
+    expect(r.allocations.find((a) => a.paymentId === 'q2')).toMatchObject({ contractId: 'k-yilmaz' });
+    r = reducer(r, { type: 'confirmPaymentMatch', paymentId: 'q1', contractId: 'k-other' });
+    expect(r.allocations.filter((a) => a.paymentId === 'q2')).toEqual([{ paymentId: 'q2', contractId: 'k-other', amountCents: -30000, method: 'auto' }]);
+  });
+  test('Bestätigen von Beträgen <= 0 wird abgelehnt', () => {
+    const r = reducer(stateWith({ contracts: [yilmaz], payments: [orig, back] }), { type: 'confirmPaymentMatch', paymentId: 'q2', contractId: 'k-yilmaz' });
+    expect(r.allocations.filter((a) => a.paymentId === 'q2')).toEqual([]);
+  });
+  test('Überzahlung auf Rechnung: höchstens der offene Betrag wird zugeordnet', () => {
+    const r = reducer(stateWith({ invoices: [workshop], payments: [tx({ id: 'q1', amountCents: 20000 })] }), { type: 'confirmPaymentMatch', paymentId: 'q1', invoiceId: 'i-ws' });
+    expect(r.allocations).toEqual([{ paymentId: 'q1', invoiceId: 'i-ws', amountCents: 14900, method: 'confirmed' }]);
+  });
+  test('refresh ist idempotent und überschreibt Bestätigtes nie', () => {
+    const s0 = stateWith({ invoices: [workshop], contracts: [yilmaz], payments: [orig, back, tx({ id: 'q3', externalId: 't3', reference: 'RE-1101', amountCents: 14900 })] });
+    const c = reducer(s0, { type: 'confirmPaymentMatch', paymentId: 'q1', contractId: 'k-yilmaz' });
+    const once = refresh(c, NOW);
+    const twice = refresh(once, NOW);
+    expect(twice.allocations).toEqual(once.allocations);
+    expect(twice.allocations.filter((a) => a.paymentId === 'q3')).toHaveLength(1);
+    expect(twice.allocations.filter((a) => a.paymentId === 'q2')).toHaveLength(1);
+    expect(twice.allocations.find((a) => a.paymentId === 'q1')).toMatchObject({ contractId: 'k-yilmaz', method: 'confirmed' });
+  });
 });
