@@ -6,7 +6,7 @@ import { ListRow } from '@/components/ListRow';
 import { MoneyCard } from '@/components/MoneyCard';
 import { PageHeader } from '@/components/PageHeader';
 import { CONTACT_KIND_LABEL, JOB_STATUS_LABEL, JOB_STATUS_ORDER } from '@/components/zulassung-labels';
-import { zulassungKpis } from '@/data/selectors';
+import { unallocatedBankPayments, zulassungKpis } from '@/data/selectors';
 import { useAppStore } from '@/data/store';
 import { MONEY_SOURCES, buildBriefing } from '@/domain/briefing';
 import { formatBerlinDe, now } from '@/domain/clock';
@@ -36,6 +36,11 @@ export default function ZulassungPage() {
         <MoneyCard company="zulassung" openCents={money.openCents} overdueCents={money.overdueCents}
           stale={areaStale(MONEY_SOURCES.zulassung, state.connections, at)} />
       </section>
+
+      <ListGroup title="Zahlungen" testId="zulassung-payments">
+        <ListRow href="/zulassung/zuordnen" testId="zulassung-match-row" title="Zahlungen zuordnen" subtitle="Sparkassen-Auszug hochladen und zuordnen"
+          value={unallocatedBankPayments(state, 'zulassung').length} />
+      </ListGroup>
 
       {JOB_STATUS_ORDER.map((status) => {
         const jobs = state.jobs.filter((j) => j.status === status);

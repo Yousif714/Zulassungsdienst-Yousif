@@ -126,7 +126,8 @@ test('Echtmodus: Qonto-Import → Vorschlag → Ja → zweite Zahlung derselben 
   await page.goto('/verbindungen');
   await expect(page.getByTestId('setup-bank_qonto')).toContainText(/Verbunden · Stand vor \d+ Min/);
   await expect(page.getByText('Sparkasse (Zulassung)')).toBeVisible();
-  await expect(page.getByText(/Kommt als Upload/)).toBeVisible();
+  await expect(page.getByTestId('setup-bank_sparkasse')).toContainText('Noch kein Auszug');
+  await expect(page.getByTestId('setup-bank_sparkasse').getByRole('link', { name: 'Auszug hochladen' })).toHaveAttribute('href', '/zulassung/zuordnen');
   await page.goto('/nexus/zuordnen');
   const cards = page.locator('[data-testid^="match-"]').filter({ has: page.getByRole('button', { name: /Ja, gehört zu Murat Demir/ }) }); // Vorschlag-Karten (Auswahllisten anderer Karten nennen den Namen auch)
   await expect(cards).toHaveCount(2);
