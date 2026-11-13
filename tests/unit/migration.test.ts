@@ -1,9 +1,12 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { TABLES } from '@/server/db/tables';
 
-const FILE = 'supabase/migrations/20261112000000_fundament.sql';
-const sql = existsSync(FILE) ? readFileSync(FILE, 'utf8').toLowerCase().replace(/\s+/g, ' ') : '';
+const DIR = 'supabase/migrations';
+const FILE = `${DIR}/20261112000000_fundament.sql`;
+const read = (f: string) => readFileSync(f, 'utf8').toLowerCase().replace(/\s+/g, ' ');
+// Alle Migrationen in Namensreihenfolge verkettet: die Prüfungen gelten für den Endstand des Schemas.
+const sql = existsSync(DIR) ? readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort().map((f) => read(`${DIR}/${f}`)).join(' ') : '';
 const ALL = [...new Set<string>(Object.values(TABLES)), 'passkeys', 'recovery_codes', 'job_runs', 'meta'];
 const FUNCS = ['apply_changes', 'claim_job_run', 'add_first_passkey', 'consume_recovery_code', 'replace_recovery_codes'];
 
@@ -60,5 +63,19 @@ describe('Migration Fundament', () => {
     expect(sql).toContain('create table meta ( key text primary key');
     expect(sql).toMatch(/\('schema_version', '1'\)/);
     expect(sql).toMatch(/\('revision', '0'\)/);
+  });
+});
+
+describe('Migration Verträge', () => {
+  it('Tabellen, RLS, Unique-Index, apply_changes kennt die neuen Tabellen', () => {
+    const v = read(`${DIR}/20261113000000_vertraege.sql`);
+    for (const t of ['subscriptions', 'dismissed_proposals']) {
+      expect(v).toContain(`create table ${t} (`);
+      expect(v).toContain(`alter table ${t} enable row level security;`);
+    }
+    expect(v).toMatch(/unique index [a-z_]+ on subscriptions \(connection_id, external_id\)/);
+    expect(v).toContain('create or replace function apply_changes(');
+    expect(v).toMatch(/v_external constant text\[\] := array\[[^\]]*'subscriptions'/);
+    expect(v).toMatch(/revoke execute on function apply_changes\(int, jsonb\) from public, anon, authenticated;/);
   });
 });

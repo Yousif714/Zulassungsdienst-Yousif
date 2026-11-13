@@ -1,0 +1,15 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "re_B1",
+      "object": "refund",
+      "amount": 5000,
+      "currency": "eur",
+      "created": 1789905600,
+      "status": "succeeded",
+      "invoiceId": "in_B1"
+    }
+  ],
+  "has_more": false
+}

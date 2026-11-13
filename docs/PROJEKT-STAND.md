@@ -25,6 +25,8 @@ Kernziele:
 | `docs/superpowers/specs/2026-11-12-phase2-design.md` | **Spec Phase 2** (Pakete 2a–2f, Fundament-Architektur) |
 | `docs/phase2-backlog.md` | Offene Punkte und verschobene Befunde für Phase 2 |
 | `docs/setup-phase2a.md` | **Inhaber-Checkliste** Paket 2a: Supabase, Vercel, Variablen, erste Anmeldung |
+| `docs/setup-phase2b.md` | **Inhaber-Checkliste** Paket 2b-1: Stripe-Key und Webhook, Lexware-Schlüssel, Vercel, Migration |
+| `docs/superpowers/plans/2026-11-12-phase2b1-vertraege.md` | Bauplan Paket 2b-1 (Verträge aus Stripe und Lexware) |
 | `docs/NEXUS-Assistent-Prompt.md` | Fachliche Anforderungen (Prompt-Form) |
 | `docs/Codex-Vergleich-Prompt.md` | Zweitmeinungs-Prompt für Codex |
 | `docs/vorschau/README.md` | Anleitung für den Inhaber, Vercel/iPhone |
@@ -54,9 +56,9 @@ Kernziele:
 `npm test` (Vitest, ~406) · `npm run test:integration` (Supabase-Testprojekt) · `npx tsc --noEmit` · `npm run lint` · `npm run contrast` · `npm run e2e` (Playwright, vorher `fuser -k 3100/tcp`) · Screenshots: `SCREENSHOTS=1 npm run e2e -- tests/e2e/screenshots.spec.ts`
 
 ## Stand & nächste Schritte
-- Phase 1 + Design-Feinschliff live (PR #1, #2 gemergt).
-- **Paket 2a (Fundament) fertig** auf `claude/cool-hopper-hcnb9d`: 14 Tasks, Abschlussreview mit Fixes, 406 Unit-Tests + E2E grün, `next build` ohne Env grün. Entscheidungen in Spec Abschnitt 2, offene Punkte in `docs/phase2-backlog.md` („Offen aus Paket 2a“).
-- **Als Nächstes (Inhaber):** PR prüfen und mergen; Vercel-Team auf Pro (5-Min-Cron, sonst scheitert das Deployment); nur ein Vercel-Projekt am Repo lassen (aktuell 4); dann Supabase + Vercel nach `docs/setup-phase2a.md`.
-- **Danach (Entwickler):** `npm run test:integration` gegen Testprojekt „nexus-test“; dann Paket 2b (Verbindungen) nach Spec, Backlog-Punkte „Vor 2b/2f“ zuerst.
+- **Paket 2a live** (PR #3, Fix #4): Produktion `https://nexus-iota-gold-96.vercel.app` (Vercel-Projekt `nexus`, Team NEXUS, Pro), Supabase `nexus-assistent` (Frankfurt, Free), Migration ausgeführt, alle Variablen nur für Production gesetzt, Inhaber mit Passkey angemeldet, Echtmodus zeigt „Noch nichts verbunden“.
+- Die Session-Umgebung „NEXUS Video“ hat einen Vercel-Token (30 Tage) für `api.vercel.com`: Variablen, Deployments und Logs lassen sich darüber selbst prüfen.
+- **Paket 2b-1 gebaut** (Branch `claude/cool-hopper-hcnb9d`, noch kein PR/Merge): Verträge aus Stripe und Lexware. Import alle 15 Min. + Stripe-Webhook, Vertragsvorschläge („NEXUS-Mitgliedschaft, N Monate“) zum Bestätigen unter Mitglieder › Vorschläge, Stripe-Zahlungen sicher über das Abo zugeordnet, Legacy ohne Bank zeigt „Bank nicht verbunden“. Spec `docs/superpowers/specs/2026-11-12-phase2b-design.md`, Plan `docs/superpowers/plans/2026-11-12-phase2b1-vertraege.md`. 603 Unit-Tests, E2E grün.
+- **Als Nächstes:** PR für 2b-1 und Merge; dann Inhaber-Checkliste `docs/setup-phase2b.md` (Stripe-Lese-Schlüssel, Webhook, 2 Lexware-Schlüssel, 4 Vercel-Variablen, Migration). Vor echtem Betrieb Stripe-/Lexware-Feldnamen gegen die Doku prüfen (Backlog). Danach 2b-2 (Qonto API, Sparkasse CAMT, Zuordnungs-Härtung), dann 2b-3 (Umstellung der Bestandsmitglieder auf Stripe per Checkout-Link, Backlog „Vor 2b-3“ zuerst). Weiter offen: Supabase auf Pro vor echten Bankdaten; überzählige Vercel-Projekte löschen; `npm run test:integration` gegen Testprojekt.
 - Zugänge des Inhabers: alles vorhanden außer einer zweiten WhatsApp-Nummer (erst 2e). Banken: Qonto (NEXUS, API) und Sparkasse Essen (Zulassung, CAMT-Upload). info@ beim Team, IMAP-Daten auf Anfrage. Kalender: Google und iCloud.
 - Offen: Codex-Zweitmeinung; Gefühl der Wischgesten am iPhone.

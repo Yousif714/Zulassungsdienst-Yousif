@@ -87,3 +87,34 @@ describe('GET /api/cron/tick', () => {
     expect(Array.isArray(j.ran) && Array.isArray(j.skipped)).toBe(true);
   });
 });
+
+describe('runTick Sync', () => {
+  test('Sync läuft genau einmal je Takt, auch bei mehreren fälligen Sync-Slots', async () => {
+    const sync = vi.fn(async () => {});
+    await runTick({ repos, at: new Date('2026-11-12T06:05:00Z'), provider, sync });
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+  test('kein Sync-Slot beansprucht → kein Sync', async () => {
+    const sync = vi.fn(async () => {});
+    const at = new Date('2026-11-12T06:05:00Z');
+    await runTick({ repos, at, provider });
+    await runTick({ repos, at, provider, sync });
+    expect(sync).not.toHaveBeenCalled();
+  });
+  test('Fehler im Sync bricht den Takt nicht ab', async () => {
+    const r = await runTick({ repos, at: new Date('2026-11-12T06:05:00Z'), provider, sync: async () => { throw new Error('x'); } });
+    expect(r.ran.length).toBeGreaterThan(0);
+  });
+  test('Sync-Fehler wird geloggt: fester Präfix, nur Fehlername, nie Meldung oder Geheimnis', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await runTick({ repos, at: new Date('2026-11-12T06:05:00Z'), provider, sync: async () => { throw new TypeError('sk_live_GEHEIM'); } });
+    expect(spy).toHaveBeenCalledWith('Sync nach dem Takt fehlgeschlagen:', 'TypeError');
+    expect(JSON.stringify(spy.mock.calls)).not.toContain('GEHEIM');
+    spy.mockRestore();
+  });
+});
+
+test('Route: maxDuration 60 s, über dem Sync-Budget von 40 s', async () => {
+  const route = await import('@/app/api/cron/tick/route');
+  expect(route.maxDuration).toBe(60);
+});

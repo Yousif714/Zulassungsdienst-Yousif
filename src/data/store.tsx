@@ -55,7 +55,7 @@ export function loadInitial(
   let s: AppState;
   try {
     const raw = storage.getItem(STORE_KEY);
-    s = raw ? (JSON.parse(raw) as AppState) : createDemoState();
+    s = raw ? { ...createEmptyState(), ...(JSON.parse(raw) as AppState) } : createDemoState();
   } catch {
     s = createDemoState();
   }

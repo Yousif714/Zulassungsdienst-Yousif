@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { reconcileInsights, runDetectors, selectTop } from '@/domain/detectors';
-import { memberView } from '@/domain/detectors/members';
+import { detectMemberOverdue, memberView } from '@/domain/detectors/members';
+import type { Connection } from '@/domain/types';
+import { detectStaleSources } from '@/domain/detectors/sources';
 import type { StoredInsight } from '@/domain/types';
 import { NOW_0930, base, conn, find, inv, ins, muellerDone, schmidtIn, stateWith, tx, types } from './helpers';
 
@@ -97,6 +99,43 @@ describe('Detektoren', () => {
   });
 });
 
+describe('Rückstand je Vertragsquelle', () => {
+  const stripeContractOverdue = (status: Partial<Record<Connection['id'], Connection['status']>>) =>
+    stateWith({
+      contracts: [{ ...base, contactId: 'm-kaya', billing: 'stripe', startDate: '2026-09-01' }],
+      connections: stateWith().connections.map((c) => ({ ...c, status: status[c.id] ?? c.status })),
+    });
+  test('Rückstand-Hinweis braucht nur die Quelle des Vertrags', () => {
+    const st = stripeContractOverdue({ bank: 'missing', stripe_nexus: 'connected' });
+    expect(runDetectors(st, NOW_0930).some((i) => i.type === 'member_overdue')).toBe(true);
+    expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['stripe_nexus']);
+  });
+  test('Sammelhinweis bleibt bei fehlender Bank, wenn Stripe-Verträge überfällig sind', () => {
+    const st = stripeContractOverdue({ bank: 'missing', stripe_nexus: 'connected' });
+    const two = {
+      ...st,
+      contracts: [
+        st.contracts[0],
+        { ...st.contracts[0], id: 'c2', contactId: 'm-yilmaz' },
+        { ...st.contracts[0], id: 'c3', contactId: 'm-kaya', billing: 'legacy' as const },
+      ],
+    };
+    const all = runDetectors(two, NOW_0930).filter((i) => i.dedupeKey.startsWith('overdue:all:'));
+    expect(all).toHaveLength(1);
+    expect(all[0].title).toMatch(/^2 Mitglieder/);
+    expect(all[0].needsSources).toEqual(['stripe_nexus']);
+    expect(all[0].refs.map((r) => r.id)).toEqual(['c1', 'c2']);
+  });
+  test('Legacy-Vertrag ohne Bank → kein Rückstand-Hinweis', () => {
+    const st = stateWith({
+      contracts: [{ ...base, contactId: 'm-kaya', startDate: '2026-09-01' }],
+      connections: stateWith().connections.map((c) => (c.id === 'bank' ? { ...c, status: 'missing' as const } : c)),
+    });
+    expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['bank']);
+    expect(runDetectors(st, NOW_0930).some((i) => i.type === 'member_overdue')).toBe(false);
+  });
+});
+
 describe('Lebenszyklus', () => {
   test('neu → open, weg → done, dismissed bleibt, Duplikate kollabieren', () => {
     const r1 = reconcileInsights([], [ins('k1')], NOW_0930);
@@ -142,4 +181,12 @@ describe('Lebenszyklus', () => {
     const list = [mk('a', 'info', 9), mk('b', 'today', 100), mk('c', 'now', 5), mk('d', 'now', 50), mk('e', 'now', 999, 'done'), mk('f', 'today', 200)];
     expect(selectTop(list).map((i) => i.dedupeKey)).toEqual(['d', 'c', 'f']);
   });
+});
+
+test('Fehler-Hinweis erst ab 3 Fehlversuchen, Demo-Störung (ohne sync) sofort', () => {
+  const c = (failures?: number) => conn({ id: 'stripe_nexus', company: 'nexus', label: 'Stripe NEXUS', status: 'error', lastSuccessAt: null, lastError: 'x', ...(failures === undefined ? {} : { sync: { cursor: null, complete: true, failures } }) });
+  const n = (failures?: number) => detectStaleSources(stateWith({ connections: [c(failures)] }), NOW_0930).length;
+  expect(n(2)).toBe(0);
+  expect(n(3)).toBe(1);
+  expect(n()).toBe(1);
 });

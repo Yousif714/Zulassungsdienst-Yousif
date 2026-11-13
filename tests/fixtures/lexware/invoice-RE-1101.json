@@ -1,0 +1,25 @@
+{
+  "id": "inv-RE-1101",
+  "voucherNumber": "RE-1101",
+  "voucherDate": "2026-09-12T00:00:00.000+02:00",
+  "dueDate": "2026-09-26T00:00:00.000+02:00",
+  "voucherStatus": "open",
+  "address": {
+    "contactId": "c-81"
+  },
+  "title": "Rechnung",
+  "introduction": null,
+  "lineItems": [
+    {
+      "type": "custom",
+      "name": "Workshop",
+      "description": "Einzeltermin"
+    }
+  ],
+  "totalPrice": {
+    "currency": "EUR",
+    "totalNetAmount": 125.21,
+    "totalGrossAmount": 149.0
+  },
+  "updatedDate": "2026-09-12T08:00:00.000+02:00"
+}

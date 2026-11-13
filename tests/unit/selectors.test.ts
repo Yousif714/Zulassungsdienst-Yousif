@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { createDemoState } from '@/data/seed';
-import { invoiceCandidates, stripeLexCases, unallocatedBankPayments, zulassungKpis } from '@/data/selectors';
+import { invoiceCandidates, memberRows, nexusForecast, overdueMembers, stripeLexCases, unallocatedBankPayments, waitingStripePayments, zulassungKpis } from '@/data/selectors';
 import { reducer, refresh } from '@/data/store';
 import { jobBilling } from '@/domain/billing';
 import { NOW_0930 as NOW } from './helpers';
+import { confirmedSub, legacyNoBank, stripeState } from './import/helpers';
 
 const s = refresh(createDemoState(), NOW);
 
@@ -65,5 +66,38 @@ describe('Zulassungsdienst-Selektoren', () => {
     // Hält ein ANDERER Auftrag die Rechnung, ist sie kein Kandidat.
     const other = { ...s, jobs: [...s.jobs, { ...s.jobs.find((j) => j.id === 'j-mueller-1')!, id: 'j-mueller-x', invoiceIds: ['i-z-311'] }] };
     expect(invoiceCandidates(other, 'j-mueller-1').map((i) => i.id)).not.toContain('i-z-311');
+  });
+});
+
+describe('Verträge je Quelle', () => {
+  test('Legacy-Vertrag ohne Bank: notConnected', () => expect(memberRows(legacyNoBank, '2026-11-12')[0].notConnected).toBe(true));
+  test('Stripe-Vertrag mit verbundener Quelle: nicht notConnected', () => {
+    const st = { ...legacyNoBank, contracts: legacyNoBank.contracts.map((c) => ({ ...c, billing: 'stripe' as const })) };
+    expect(memberRows(st, '2026-11-12')[0].notConnected).toBe(false);
+  });
+  test('overdueMembers und nexusForecast lassen notConnected-Verträge aus', () => {
+    expect(memberRows(legacyNoBank, '2026-11-12')[0].traffic).not.toBe('green');
+    expect(overdueMembers(legacyNoBank, '2026-11-12')).toEqual([]);
+    expect(nexusForecast(legacyNoBank, '2026-11-12')).toEqual({ expectedCents: 0, atRiskCents: 0 });
+    const connected = { ...legacyNoBank, connections: createDemoState().connections.map((c) => ({ ...c, status: 'connected' as const })) };
+    expect(overdueMembers(connected, '2026-11-12')).toHaveLength(1);
+    expect(nexusForecast(connected, '2026-11-12').expectedCents).toBeGreaterThan(0);
+  });
+  test('wartende Stripe-Zahlungen', () => {
+    const ids = waitingStripePayments(stripeState).map((p) => p.externalId);
+    expect(ids).toContain('in_A1');
+    expect(ids).not.toContain('in_D1'); // Coaching-Abo: keine Mitgliedschaft
+  });
+  test('Erstattungen zählen nicht als wartende Zahlungen', () => {
+    expect(stripeState.payments.some((p) => p.externalId === 're_B1')).toBe(true);
+    expect(waitingStripePayments(stripeState).map((p) => p.externalId)).not.toContain('re_B1');
+  });
+  test('bestätigtes Abo: keine wartenden Zahlungen mehr', () => {
+    const st = confirmedSub(stripeState, 'sub_A', 'k-ayse');
+    expect(waitingStripePayments(st).map((p) => p.externalId)).not.toContain('in_A1');
+  });
+  test('Stripe-Zahlung ohne Abo wartet nicht', () => {
+    const st = { ...stripeState, payments: stripeState.payments.map((p) => (p.externalId === 'in_A1' ? { ...p, subscriptionExternalId: undefined } : p)) };
+    expect(waitingStripePayments(st).map((p) => p.externalId)).not.toContain('in_A1');
   });
 });

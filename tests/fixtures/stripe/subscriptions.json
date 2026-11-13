@@ -1,0 +1,200 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "sub_A",
+      "object": "subscription",
+      "status": "active",
+      "customer": {
+        "id": "cus_A",
+        "name": "Ayşe Öztürk",
+        "email": "ayse@example.de"
+      },
+      "currency": "eur",
+      "start_date": 1788264000,
+      "billing_cycle_anchor": 1788264000,
+      "cancel_at": 1798804800,
+      "schedule": null,
+      "items": {
+        "data": [
+          {
+            "price": {
+              "id": "price_sub_A",
+              "unit_amount": 30000,
+              "currency": "eur",
+              "product": "prod_4",
+              "recurring": {
+                "interval": "month",
+                "interval_count": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sub_B",
+      "object": "subscription",
+      "status": "active",
+      "customer": {
+        "id": "cus_B",
+        "name": "Jonas Weber",
+        "email": "jonas@example.de"
+      },
+      "currency": "eur",
+      "start_date": 1789473600,
+      "billing_cycle_anchor": 1789473600,
+      "cancel_at": null,
+      "schedule": {
+        "id": "sub_sched_B",
+        "phases": [
+          {
+            "start_date": 1789473600,
+            "end_date": 1802692800
+          }
+        ]
+      },
+      "items": {
+        "data": [
+          {
+            "price": {
+              "id": "price_sub_B",
+              "unit_amount": 27500,
+              "currency": "eur",
+              "product": "prod_m",
+              "recurring": {
+                "interval": "month",
+                "interval_count": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sub_C",
+      "object": "subscription",
+      "status": "canceled",
+      "customer": {
+        "id": "cus_C",
+        "name": "Lea Braun",
+        "email": "lea@example.de"
+      },
+      "currency": "eur",
+      "start_date": 1786363200,
+      "billing_cycle_anchor": 1786363200,
+      "cancel_at": null,
+      "schedule": null,
+      "items": {
+        "data": [
+          {
+            "price": {
+              "id": "price_sub_C",
+              "unit_amount": 30000,
+              "currency": "eur",
+              "product": "prod_6",
+              "recurring": {
+                "interval": "month",
+                "interval_count": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sub_D",
+      "object": "subscription",
+      "status": "active",
+      "customer": {
+        "id": "cus_D",
+        "name": "Dana Kern",
+        "email": "dana@example.de"
+      },
+      "currency": "eur",
+      "start_date": 1791201600,
+      "billing_cycle_anchor": 1791201600,
+      "cancel_at": null,
+      "schedule": null,
+      "items": {
+        "data": [
+          {
+            "price": {
+              "id": "price_sub_D",
+              "unit_amount": 9900,
+              "currency": "eur",
+              "product": "prod_c",
+              "recurring": {
+                "interval": "month",
+                "interval_count": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sub_E",
+      "object": "subscription",
+      "status": "active",
+      "customer": {
+        "id": "cus_E",
+        "name": "Tim Roth",
+        "email": "tim@example.de"
+      },
+      "currency": "eur",
+      "start_date": 1792497600,
+      "billing_cycle_anchor": 1792497600,
+      "cancel_at": null,
+      "schedule": null,
+      "items": {
+        "data": [
+          {
+            "price": {
+              "id": "price_sub_E",
+              "unit_amount": 27500,
+              "currency": "eur",
+              "product": "prod_m",
+              "recurring": {
+                "interval": "month",
+                "interval_count": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sub_F",
+      "object": "subscription",
+      "status": "active",
+      "customer": {
+        "id": "cus_F",
+        "name": "Ole Lang",
+        "email": "ole@example.de"
+      },
+      "currency": "usd",
+      "start_date": 1790856000,
+      "billing_cycle_anchor": 1790856000,
+      "cancel_at": null,
+      "schedule": null,
+      "items": {
+        "data": [
+          {
+            "price": {
+              "id": "price_sub_F",
+              "unit_amount": 9000,
+              "currency": "usd",
+              "product": "prod_3",
+              "recurring": {
+                "interval": "month",
+                "interval_count": 1
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "has_more": false
+}

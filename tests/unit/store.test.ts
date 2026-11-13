@@ -192,6 +192,15 @@ describe('loadInitial', () => {
   const old = (): AppState => reducer(s, { type: 'dismissInsight', key: 'slides:call-seele' });
   const status = (st: AppState) => st.insights.find((i) => i.dedupeKey === 'slides:call-seele')!.status;
 
+  test('loadInitial ergänzt fehlende neue Felder eines alten Demo-Stands', () => {
+    const o = { ...createDemoState() } as Partial<AppState>;
+    delete o.subscriptions;
+    delete o.dismissedProposals;
+    const { state } = loadInitial(memStorage({ [STORE_KEY]: JSON.stringify(o) }), '', NOW);
+    expect(state.subscriptions).toEqual([]);
+    expect(state.dismissedProposals).toEqual([]);
+  });
+
   test('reset=1 → frische Demo, sofort gespeichert; zweiter Lauf ohne Parameter (StrictMode) behält sie', () => {
     const storage = memStorage({ [STORE_KEY]: JSON.stringify(old()) });
     const first = loadInitial(storage, '?reset=1', NOW);

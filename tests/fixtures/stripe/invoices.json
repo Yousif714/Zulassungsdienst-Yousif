@@ -1,0 +1,141 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "in_A1",
+      "object": "invoice",
+      "status": "paid",
+      "currency": "eur",
+      "customer": "cus_A",
+      "customer_name": "Ayşe Öztürk",
+      "number": "NX-0001",
+      "created": 1788264000,
+      "amount_paid": 30000,
+      "status_transitions": {
+        "paid_at": 1788264000
+      },
+      "lines": {
+        "data": [
+          {
+            "description": "NEXUS-Mitgliedschaft 4 Monate"
+          }
+        ]
+      },
+      "parent": {
+        "type": "subscription_details",
+        "subscription_details": {
+          "subscription": "sub_A"
+        }
+      }
+    },
+    {
+      "id": "in_A2",
+      "object": "invoice",
+      "status": "paid",
+      "currency": "eur",
+      "customer": "cus_A",
+      "customer_name": "Ayşe Öztürk",
+      "number": "NX-0002",
+      "created": 1790856000,
+      "amount_paid": 30000,
+      "status_transitions": {
+        "paid_at": 1790856000
+      },
+      "lines": {
+        "data": [
+          {
+            "description": "NEXUS-Mitgliedschaft 4 Monate"
+          }
+        ]
+      },
+      "parent": {
+        "type": "subscription_details",
+        "subscription_details": {
+          "subscription": "sub_A"
+        }
+      }
+    },
+    {
+      "id": "in_A3",
+      "object": "invoice",
+      "status": "paid",
+      "currency": "eur",
+      "customer": "cus_A",
+      "customer_name": "Ayşe Öztürk",
+      "number": "NX-0003",
+      "created": 1793534400,
+      "amount_paid": 30000,
+      "status_transitions": {
+        "paid_at": 1793534400
+      },
+      "lines": {
+        "data": [
+          {
+            "description": "NEXUS-Mitgliedschaft 4 Monate"
+          }
+        ]
+      },
+      "parent": {
+        "type": "subscription_details",
+        "subscription_details": {
+          "subscription": "sub_A"
+        }
+      }
+    },
+    {
+      "id": "in_B1",
+      "object": "invoice",
+      "status": "paid",
+      "currency": "eur",
+      "customer": "cus_B",
+      "customer_name": "Jonas Weber",
+      "number": "NX-0004",
+      "created": 1789473600,
+      "amount_paid": 25000,
+      "status_transitions": {
+        "paid_at": 1789473600
+      },
+      "lines": {
+        "data": [
+          {
+            "description": "NEXUS Mitgliedschaft"
+          }
+        ]
+      },
+      "parent": {
+        "type": "subscription_details",
+        "subscription_details": {
+          "subscription": "sub_B"
+        }
+      }
+    },
+    {
+      "id": "in_D1",
+      "object": "invoice",
+      "status": "paid",
+      "currency": "eur",
+      "customer": "cus_D",
+      "customer_name": "Dana Kern",
+      "number": "NX-0005",
+      "created": 1791201600,
+      "amount_paid": 9900,
+      "status_transitions": {
+        "paid_at": 1791201600
+      },
+      "lines": {
+        "data": [
+          {
+            "description": "Coaching Einzelstunde"
+          }
+        ]
+      },
+      "parent": {
+        "type": "subscription_details",
+        "subscription_details": {
+          "subscription": "sub_D"
+        }
+      }
+    }
+  ],
+  "has_more": false
+}

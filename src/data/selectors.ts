@@ -1,5 +1,7 @@
 import { jobBilling } from '@/domain/billing';
 import { MONEY_SOURCES } from '@/domain/briefing';
+import { contractSources, notConnected } from '@/domain/connections';
+import { isMembership } from '@/domain/import/membership';
 import { todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
 import { areaStale } from '@/domain/freshness';
@@ -17,6 +19,8 @@ export type MemberRow = {
   arrearsCents: number;
   openCents: number;
   billing: MemberContract['billing'];
+  /** Die Quelle des Vertrags (Bank bzw. Stripe) ist nicht verbunden: der Stand ist unbekannt. */
+  notConnected: boolean;
 };
 
 export function memberRows(s: AppState, today: IsoDate): MemberRow[] {
@@ -29,6 +33,7 @@ export function memberRows(s: AppState, today: IsoDate): MemberRow[] {
       arrearsCents: v.status.arrearsCents,
       openCents: v.status.openCents,
       billing: c.billing,
+      notConnected: notConnected(contractSources(c), s.connections),
     };
   });
 }
@@ -38,7 +43,7 @@ export function overdueMembers(
   today: IsoDate,
 ): { contractId: string; contactId: string; name: string; arrearsCents: number; traffic: 'yellow' | 'red' }[] {
   return memberRows(s, today)
-    .filter((r): r is MemberRow & { traffic: 'yellow' | 'red' } => r.traffic === 'yellow' || r.traffic === 'red')
+    .filter((r): r is MemberRow & { traffic: 'yellow' | 'red' } => !r.notConnected && (r.traffic === 'yellow' || r.traffic === 'red'))
     .map((r) => ({
       contractId: r.contractId,
       contactId: s.contracts.find((c) => c.id === r.contractId)!.contactId,
@@ -50,7 +55,7 @@ export function overdueMembers(
 }
 
 export function nexusForecast(s: AppState, today: IsoDate): { expectedCents: number; atRiskCents: number } {
-  const members = s.contracts.map((c) => {
+  const members = s.contracts.filter((c) => !notConnected(contractSources(c), s.connections)).map((c) => {
     const v = memberView(s, c.id, today);
     return { status: v.status, states: v.states };
   });
@@ -62,6 +67,14 @@ export const unallocatedBankPayments = (s: AppState): Payment[] =>
   s.payments.filter(
     (p) => p.source === 'bank' && p.kind === 'incoming' && p.company === 'nexus' && !s.allocations.some((a) => a.paymentId === p.id),
   );
+
+/** Stripe-Zahlungen von Mitgliedschafts-Abos, die auf einen bestätigten Vertrag warten (Abo hat noch keinen Vertrag). */
+export const waitingStripePayments = (s: AppState): Payment[] =>
+  s.payments.filter((p) => {
+    if (p.source !== 'stripe' || p.kind !== 'incoming' || p.amountCents <= 0 || s.allocations.some((a) => a.paymentId === p.id)) return false;
+    const sub = s.subscriptions.find((x) => x.externalId === p.subscriptionExternalId);
+    return !!sub && sub.contractId === null && (isMembership(sub.productName) || isMembership(sub.invoiceLineText ?? ''));
+  });
 
 /** Offene Fälle „Stripe bezahlt, Lexware offen“: Rechnung und Stripe-Zahlung aus dem Hinweis. */
 export function stripeLexCases(s: AppState): { key: string; invoice: Invoice; payment: Payment }[] {

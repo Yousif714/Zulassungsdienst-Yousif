@@ -5,7 +5,7 @@ function daysInMonth(year: number, month0: number): number {
 }
 
 /** Kalendertag in Monat (month0 darf überlaufen); Tag über Monatslänge → Monatsende. */
-function makeDate(year: number, month0: number, day: number): IsoDate {
+export function monthDate(year: number, month0: number, day: number): IsoDate {
   const y = year + Math.floor(month0 / 12);
   const m = ((month0 % 12) + 12) % 12;
   const d = Math.min(day, daysInMonth(y, m));
@@ -22,18 +22,18 @@ export function buildSchedule(c: MemberContract, ex: ContractException[]): Insta
   for (let i = 0; i < c.installments; i++) {
     let month0 = sm - 1 + i;
     let day = c.dueDay;
-    let date = makeDate(sy, month0, day);
+    let date = monthDate(sy, month0, day);
 
     for (const p of pauses) {
       if (date >= p.from) {
         month0 += p.months;
-        date = makeDate(sy, month0, day);
+        date = monthDate(sy, month0, day);
       }
     }
     for (const s of shifts) {
       if (date >= s.from) {
         day = s.newDueDay;
-        date = makeDate(sy, month0, day);
+        date = monthDate(sy, month0, day);
       }
     }
     for (const d of deferrals) {

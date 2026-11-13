@@ -1,0 +1,94 @@
+{
+  "content": [
+    {
+      "id": "inv-RE-1043",
+      "voucherType": "invoice",
+      "voucherStatus": "paid",
+      "voucherNumber": "RE-1043",
+      "voucherDate": "2026-09-01T00:00:00.000+02:00",
+      "updatedDate": "2026-09-01T08:00:00.000+02:00",
+      "dueDate": "2026-09-01T00:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 300.0,
+      "currency": "EUR"
+    },
+    {
+      "id": "inv-RE-1051",
+      "voucherType": "invoice",
+      "voucherStatus": "paid",
+      "voucherNumber": "RE-1051",
+      "voucherDate": "2026-10-01T00:00:00.000+02:00",
+      "updatedDate": "2026-10-01T08:00:00.000+02:00",
+      "dueDate": "2026-10-01T00:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 300.0,
+      "currency": "EUR"
+    },
+    {
+      "id": "inv-RE-1060",
+      "voucherType": "invoice",
+      "voucherStatus": "open",
+      "voucherNumber": "RE-1060",
+      "voucherDate": "2026-11-01T00:00:00.000+02:00",
+      "updatedDate": "2026-11-01T08:00:00.000+02:00",
+      "dueDate": "2026-11-01T00:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 300.0,
+      "currency": "EUR"
+    },
+    {
+      "id": "inv-RE-1100",
+      "voucherType": "invoice",
+      "voucherStatus": "open",
+      "voucherNumber": "RE-1100",
+      "voucherDate": "2026-09-10T00:00:00.000+02:00",
+      "updatedDate": "2026-09-10T08:00:00.000+02:00",
+      "dueDate": "2026-09-24T00:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 1200.0,
+      "currency": "EUR"
+    },
+    {
+      "id": "inv-RE-1101",
+      "voucherType": "invoice",
+      "voucherStatus": "open",
+      "voucherNumber": "RE-1101",
+      "voucherDate": "2026-09-12T00:00:00.000+02:00",
+      "updatedDate": "2026-09-12T08:00:00.000+02:00",
+      "dueDate": "2026-09-26T00:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 149.0,
+      "currency": "EUR"
+    },
+    {
+      "id": "inv-RE-1102",
+      "voucherType": "invoice",
+      "voucherStatus": "voided",
+      "voucherNumber": "RE-1102",
+      "voucherDate": "2026-09-15T00:00:00.000+02:00",
+      "updatedDate": "2026-09-15T08:00:00.000+02:00",
+      "dueDate": "2026-09-29T00:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 600.0,
+      "currency": "EUR"
+    },
+    {
+      "id": "inv-RE-1110",
+      "voucherType": "invoice",
+      "voucherStatus": "open",
+      "voucherNumber": "RE-1110",
+      "voucherDate": "2026-10-05T00:00:00.000+02:00",
+      "updatedDate": "2026-10-05T08:00:00.000+02:00",
+      "dueDate": "2026-10-19T00:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 600.0,
+      "currency": "EUR"
+    }
+  ],
+  "first": true,
+  "last": true,
+  "totalPages": 1,
+  "totalElements": 7,
+  "number": 0,
+  "size": 100
+}

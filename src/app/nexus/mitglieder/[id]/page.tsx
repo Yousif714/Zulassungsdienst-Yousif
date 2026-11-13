@@ -16,6 +16,7 @@ import { useAI } from '@/data/ai-client';
 import { useAppStore } from '@/data/store';
 import { reminderAction, reminderActionId } from '@/domain/action-factory';
 import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
+import { contractSources, notConnected } from '@/domain/connections';
 import { memberView } from '@/domain/detectors';
 import { formatEuro } from '@/domain/money';
 import type { Action, InstallmentState, IsoDate } from '@/domain/types';
@@ -99,30 +100,35 @@ export default function MemberPage() {
   };
 
   const showSheet = open || !!stored;
+  const missing = notConnected(contractSources(contract), state.connections);
 
   return (
     <>
-      <PageHeader title={name} subtitle={<span className="member-subtitle"><TrafficDot traffic={status.traffic} />{TRAFFIC_LABEL(status.traffic)} · {contract.billing === 'legacy' ? 'Überweisung' : 'Stripe'}</span>}
+      <PageHeader title={name} subtitle={missing
+        ? <span className="member-subtitle">{contract.billing === 'legacy' ? 'Überweisung' : 'Stripe'}</span>
+        : <span className="member-subtitle"><TrafficDot traffic={status.traffic} />{TRAFFIC_LABEL(status.traffic)} · {contract.billing === 'legacy' ? 'Überweisung' : 'Stripe'}</span>}
         trailing={<BackLink href="/nexus" label="NEXUS" />} />
 
-      <Figures title="Kennzahlen">
+      {missing && <p className="note-card" data-testid="bank-missing">{contract.billing === 'legacy' ? 'Bank nicht verbunden' : 'Stripe nicht verbunden'}: Der Stand dieses Vertrags ist unbekannt.</p>}
+
+      {!missing && <Figures title="Kennzahlen">
         <Figure label="Fällig bis heute" cents={status.dueCents} testId="due" />
         <Figure label="Gezahlt" cents={status.paidCents} testId="paid" />
         <Figure label="Rückstand" cents={status.arrearsCents} testId="arrears" strong arrears />
         <Figure label="Künftige Raten" cents={status.futureCents} testId="future" />
         <Figure label="Offen gesamt" cents={status.openCents} testId="open-total" strong />
-      </Figures>
+      </Figures>}
 
-      <section className="list-group" aria-labelledby="steps-title">
+      {!missing && <section className="list-group" aria-labelledby="steps-title">
         <h2 id="steps-title" className="list-group-title">Rechenweg</h2>
         <ol className="steps" data-testid="steps">
           {status.steps.map((s) => <li key={s}>{s}</li>)}
         </ol>
-      </section>
+      </section>}
 
       {(status.arrearsCents > 0 || stored || contract.billing === 'legacy') && (
         <div className="member-actions">
-          {status.arrearsCents > 0 && !showSheet && (
+          {!missing && status.arrearsCents > 0 && !showSheet && (
             <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>Erinnerung vorbereiten</button>
           )}
           {contract.billing === 'legacy' && (

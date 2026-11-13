@@ -8,6 +8,7 @@ import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { Action } from '@/domain/types';
 import { NOW_0930 as NOW } from './helpers';
 import { createDemoState } from '@/data/seed';
+import { emptyBatch } from '@/domain/import/batch';
 
 const draft = (p: Partial<Action> = {}): Action => ({
   id: 'a-1', type: 'create_calendar_event', company: 'zulassung', title: 'Termin anlegen',
@@ -128,10 +129,10 @@ describe('Zustands-Dienst', () => {
   });
 
   test('isClientEvent: nur erlaubte Ereignisse mit Grundform', () => {
-    expect(CLIENT_EVENTS.size).toBe(14);
+    expect(CLIENT_EVENTS.size).toBe(16);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);
     expect(isClientEvent({ type: 'dismissInsight', key: 'reply:m-1' })).toBe(true);
-    for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {
+    for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {
       expect(isClientEvent({ type, id: 'a-1', result: 'ok', found: true }), type).toBe(false);
     }
     for (const v of [null, undefined, 'approveAction', 42, [], [{ type: 'approveAction' }]]) expect(isClientEvent(v)).toBe(false);
@@ -140,6 +141,14 @@ describe('Zustands-Dienst', () => {
     expect(isClientEvent({ type: 'createAction', action: null })).toBe(false);
     expect(isClientEvent({ type: 'createAction', action: draft() })).toBe(true);
     expect(isClientEvent({ type: 'createAction', action: draft({ status: 'approved' }) })).toBe(false);
+  });
+
+  test('confirmProposal/dismissProposal sind Client-Ereignisse mit Formprüfung', () => {
+    const draftA = { totalCents: 120000, installments: 4, installmentCents: 30000, dueDay: 1, startDate: '2026-09-01', catchUpMode: 'first_rate' };
+    expect(isClientEvent({ type: 'confirmProposal', proposalId: 'p', draft: draftA, contactId: null })).toBe(true);
+    expect(isClientEvent({ type: 'confirmProposal', proposalId: 'p', draft: { ...draftA, installments: 1.5 }, contactId: null })).toBe(false);
+    expect(isClientEvent({ type: 'confirmProposal', proposalId: 'p', draft: { ...draftA, startDate: '1.9.2026' }, contactId: null })).toBe(false);
+    expect(isClientEvent({ type: 'dismissProposal', proposalId: 'p' })).toBe(true);
   });
 
   test('updateSettings: nur bekannte Schlüssel mit passendem Typ', () => {
@@ -194,5 +203,8 @@ describe('Zustands-Dienst', () => {
     expect(isClientEvent({ type: 'setSlides', callId: 'c-1', status: 'draft' })).toBe(false);
     expect(isClientEvent({ type: 'setSlides', callId: 'c-1', slides: [{ position: '1', title: 'T', body: 'B' }], status: 'draft' })).toBe(false);
     expect(isClientEvent({ type: 'setSlides', callId: 'c-1', slides: [{ position: 1, title: 'T' }], status: 'draft' })).toBe(false);
+  });
+  test.each(['importBatch', 'syncFailed'])('%s ist kein Client-Ereignis', (type) => {
+    expect(isClientEvent({ type, connectionId: 'stripe_nexus', batch: emptyBatch(), error: 'x', cursor: null, complete: true })).toBe(false);
   });
 });

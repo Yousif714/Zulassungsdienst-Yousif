@@ -8,6 +8,11 @@ export interface ServerEnv {
   cronSecret: string;
   appOrigin: string;
   testMemoryDb: boolean;
+  /** Optionale Integrationsschlüssel; fehlen sie, bleibt die Verbindung `missing`. */
+  stripeRestrictedKey?: string;
+  stripeWebhookSecret?: string;
+  lexwareNexusApiKey?: string;
+  lexwareZulassungApiKey?: string;
 }
 
 const SUPABASE = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const;
@@ -31,5 +36,9 @@ export function readEnv(e: Record<string, string | undefined> = process.env): Se
     cronSecret: val('CRON_SECRET')!,
     appOrigin: val('APP_ORIGIN')!,
     testMemoryDb,
+    stripeRestrictedKey: val('STRIPE_RESTRICTED_KEY'),
+    stripeWebhookSecret: val('STRIPE_WEBHOOK_SECRET'),
+    lexwareNexusApiKey: val('LEXWARE_NEXUS_API_KEY'),
+    lexwareZulassungApiKey: val('LEXWARE_ZULASSUNG_API_KEY'),
   };
 }

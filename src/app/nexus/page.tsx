@@ -13,6 +13,7 @@ import { useAppStore } from '@/data/store';
 import { MONEY_SOURCES, buildBriefing } from '@/domain/briefing';
 import { formatBerlin, formatBerlinDe, now, todayBerlin } from '@/domain/clock';
 import { areaStale } from '@/domain/freshness';
+import { deriveProposals } from '@/domain/import/proposals';
 import { formatEuro } from '@/domain/money';
 
 type Filter = 'all' | 'overdue';
@@ -28,6 +29,7 @@ export default function NexusPage() {
   const rows = memberRows(state, today).sort((a, b) => b.arrearsCents - a.arrearsCents || a.name.localeCompare(b.name, 'de'));
   const shown = filter === 'overdue' ? rows.filter((r) => r.traffic !== 'green') : rows;
   const toMatch = unallocatedBankPayments(state).length + stripeLexCases(state).length;
+  const openProposals = deriveProposals(state).length;
   const calls = [...state.calls].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const contentOpen = state.content.filter((c) => c.stage !== 'published').length;
 
@@ -45,6 +47,13 @@ export default function NexusPage() {
         <ListRow key="match" href="/nexus/zuordnen" title={`Zuordnen (${toMatch})`} testId="match-link" />
       </ListGroup>
 
+      {openProposals > 0 && (
+        <ListGroup title="Verträge">
+          <ListRow key="proposals" href="/nexus/mitglieder/vorschlaege" testId="proposals-card"
+            title={openProposals === 1 ? '1 Vertrag zum Bestätigen' : `${openProposals} Verträge zum Bestätigen`} />
+        </ListGroup>
+      )}
+
       <section className="list-group" aria-labelledby="members-title">
         <div className="list-group-headline">
           <h2 id="members-title" className="list-group-title">Mitglieder</h2>
@@ -56,9 +65,9 @@ export default function NexusPage() {
           {shown.map((r) => (
             <li key={r.contractId}>
               <ListRow href={`/nexus/mitglieder/${r.contractId}`} testId={`member-row-${r.contractId}`}
-                leading={<TrafficDot traffic={r.traffic} />} title={r.name}
-                subtitle={r.billing === 'legacy' ? 'Überweisung' : 'Stripe'}
-                value={r.arrearsCents > 0 ? <span className="amount arrears-value">{formatEuro(r.arrearsCents)}</span> : undefined} />
+                leading={r.notConnected ? undefined : <TrafficDot traffic={r.traffic} />} title={r.name}
+                subtitle={r.billing === 'legacy' ? (r.notConnected ? 'Überweisung · Bank nicht verbunden' : 'Überweisung') : (r.notConnected ? 'Stripe · nicht verbunden' : 'Stripe')}
+                value={!r.notConnected && r.arrearsCents > 0 ? <span className="amount arrears-value">{formatEuro(r.arrearsCents)}</span> : undefined} />
             </li>
           ))}
         </ul>

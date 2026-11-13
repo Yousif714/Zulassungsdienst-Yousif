@@ -2,14 +2,13 @@ import 'server-only';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { realNow } from '@/domain/clock';
 import type { AuthRepository, Repos, StateRepository, StoredPasskey } from './repository';
-import { fromRows, TABLES, type ChangeSet, type Row, type TableName } from './tables';
+import { fromRows, TABLES, WITH_EXTERNAL_TABLES, type ChangeSet, type Row, type TableName } from './tables';
 
 const PAGE = 1000; // PostgREST liefert standardmäßig höchstens 1000 Zeilen je Anfrage
 const TABLE_NAMES = [...new Set(Object.values(TABLES))] as TableName[];
-const WITH_EXTERNAL = new Set<TableName>(['payments', 'invoices', 'messages', 'events']);
 
 function columns(t: TableName): string {
-  if (WITH_EXTERNAL.has(t)) return 'id,ord,data,connection_id,external_id';
+  if (WITH_EXTERNAL_TABLES.has(t)) return 'id,ord,data,connection_id,external_id';
   if (t === 'insights') return 'id,ord,data,dedupe_key';
   return 'id,ord,data';
 }

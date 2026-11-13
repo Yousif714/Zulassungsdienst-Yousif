@@ -27,3 +27,26 @@ describe('allocate + memberStatus', () => {
     expect(memberStatus(allocate(s, [{ bookedOn: '2026-10-01', amountCents: 130000 }]).states, 10000, '2026-11-12').openCents).toBe(0);
   });
 });
+
+describe('Erstattungen', () => {
+  test('Erstattung nimmt von der jüngsten bezahlten Rate', () => {
+    const r = allocate(s, [{ bookedOn: '2026-10-01', amountCents: 60000 }, { bookedOn: '2026-10-15', amountCents: -30000 }]);
+    expect(r.states.map((x) => [x.paidCents, x.paidOn])).toEqual([[30000, '2026-10-01'], [0, null], [0, null], [0, null]]);
+  });
+  test('Erstattung zuerst gegen Überzahlung', () => {
+    const r = allocate(s, [{ bookedOn: '2026-10-01', amountCents: 130000 }, { bookedOn: '2026-10-02', amountCents: -10000 }]);
+    expect(r.overpaidCents).toBe(0);
+    expect(r.states.every((x) => x.paidCents === 30000)).toBe(true);
+  });
+  test('Teilerstattung lässt Rate teilbezahlt ohne paidOn', () => {
+    const r = allocate(s, [{ bookedOn: '2026-10-01', amountCents: 30000 }, { bookedOn: '2026-10-02', amountCents: -5000 }]);
+    expect([r.states[0].paidCents, r.states[0].paidOn]).toEqual([25000, null]);
+  });
+  test('Betrag 0 ändert nichts', () => expect(allocate(s, [{ bookedOn: '2026-10-01', amountCents: 0 }]).states.every((x) => x.paidCents === 0)).toBe(true));
+  test('Erstattung größer als Gezahltes → nie negativ', () => {
+    const r = allocate(s, [{ bookedOn: '2026-10-01', amountCents: 10000 }, { bookedOn: '2026-10-02', amountCents: -50000 }]);
+    expect(r.states.every((x) => x.paidCents >= 0)).toBe(true);
+    expect(r.overpaidCents).toBe(0);
+  });
+  test('gleicher Tag: Zahlung vor Erstattung', () => expect(allocate(s, [{ bookedOn: '2026-10-01', amountCents: -30000 }, { bookedOn: '2026-10-01', amountCents: 30000 }]).states[0].paidCents).toBe(0));
+});

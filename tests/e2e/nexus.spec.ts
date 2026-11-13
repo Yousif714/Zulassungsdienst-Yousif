@@ -118,3 +118,26 @@ test('Wiederholte Knöpfe nennen im Namen, worum es geht', async ({ page }) => {
   await page.goto('/zulassung/auftraege/j-mueller-1');
   await expect(page.getByRole('button', { name: 'Rechnung RE-Z-2026-311 zuordnen', exact: true })).toBeVisible();
 });
+
+test('Demo: keine Vorschlagskarte, Übernahme zeigt Demo-Etikett', async ({ page }) => {
+  await page.goto('/nexus?reset=1');
+  await expect(page.getByTestId('proposals-card')).toHaveCount(0);
+  await page.goto('/nexus/mitglieder/mc-schulz/uebernahme');
+  await expect(page.getByTestId('demo-badge').first()).toBeVisible();
+});
+
+test('Bank nicht verbunden: Übernahme-Seite zeigt keinen Rückstand und keinen Plan', async ({ page }) => {
+  await page.goto('/nexus?reset=1');
+  await expect(page.getByTestId(`member-row-${KAYA}`)).toBeVisible();
+  await page.evaluate(() => {
+    const key = 'nexus-demo-v1';
+    const s = JSON.parse(localStorage.getItem(key)!);
+    s.connections = s.connections.map((c: { id: string }) => (c.id === 'bank' ? { ...c, status: 'missing', lastSuccessAt: null } : c));
+    localStorage.setItem(key, JSON.stringify(s));
+  });
+  await page.goto(`/nexus/mitglieder/${KAYA}/uebernahme`);
+  await expect(page.getByTestId('bank-missing')).toBeVisible();
+  await expect(page.getByTestId('arrears')).toHaveCount(0);
+  await expect(page.getByTestId('rate-preview')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Stripe-Plan vorbereiten/ })).toHaveCount(0);
+});

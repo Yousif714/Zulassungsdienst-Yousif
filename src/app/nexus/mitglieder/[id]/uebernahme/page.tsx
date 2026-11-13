@@ -9,10 +9,12 @@ import { Figure, Figures } from '@/components/Figures';
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
+import { CATCH_UP_OPTIONS } from '@/components/ProposalCard';
 import { Segmented } from '@/components/Segmented';
 import { useAppStore } from '@/data/store';
 import { stripePlanAction, stripePlanActionId } from '@/domain/action-factory';
 import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
+import { contractSources, notConnected } from '@/domain/connections';
 import { memberView } from '@/domain/detectors';
 import { planTakeover } from '@/domain/ledger/takeover';
 import { formatEuro } from '@/domain/money';
@@ -20,10 +22,7 @@ import type { Installment, MemberContract } from '@/domain/types';
 
 type Mode = MemberContract['catchUpMode'];
 
-const MODE_OPTIONS: { value: Mode; label: string }[] = [
-  { value: 'first_rate', label: 'Mit erster Rate nachzahlen' },
-  { value: 'spread', label: 'Auf Restraten verteilen' },
-];
+const MODE_OPTIONS = CATCH_UP_OPTIONS;
 
 export default function TakeoverPage() {
   const { id } = useParams<{ id: string }>();
@@ -58,6 +57,8 @@ export default function TakeoverPage() {
     })
     .sort((x, y) => x.p.bookedOn.localeCompare(y.p.bookedOn));
 
+  const missing = notConnected(contractSources(contract), state.connections);
+
   const prepare = () => {
     const action = stripePlanAction({ contract, name, mode, rates: plan.rates, at, isDemo: appMode === 'demo' });
     dispatch({ type: 'createAction', action });
@@ -65,7 +66,7 @@ export default function TakeoverPage() {
 
   return (
     <>
-      <PageHeader title="Übernahme" subtitle={`${name} · von Überweisung zu Stripe`} badge={<DemoBadge />} trailing={back} />
+      <PageHeader title="Übernahme" subtitle={`${name} · von Überweisung zu Stripe`} badge={appMode === 'demo' ? <DemoBadge /> : undefined} trailing={back} />
 
       {contract.billing === 'stripe' && <p className="note-card">{name} zahlt bereits über Stripe.</p>}
 
@@ -82,6 +83,17 @@ export default function TakeoverPage() {
           ))}
       </ListGroup>
 
+      {missing ? (
+        <>
+          <p className="note-card" data-testid="bank-missing">Bank nicht verbunden: Der Rückstand wird nach der Bankanbindung berechnet.</p>
+          <ListGroup title="Vertrag" testId="contract-terms">
+            <ListRow key="total" title="Gesamt" value={<span className="amount">{formatEuro(contract.totalCents)}</span>} />
+            <ListRow key="rates" title="Raten" value={<>{contract.installments} × <span className="amount">{formatEuro(contract.installmentCents)}</span></>} />
+            <ListRow key="start" title="Start" subtitle={`Fällig am ${contract.dueDay}.`} value={formatIsoDe(contract.startDate)} />
+          </ListGroup>
+        </>
+      ) : (
+        <>
       <Figures title="Stand">
         <Figure label="Rückstand" cents={plan.arrearsCents} testId="arrears" strong arrears />
         <Figure label="Künftige Raten" cents={plan.futureCents} testId="future" />
@@ -124,6 +136,8 @@ export default function TakeoverPage() {
             )}
           </div>
         </div>
+      )}
+        </>
       )}
     </>
   );

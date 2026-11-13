@@ -18,6 +18,17 @@ describe('readEnv', () => {
     });
   });
 
+  test('Schlüssel sind optional', () => {
+    const e = readEnv(FULL);
+    expect([e.stripeRestrictedKey, e.stripeWebhookSecret, e.lexwareNexusApiKey, e.lexwareZulassungApiKey]).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
+  test('Schlüssel werden gelesen (leer = fehlt)', () => {
+    const e = readEnv({ ...FULL, STRIPE_RESTRICTED_KEY: 'rk', STRIPE_WEBHOOK_SECRET: 'wh', LEXWARE_NEXUS_API_KEY: 'lx', LEXWARE_ZULASSUNG_API_KEY: '  ' });
+    expect(e).toMatchObject({ stripeRestrictedKey: 'rk', stripeWebhookSecret: 'wh', lexwareNexusApiKey: 'lx' });
+    expect(e.lexwareZulassungApiKey).toBeUndefined();
+  });
+
   test('alle fehlenden Variablen werden genannt', () => {
     expect(() => readEnv({})).toThrow('Fehlende Umgebungsvariablen: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SESSION_SECRET, OWNER_SETUP_TOKEN, CRON_SECRET, APP_ORIGIN');
     expect(() => readEnv({ ...FULL, CRON_SECRET: '', APP_ORIGIN: undefined })).toThrow('Fehlende Umgebungsvariablen: CRON_SECRET, APP_ORIGIN');

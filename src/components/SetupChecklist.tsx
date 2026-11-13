@@ -1,12 +1,14 @@
-import { HOW_TO } from '@/domain/connections';
+import { now } from '@/domain/clock';
 import type { Connection } from '@/domain/types';
 
+import { connectionSubtitle } from './connection-labels';
 import { IconCheck } from './Icons';
 import { ListGroup } from './ListGroup';
 import { ListRow } from './ListRow';
 
 /** Echtmodus: alle Verbindungen als Einrichtungs-Liste, Häkchen bei „verbunden“, sonst die Anleitung. */
 export function SetupChecklist({ connections }: { connections: Connection[] }) {
+  const at = now();
   return (
     <ListGroup title="Einrichtung" testId="setup-checklist">
       {connections.map((c) => {
@@ -17,7 +19,7 @@ export function SetupChecklist({ connections }: { connections: Connection[] }) {
               ? <span className="setup-mark" data-done="true" role="img" aria-label="Verbunden" data-testid="setup-check"><IconCheck /></span>
               : <span className="setup-mark" role="img" aria-label="Noch offen" />}
             title={<span className="wrap-text">{c.label}</span>}
-            subtitle={<span className="wrap-text">{done ? 'Verbunden' : c.status === 'error' ? `Störung. ${HOW_TO[c.id]}` : HOW_TO[c.id]}</span>} />
+            subtitle={<span className="wrap-text">{connectionSubtitle(c, at)}</span>} />
         );
       })}
     </ListGroup>

@@ -1,0 +1,33 @@
+{
+  "content": [
+    {
+      "id": "c-200",
+      "version": 1,
+      "roles": {
+        "customer": {
+          "number": 20200
+        }
+      },
+      "company": {
+        "name": "Autohaus Kern"
+      },
+      "emailAddresses": {
+        "business": [
+          "info@autohaus-kern.de"
+        ]
+      },
+      "phoneNumbers": {
+        "business": [
+          "089 123456"
+        ]
+      },
+      "archived": false
+    }
+  ],
+  "first": true,
+  "last": true,
+  "totalPages": 1,
+  "totalElements": 1,
+  "number": 0,
+  "size": 100
+}

@@ -1,0 +1,90 @@
+{
+  "content": [
+    {
+      "id": "c-77",
+      "version": 1,
+      "roles": {
+        "customer": {
+          "number": 10077
+        }
+      },
+      "person": {
+        "firstName": "Murat",
+        "lastName": "Demir"
+      },
+      "emailAddresses": {
+        "business": [
+          "Murat@Example.de"
+        ]
+      },
+      "phoneNumbers": {},
+      "archived": false
+    },
+    {
+      "id": "c-81",
+      "version": 1,
+      "roles": {
+        "customer": {
+          "number": 10081
+        }
+      },
+      "person": {
+        "firstName": "Sven",
+        "lastName": "Krüger"
+      },
+      "emailAddresses": {
+        "business": [
+          "sven@example.de"
+        ]
+      },
+      "phoneNumbers": {},
+      "archived": false
+    },
+    {
+      "id": "c-82",
+      "version": 1,
+      "roles": {
+        "customer": {
+          "number": 10082
+        }
+      },
+      "person": {
+        "firstName": "Lena",
+        "lastName": "Wolf"
+      },
+      "emailAddresses": {
+        "business": [
+          "lena@example.de"
+        ]
+      },
+      "phoneNumbers": {},
+      "archived": false
+    },
+    {
+      "id": "c-83",
+      "version": 1,
+      "roles": {
+        "customer": {
+          "number": 10083
+        }
+      },
+      "person": {
+        "firstName": "Nina",
+        "lastName": "Hahn"
+      },
+      "emailAddresses": {
+        "business": [
+          "nina@example.de"
+        ]
+      },
+      "phoneNumbers": {},
+      "archived": false
+    }
+  ],
+  "first": true,
+  "last": true,
+  "totalPages": 1,
+  "totalElements": 4,
+  "number": 0,
+  "size": 100
+}

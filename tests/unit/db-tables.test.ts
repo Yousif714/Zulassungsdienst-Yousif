@@ -3,6 +3,7 @@ import { createDemoState } from '@/data/seed';
 import { applyEvent, refresh } from '@/data/engine';
 import { toRows, fromRows, diffState, TABLES } from '@/server/db/tables';
 import { createEmptyState } from '@/data/empty-state';
+import type { Subscription } from '@/domain/types';
 
 import { NOW_0930 as NOW } from './helpers';
 
@@ -76,5 +77,26 @@ describe('tables', () => {
     expect(d.insights.upsert[0].id).toBe(key);
     expect(d.audit.upsert.length).toBeGreaterThan(0);
     expect(d.audit.upsert[0].id).toBe(String(s.audit.length).padStart(8, '0'));
+  });
+});
+
+const SUB: Subscription = {
+  id: 'sub-1', connectionId: 'stripe_nexus', externalId: 'sub_A', stripeCustomerId: 'cus_1', customerName: 'Max', customerEmail: null,
+  productName: 'Mitgliedschaft', amountCents: 5000, priceCents: 5000, currency: 'eur', interval: 'month', startDate: '2026-08-01', anchorDay: 1,
+  cancelAt: null, endDate: null, installments: null, status: 'active', disputes: [], contractId: null, confirmedPriceCents: null, confirmedEndDate: null,
+};
+
+describe('Verträge-Tabellen', () => {
+  it('subscriptions mit Schlüsselspalten, dismissedProposals als eigene Zeilen', () => {
+    const s = { ...createEmptyState(), subscriptions: [SUB], dismissedProposals: ['stripe_nexus:sub_X'] };
+    const r = toRows(s);
+    expect(r.subscriptions[0]).toMatchObject({ id: SUB.id, connection_id: 'stripe_nexus', external_id: 'sub_A' });
+    expect(r.dismissed_proposals).toEqual([{ id: 'stripe_nexus:sub_X', ord: 0, data: 'stripe_nexus:sub_X' }]);
+    expect(fromRows(r)).toEqual(s);
+  });
+  it('fehlende neue Tabellen → leere Listen', () => {
+    const s = fromRows({});
+    expect(s.subscriptions).toEqual([]);
+    expect(s.dismissedProposals).toEqual([]);
   });
 });

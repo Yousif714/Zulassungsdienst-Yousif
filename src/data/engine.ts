@@ -10,8 +10,12 @@ import type { StoreEvent } from '@/domain/events';
 import { areaStale } from '@/domain/freshness';
 import { normalizePhone, validPhone } from '@/domain/matching/messages';
 import { classifyBankTx, matchBankPayment } from '@/domain/matching/payments';
+import { stripeAllocations } from '@/domain/matching/stripe';
+import { validateContractDraft } from '@/domain/import/contract-draft';
+import { mergeBatch } from '@/domain/import/merge';
+import { deriveProposals, findContactFor } from '@/domain/import/proposals';
 import { formatEuro } from '@/domain/money';
-import type { Action, AppState, AssistantMessage, AuditEntry, Connection, Message, Settings } from '@/domain/types';
+import type { Action, AppState, AssistantMessage, AuditEntry, Connection, Contact, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
 export interface EngineContext { at: Date; isDemo: boolean; newId: () => string }
@@ -38,6 +42,21 @@ function autoAllocate(s: AppState, at: Date, isDemo: boolean): AppState {
   return st;
 }
 
+/** Stripe-Zahlungen bestätigter Abos dem Vertrag zuordnen (auch rückwirkend und Erstattungen). */
+function allocateStripe(s: AppState, at: Date, isDemo: boolean): AppState {
+  const fresh = stripeAllocations(s);
+  if (fresh.length === 0) return s;
+  const nameOf = (contractId: string) => {
+    const c = s.contracts.find((x) => x.id === contractId);
+    return s.contacts.find((x) => x.id === c?.contactId)?.name ?? contractId;
+  };
+  return {
+    ...s,
+    allocations: [...s.allocations, ...fresh],
+    audit: [...s.audit, ...fresh.map((a) => ({ at: at.toISOString(), actor: 'system' as const, text: `Automatisch zugeordnet (Stripe): ${nameOf(a.contractId)}`, isDemo }))],
+  };
+}
+
 function settleCommitments(s: AppState, at: Date): AppState {
   let changed = false;
   const commitments = s.commitments.map((c) => {
@@ -60,7 +79,7 @@ function settleCommitments(s: AppState, at: Date): AppState {
 
 /** Auto-Zuordnung (`high`), Zusagen prüfen, Hinweise neu abgleichen. */
 export function refresh(s: AppState, at: Date, isDemo = true): AppState {
-  const st = settleCommitments(autoAllocate(s, at, isDemo), at);
+  const st = settleCommitments(autoAllocate(allocateStripe(s, at, isDemo), at, isDemo), at);
   const stale = areaStale(st.connections.map((c) => c.id), st.connections, at);
   return { ...st, insights: reconcileInsights(st.insights, [...runDetectors(st, at), ...runCoach(st, at)], at, stale, st.settings.suppressedCoachKeys) };
 }
@@ -277,6 +296,61 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       const what = e.status === 'error' ? 'Störung simuliert' : e.status === 'connected' ? 'wieder verbunden' : 'getrennt';
       return owner({ state: { ...s, connections }, text: `Verbindung ${conn?.label ?? e.id}: ${what}` });
     }
+    case 'importBatch': {
+      const conn = s.connections.find((c) => c.id === e.connectionId);
+      if (!conn) return { state: s };
+      const r = mergeBatch(s, e.batch, ctx.newId);
+      const connections = s.connections.map((c) => {
+        if (c.id !== e.connectionId) return c;
+        const next: Connection = { ...c, status: 'connected', lastSuccessAt: at.toISOString(), sync: { cursor: e.cursor, complete: e.complete, failures: 0 } };
+        delete next.lastError;
+        return next;
+      });
+      const { payments: p, invoices: i, subscriptions: a } = r.added;
+      const state = { ...r.state, connections };
+      return p + i + a > 0
+        ? { state, audit: { actor: 'system', text: `Abgleich ${conn.label}: ${p} neue Zahlungen, ${i} Rechnungen, ${a} Abos` } }
+        : { state };
+    }
+    case 'syncFailed': {
+      const conn = s.connections.find((c) => c.id === e.connectionId);
+      if (!conn) return { state: s };
+      const connections = s.connections.map((c) =>
+        c.id !== e.connectionId ? c : { ...c, status: 'error' as const, lastError: e.error, sync: { cursor: c.sync?.cursor ?? null, complete: c.sync?.complete ?? false, failures: (c.sync?.failures ?? 0) + 1 } });
+      const state = { ...s, connections };
+      return conn.status === 'error' ? { state } : { state, audit: { actor: 'system', text: `Abgleich ${conn.label}: Fehler – ${e.error}` } };
+    }
+    case 'confirmProposal': {
+      const p = deriveProposals(s).find((x) => x.id === e.proposalId);
+      if (!p) return { state: s, audit: { actor: 'owner', text: 'Vorschlag nicht mehr offen' } };
+      const errors = validateContractDraft(e.draft);
+      if (errors.length) return { state: s, audit: { actor: 'owner', text: `Vertrag nicht angelegt: ${errors.join(' ')}` } };
+      const contractId = ctx.newId(); // zuerst: created[0] ist die Vertrags-ID
+      const found = findContactFor(p, s.contacts);
+      const reuse = found.contactId !== null && (found.match === 'ref' || found.match === 'email' || (found.match === 'name' && e.contactId === found.contactId));
+      let contacts = s.contacts;
+      let contactId: string;
+      if (reuse) {
+        contactId = found.contactId!;
+        contacts = contacts.map((c) => {
+          if (c.id !== contactId) return c;
+          const refs = c.externalRefs ?? [];
+          const missing = p.contactRefs.filter((r) => !refs.some((x) => x.connectionId === r.connectionId && x.externalId === r.externalId));
+          return missing.length ? { ...c, externalRefs: [...refs, ...missing] } : c;
+        });
+      } else {
+        contactId = ctx.newId();
+        const c: Contact = { id: contactId, company: 'nexus', kind: 'member', name: p.name, phones: [], emails: p.email ? [p.email] : [], externalRefs: [...p.contactRefs] };
+        contacts = [...contacts, c];
+      }
+      const contract: MemberContract = { ...e.draft, id: contractId, contactId, billing: p.billing, origin: p.sources };
+      const isSource = (x: { connectionId: string; externalId: string }) => p.sources.some((r) => r.connectionId === x.connectionId && r.externalId === x.externalId);
+      const subscriptions = s.subscriptions.map((x) => (isSource(x) ? { ...x, contractId, confirmedPriceCents: x.priceCents, confirmedEndDate: x.endDate } : x));
+      const state = { ...s, contacts, contracts: [...s.contracts, contract], subscriptions };
+      return owner({ state, text: `Vertrag übernommen: ${p.name}, ${e.draft.installments} × ${formatEuro(e.draft.installmentCents)}` });
+    }
+    case 'dismissProposal':
+      return s.dismissedProposals.includes(e.proposalId) ? { state: s } : { state: { ...s, dismissedProposals: [...s.dismissedProposals, e.proposalId] } };
     case 'assistantInbound': {
       const owner = validPhone(s.settings.ownerPhone);
       const fromOwner = e.channel === 'app' || (owner !== null && normalizePhone(e.from) === owner);
