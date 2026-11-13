@@ -1,5 +1,6 @@
 import type { ImportBatch } from './import/batch';
 import type { ContractDraft } from './import/contract-draft';
+import type { PortalListEntry } from './import/portal-list';
 import type { Action, AssistantMessage, Call, Connection, ConnectionId, Job, Settings } from './types';
 
 /** Woher eine Nachricht an den Assistenten kommt: WhatsApp (Absender wird geprüft) oder die angemeldete App. */
@@ -38,4 +39,6 @@ export type StoreEvent =
   /** `contactId`: „Ja“ auf „Ist das … ?“ (Name-Treffer); sonst null. */
   | { type: 'confirmProposal'; proposalId: string; draft: ContractDraft; contactId: string | null }
   | { type: 'dismissProposal'; proposalId: string }
+  /** Mitgliederliste aus dem Portal: zusammenführen, nie löschen. */
+  | { type: 'importPortalList'; entries: PortalListEntry[] }
   | { type: 'resetDemo' };

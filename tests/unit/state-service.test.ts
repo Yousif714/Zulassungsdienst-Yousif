@@ -135,8 +135,16 @@ describe('Zustands-Dienst', () => {
     expect(isClientEvent({ type: 'dismissPayment' })).toBe(false);
   });
 
+  test('Review 5: importPortalList nur mit gültiger Form', () => {
+    expect(isClientEvent({ type: 'importPortalList', entries: [{ email: 'a@b.de', name: 'A' }] })).toBe(true);
+    expect(isClientEvent({ type: 'importPortalList', entries: [] })).toBe(false);
+    expect(isClientEvent({ type: 'importPortalList', entries: [{ email: 'kaputt', name: 'A' }] })).toBe(false);
+    expect(isClientEvent({ type: 'importPortalList', entries: [{ email: 'a@b.de' }] })).toBe(false);
+    expect(isClientEvent({ type: 'importPortalList', entries: Array.from({ length: 2001 }, (_, i) => ({ email: `u${i}@x.de`, name: '' })) })).toBe(false);
+  });
+
   test('isClientEvent: nur erlaubte Ereignisse mit Grundform', () => {
-    expect(CLIENT_EVENTS.size).toBe(17);
+    expect(CLIENT_EVENTS.size).toBe(18);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);
     expect(isClientEvent({ type: 'dismissInsight', key: 'reply:m-1' })).toBe(true);
     for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {

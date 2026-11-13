@@ -13,6 +13,7 @@ import { bankReturnAllocations, classifyBankTx, matchBankPayment, normalizeIban,
 import { stripeAllocations } from '@/domain/matching/stripe';
 import { validateContractDraft } from '@/domain/import/contract-draft';
 import { mergeBatch } from '@/domain/import/merge';
+import { mergePortalList, normalizePortalEntries } from '@/domain/import/portal-list';
 import { deriveProposals, findContactFor } from '@/domain/import/proposals';
 import { invoiceOpenCents } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
@@ -410,6 +411,18 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       const subscriptions = s.subscriptions.map((x) => (isSource(x) ? { ...x, contractId, confirmedPriceCents: x.priceCents, confirmedEndDate: x.endDate } : x));
       const state = { ...s, contacts, contracts: [...s.contracts, contract], subscriptions };
       return owner({ state, text: `Vertrag übernommen: ${p.name}, ${e.draft.installments} × ${formatEuro(e.draft.installmentCents)}` });
+    }
+    case 'importPortalList': {
+      const entries = normalizePortalEntries(e.entries);
+      if (entries.length === 0) return owner({ state: s, text: 'Mitgliederliste leer, nichts übernommen' });
+      const r = mergePortalList(s.portalMembers, entries, at.toISOString(), ctx.newId);
+      const connections = s.connections.map((c) => {
+        if (c.id !== 'portal_nexus') return c;
+        const next: Connection = { ...c, status: 'connected', lastSuccessAt: at.toISOString() };
+        delete next.lastError;
+        return next;
+      });
+      return owner({ state: { ...s, portalMembers: r.items, connections }, text: `Mitgliederliste übernommen: ${entries.length} Mitglieder, ${r.added} neu, ${r.missing} nicht mehr in der Liste` });
     }
     case 'dismissProposal':
       return s.dismissedProposals.includes(e.proposalId) ? { state: s } : { state: { ...s, dismissedProposals: [...s.dismissedProposals, e.proposalId] } };

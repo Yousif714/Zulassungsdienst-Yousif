@@ -1,3 +1,5 @@
+import type { PortalMember } from '../types';
+
 /**
  * Mitgliederliste aus dem Portal (kopierter Text, CSV oder bereits extrahierte
  * Tabellenzeilen aus einer XLSX-Datei) in Einträge mit E-Mail und Name wandeln.
@@ -104,6 +106,53 @@ export function decodeListFile(bytes: Uint8Array): string {
   } catch {
     return new TextDecoder('windows-1252').decode(b);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Zusammenführen
+
+const memberEmails = (m: PortalMember): string[] => m.emails ?? [m.email];
+
+/**
+ * Führt die (bereits normalisierte) Liste in die bekannten Mitglieder ein. Nichts wird gelöscht:
+ * Fehlende behalten ihren Stand (`lastSeenInListAt`) und werden nur gezählt. Ein Eintrag gehört zu
+ * einem bekannten Mitglied, wenn sie irgendeine Adresse teilen; die ID bleibt.
+ */
+export function mergePortalList(existing: PortalMember[], entries: PortalListEntry[], at: string, newId: () => string): { items: PortalMember[]; added: number; missing: number } {
+  const items = [...existing];
+  const touched = new Set<string>();
+  let added = 0;
+  for (const e of entries) {
+    const mails = entryEmails(e);
+    const idx = items.findIndex((m) => memberEmails(m).some((x) => mails.includes(x)));
+    const old = idx >= 0 ? items[idx] : undefined;
+    const all = old ? [...new Set([...memberEmails(old), ...mails])] : mails;
+    const next: PortalMember = {
+      id: old?.id ?? newId(),
+      connectionId: 'portal_nexus',
+      externalId: old?.externalId ?? e.email,
+      email: old?.email ?? e.email,
+      name: e.name || old?.name || e.email.split('@')[0],
+      firstSeenAt: old?.firstSeenAt ?? at,
+      lastSeenInListAt: at,
+    };
+    if (all.length > 1) next.emails = all;
+    const joinedOn = e.joinedOn !== undefined ? e.joinedOn : old?.joinedOn;
+    const joinedText = e.joinedText ?? old?.joinedText;
+    const lastActiveOn = e.lastActiveOn !== undefined ? e.lastActiveOn : old?.lastActiveOn;
+    const lastActiveText = e.lastActiveText ?? old?.lastActiveText;
+    if (joinedOn !== undefined) next.joinedOn = joinedOn;
+    if (joinedText !== undefined) next.joinedText = joinedText;
+    if (lastActiveOn !== undefined) next.lastActiveOn = lastActiveOn;
+    if (lastActiveText !== undefined) next.lastActiveText = lastActiveText;
+    if (old) items[idx] = next;
+    else {
+      items.push(next);
+      added++;
+    }
+    touched.add(next.id);
+  }
+  return { items, added, missing: items.filter((m) => !touched.has(m.id)).length };
 }
 
 // ---------------------------------------------------------------------------
