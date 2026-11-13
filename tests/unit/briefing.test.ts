@@ -37,6 +37,13 @@ describe('Briefing', () => {
     expect(t).toContain('1. Schmidt wartet · Antwort senden');
     expect(t).toContain('Geld Zulassungsdienst: offen 150,00 €, überfällig 100,00 €');
   });
+  test('alter Sparkasse-Auszug blendet die Zulassung-Geldkarte nicht aus', () => {
+    const st = state();
+    const old = { ...st, connections: st.connections.map((c) => (c.id === 'bank_sparkasse' ? { ...c, lastSuccessAt: '2026-11-01T09:00:00Z' } : c)) };
+    const b = buildBriefing(old, 'morning', NOW);
+    expect(b.money.find((m) => m.company === 'zulassung')?.stale).toBe(false);
+    expect(MONEY_SOURCES.zulassung).not.toContain('bank_sparkasse');
+  });
   test('Abend mit Coach-Tipps am Ende', () => {
     const t = renderBriefingText(buildBriefing(state(), 'evening', NOW));
     expect(t).toMatch(/^Guten Abend\. Rückblick:/);

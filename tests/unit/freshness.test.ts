@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ageMinutes, ageText, areaStale, sourceFreshness } from '@/domain/freshness';
+import { ageMinutes, ageText, areaStale, sourceFreshness, staleAfterMinutes } from '@/domain/freshness';
 import { NOW_0930, conn } from './helpers';
 
 describe('Datenstand', () => {
@@ -33,4 +33,10 @@ describe('Datenstand', () => {
     expect(ageMinutes(conn({ lastSuccessAt: '2026-11-12T08:29:30Z' }), NOW_0930)).toBe(0);
     expect(ageMinutes(conn({ lastSuccessAt: null }), NOW_0930)).toBeNull();
   });
+});
+
+test('Sparkasse gilt 7 Tage als frisch', () => {
+  expect(staleAfterMinutes('bank_sparkasse')).toBe(10080);
+  expect(sourceFreshness(conn({ id: 'bank_sparkasse', lastSuccessAt: '2026-11-06T09:00:00Z' }), NOW_0930)).toBe('fresh');
+  expect(sourceFreshness(conn({ id: 'bank_sparkasse', lastSuccessAt: '2026-11-04T09:00:00Z' }), NOW_0930)).toBe('stale');
 });
