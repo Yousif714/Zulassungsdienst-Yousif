@@ -106,10 +106,10 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 
 ## Offen aus Paket 2b-1 (Reviews, nicht merge-blockierend)
 
-**Vor 2b-3 (Umstellung auf Stripe) fällig**
-- Stripe-Rechnungen, die mehr als 35 Tage vor der Zahlung erstellt wurden, fehlen im Import. Das ergibt einen falschen Rückstand.
-- Ein Streitfall ohne importierte Zahlung geht verloren und wird auch später nicht nachgeholt.
-- Ein natürliches Abo-Ende (`cancel_at` erreicht) löst den Hinweis „Abo gekündigt“ aus.
+**Vor 2b-3 (Umstellung auf Stripe): erledigt am 13.11.**
+- ~~Späte Zahlung alter Rechnungen~~: Der Cursor merkt sich offene und uneinbringliche Rechnungen (`pending`) und lädt sie einzeln nach, sobald sie nicht mehr offen sind. Rest: Rechnungen, die vor diesem Fix spät bezahlt wurden, kommen nur über einen Neustart ab IMPORT_SINCE nach (Cursor zurücksetzen).
+- ~~Streitfall ohne Zahlung~~: Die Rechnung wird nachgeladen, außer die Zahlung ist schon importiert (`ctx.known`).
+- ~~Natürliches Abo-Ende~~: Ist das bestätigte Enddatum erreicht, kommt kein Hinweis „gekündigt“.
 
 **Vor Echtbetrieb prüfen**
 - Die Stripe-Felder (API-Version `2025-09-30.clover`, `parent.subscription_details`, `/v1/invoice_payments`) und die Lexware-Felder und -Parameter (`sort=voucherDate,ASC`, voucherlist-Felder, `updatedDate`-Filter) sind nicht gegen die Doku geprüft, weil das Netz in der Session gesperrt war. Fehler zeigen sich als Verbindungsfehler, nicht als falsche Daten.
