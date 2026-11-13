@@ -1,7 +1,10 @@
 import type { ImportBatch } from './import/batch';
 import type { ContractDraft } from './import/contract-draft';
 import type { PortalListEntry } from './import/portal-list';
-import type { Action, AssistantMessage, Call, Connection, ConnectionId, Job, Settings } from './types';
+import type { Action, AssistantMessage, Call, Connection, ConnectionId, InvoiceReading, Job, Settings } from './types';
+
+/** Neue Lesung vom Server; `error` gesetzt = Fehlversuch. Ergebnis und Vertrag bestimmt der Reducer. */
+export type NewInvoiceReading = Omit<InvoiceReading, 'outcome' | 'contractId'>;
 
 /** Woher eine Nachricht an den Assistenten kommt: WhatsApp (Absender wird geprüft) oder die angemeldete App. */
 export type InboundChannel = 'whatsapp' | 'app';
@@ -39,6 +42,10 @@ export type StoreEvent =
   /** `contactId`: „Ja“ auf „Ist das … ?“ (Name-Treffer); sonst null. */
   | { type: 'confirmProposal'; proposalId: string; draft: ContractDraft; contactId: string | null }
   | { type: 'dismissProposal'; proposalId: string }
+  | { type: 'invoicesRead'; readings: NewInvoiceReading[]; warning?: string; error?: string }
+  | { type: 'confirmReadContract'; contractId: string }
+  | { type: 'correctContract'; contractId: string; draft: ContractDraft }
+  | { type: 'deleteReadContract'; contractId: string }
   /** Mitgliederliste aus dem Portal: zusammenführen, nie löschen. */
   | { type: 'importPortalList'; entries: PortalListEntry[] }
   /** Vertrag für ein Portal-Mitglied ohne Vertrag; `created[0]` ist die Vertrags-ID. `contactId`: bestätigter Namenstreffer, sonst null. */

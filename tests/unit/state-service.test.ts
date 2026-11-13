@@ -165,7 +165,7 @@ describe('Zustands-Dienst', () => {
   });
 
   test('isClientEvent: nur erlaubte Ereignisse mit Grundform', () => {
-    expect(CLIENT_EVENTS.size).toBe(21);
+    expect(CLIENT_EVENTS.size).toBe(24);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);
     expect(isClientEvent({ type: 'dismissInsight', key: 'reply:m-1' })).toBe(true);
     for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {
@@ -243,4 +243,12 @@ describe('Zustands-Dienst', () => {
   test.each(['importBatch', 'syncFailed'])('%s ist kein Client-Ereignis', (type) => {
     expect(isClientEvent({ type, connectionId: 'stripe_nexus', batch: emptyBatch(), error: 'x', cursor: null, complete: true })).toBe(false);
   });
+});
+
+test('Lesungs-Ereignisse: invoicesRead nur Server, Vertrags-Knöpfe vom Client', () => {
+  expect(isClientEvent({ type: 'invoicesRead', readings: [] })).toBe(false);
+  expect(isClientEvent({ type: 'confirmReadContract', contractId: 'k1' })).toBe(true);
+  expect(isClientEvent({ type: 'deleteReadContract', contractId: 'k1' })).toBe(true);
+  expect(isClientEvent({ type: 'correctContract', contractId: 'k1', draft: { totalCents: 1000, installments: 1, installmentCents: 1000, dueDay: 1, startDate: '2026-10-01', catchUpMode: 'first_rate' } })).toBe(true);
+  expect(isClientEvent({ type: 'correctContract', contractId: 'k1', draft: { totalCents: 'x' } })).toBe(false);
 });

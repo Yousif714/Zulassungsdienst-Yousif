@@ -38,7 +38,7 @@ export function msg(p: Partial<Message> = {}): Message {
   return { id: 'm1', channel: 'whatsapp', connectionId: 'whatsapp_kunden', externalId: 'e1', threadId: 't1', direction: 'in', from: '+49151000', to: '+49000', body: 'Hallo', sentAt: '2026-11-12T05:30:00Z', contactId: null, jobId: null, needsReply: false, ...p };
 }
 
-const ALL_IDS: Connection['id'][] = ['lexware_nexus','lexware_zulassung','stripe_nexus','bank_qonto','bank_sparkasse','gmail','icloud','info_mail','calendar','whatsapp_kunden','whatsapp_assistent','portal_nexus'];
+const ALL_IDS: Connection['id'][] = ['lexware_nexus','lexware_zulassung','stripe_nexus','bank_qonto','bank_sparkasse','gmail','icloud','info_mail','calendar','whatsapp_kunden','whatsapp_assistent','portal_nexus','claude_invoices'];
 export function conn(p: Partial<Connection> = {}): Connection {
   return { id: 'bank_qonto', company: null, label: p.id ?? 'bank_qonto', status: 'connected', lastSuccessAt: new Date(NOW_0930.getTime() - 10 * 60_000).toISOString(), ...p };
 }
