@@ -10,7 +10,7 @@ export interface ContractProposal extends ProposalValues {
   id: string; name: string; email: string | null; billing: 'stripe' | 'legacy';
   sources: ExternalRef[]; // Abo bzw. Lexware-Kontakt → Vorschlags-ID und später MemberContract.origin
   contactRefs: ExternalRef[]; // stripe_nexus:cus_…, lexware_nexus:c-…
-  sourceLabel: 'Stripe' | 'Lexware' | 'Stripe + Lexware';
+  sourceLabel: 'Stripe' | 'Lexware' | 'Stripe + Lexware' | 'Portal';
   references: string[]; // 'Abo sub_A', 'Rechnung RE-1043'
   complete: boolean; // vollständig / bitte ergänzen
   steps: string[]; // Rechenweg
