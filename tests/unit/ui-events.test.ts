@@ -57,7 +57,7 @@ describe('UI-Ereignisse im Echtmodus bestehen isClientEvent', () => {
     const demoOnly: StoreEvent[] = [
       { type: 'resetDemo' },
       { type: 'simulateTransfer', iban: 'DE1', payerName: 'X', amountCents: 100 },
-      { type: 'setConnectionStatus', id: 'bank', status: 'error' },
+      { type: 'setConnectionStatus', id: 'bank_qonto', status: 'error' },
       { type: 'assistantOutbound', text: 'Briefing' },
       { type: 'assistantInbound', from: '+4917099999', text: 'Hallo' },
     ];

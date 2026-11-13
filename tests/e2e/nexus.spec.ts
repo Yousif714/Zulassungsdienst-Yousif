@@ -132,7 +132,7 @@ test('Bank nicht verbunden: Übernahme-Seite zeigt keinen Rückstand und keinen 
   await page.evaluate(() => {
     const key = 'nexus-demo-v1';
     const s = JSON.parse(localStorage.getItem(key)!);
-    s.connections = s.connections.map((c: { id: string }) => (c.id === 'bank' ? { ...c, status: 'missing', lastSuccessAt: null } : c));
+    s.connections = s.connections.map((c: { id: string }) => (c.id === 'bank_qonto' ? { ...c, status: 'missing', lastSuccessAt: null } : c));
     localStorage.setItem(key, JSON.stringify(s));
   });
   await page.goto(`/nexus/mitglieder/${KAYA}/uebernahme`);

@@ -48,7 +48,8 @@ describe('Demo-Daten', () => {
     expect(s.events.filter((e) => e.startAt.startsWith('2026-11-12'))).toHaveLength(3);
     expect(s.events.filter((e) => !e.location)).toHaveLength(1);
     expect(new Set(s.content.map((c) => c.stage)).size).toBe(5);
-    expect(s.connections.every((c) => c.status === 'connected' && c.lastSuccessAt === '2026-11-12T08:20:00.000Z')).toBe(true);
+    expect(s.connections.filter((c) => c.id !== 'bank_sparkasse').every((c) => c.status === 'connected' && c.lastSuccessAt === '2026-11-12T08:20:00.000Z')).toBe(true);
+    expect(s.connections.find((c) => c.id === 'bank_sparkasse')).toMatchObject({ status: 'missing', lastSuccessAt: null });
     expect(s.settings).toMatchObject({ replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '+491510000000' });
     const mueller = s.invoices.filter((i) => i.contactId === 'd-mueller' && i.status === 'overdue');
     expect(mueller.reduce((n, i) => n + i.openCents, 0)).toBe(64000);

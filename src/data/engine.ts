@@ -205,7 +205,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     case 'simulateTransfer': {
       const id = ctx.newId();
       const payment = {
-        id, company: 'nexus' as const, source: 'bank' as const, connectionId: 'bank' as const, externalId: `demo-${id}`, amountCents: e.amountCents,
+        id, company: 'nexus' as const, source: 'bank' as const, connectionId: 'bank_qonto' as const, externalId: `demo-${id}`, amountCents: e.amountCents,
         bookedOn: todayBerlin(at), payerName: e.payerName, iban: e.iban, reference: 'Überweisung (Demo)', kind: classifyBankTx({ payerName: e.payerName }),
       };
       return owner({ state: { ...s, payments: [...s.payments, payment] }, text: `Überweisung simuliert: ${e.payerName}, ${formatEuro(e.amountCents)}` });

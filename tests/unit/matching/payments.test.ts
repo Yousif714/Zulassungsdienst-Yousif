@@ -5,7 +5,7 @@ import { IBAN_KAYA, ctx, tx } from '../helpers';
 
 const p1 = tx();
 describe('Import', () => {
-  test('Schlüssel', () => expect(importKey({ connectionId: 'bank', externalId: 'x1' })).toBe('bank:x1'));
+  test('Schlüssel', () => expect(importKey({ connectionId: 'bank_qonto', externalId: 'x1' })).toBe('bank_qonto:x1'));
   test('erneuter Import ändert nichts', () => expect(mergeImported([p1], [p1, { ...p1 }]).length).toBe(1));
   test('bestehende gewinnen, neue kommen dazu', () => {
     const r = mergeImported([p1], [{ ...p1, amountCents: 1 }, tx({ externalId: 'x2' })]);

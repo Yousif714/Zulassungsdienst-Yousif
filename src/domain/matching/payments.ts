@@ -66,3 +66,8 @@ export function matchBankPayment(
   }
   return { contactId: null, confidence: 'low', reason: 'Kein sicherer Treffer, bitte manuell zuordnen.' };
 }
+
+/** IBAN-Schreibweise vereinheitlichen: Leerraum raus, Großbuchstaben. */
+export function normalizeIban(s: string): string {
+  return s.replace(/\s+/g, '').toUpperCase();
+}

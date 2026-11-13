@@ -40,7 +40,7 @@ export function detectUnmatchedPayments(s: AppState, now: Date): Insight[] {
       amountCents: p.amountCents,
       refs: [paymentRef(p.id, who)],
       nextStep: 'Zahlung zuordnen',
-      needsSources: ['bank'],
+      needsSources: ['bank_qonto'],
     });
   }
   return out;

@@ -79,3 +79,11 @@ describe('Migration Verträge', () => {
     expect(v).toMatch(/revoke execute on function apply_changes\(int, jsonb\) from public, anon, authenticated;/);
   });
 });
+
+describe('Migration Qonto (2b-2)', () => {
+  it('2b-2: bank → bank_qonto in connections, payments, insights', () => {
+    expect(sql).toContain("where connection_id = 'bank'");
+    expect(sql).toContain("delete from connections where id = 'bank'");
+    expect(sql).toContain("'\"bank_qonto\"'");
+  });
+});

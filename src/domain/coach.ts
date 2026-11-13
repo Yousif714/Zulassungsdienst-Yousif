@@ -70,7 +70,7 @@ function dueDays(s: AppState, now: Date): Insight[] {
       body: `${best.length} Raten in Folge kamen mindestens ${delay} Tage nach Fälligkeit (Tag ${c.dueDay}). Vorschlag: Fälligkeit auf den ${newDay}. des Monats.`,
       refs: [memberRef(c.id, name)],
       nextStep: `Fälligkeitstag auf den ${newDay}. ändern`,
-      needsSources: ['bank', 'stripe_nexus'],
+      needsSources: ['bank_qonto', 'stripe_nexus'],
     });
   }
   return out;

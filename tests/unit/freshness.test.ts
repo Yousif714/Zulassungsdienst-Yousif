@@ -13,8 +13,8 @@ describe('Datenstand', () => {
     expect(sourceFreshness(conn({ lastSuccessAt: null }), NOW_0930)).toBe('stale');
   });
   test('areaStale liefert die veralteten Quellen', () => {
-    const cs = [conn({ id: 'bank' }), conn({ id: 'gmail', status: 'error' }), conn({ id: 'calendar', lastSuccessAt: '2026-11-12T01:00:00Z' })];
-    expect(areaStale(['bank', 'gmail', 'calendar'], cs, NOW_0930)).toEqual(['gmail', 'calendar']);
+    const cs = [conn({ id: 'bank_qonto' }), conn({ id: 'gmail', status: 'error' }), conn({ id: 'calendar', lastSuccessAt: '2026-11-12T01:00:00Z' })];
+    expect(areaStale(['bank_qonto', 'gmail', 'calendar'], cs, NOW_0930)).toEqual(['gmail', 'calendar']);
   });
   test('ageMinutes: ganze Minuten seit dem letzten Abruf, null ohne Abruf', () => {
     expect(ageMinutes(conn({ lastSuccessAt: '2026-11-12T08:20:00Z' }), NOW_0930)).toBe(10);

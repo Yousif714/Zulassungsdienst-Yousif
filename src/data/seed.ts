@@ -59,7 +59,9 @@ export function createDemoState(): AppState {
   const pick = <T,>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
   const digits = (n: number) => Array.from({ length: n }, () => Math.floor(rnd() * 10)).join('');
 
-  const connections: Connection[] = CONNECTION_CATALOG.map(({ id, company, label }) => ({ id, company, label, status: 'connected', lastSuccessAt: SYNCED_AT }));
+  const connections: Connection[] = CONNECTION_CATALOG.map(({ id, company, label }) => (id === 'bank_sparkasse'
+    ? { id, company, label, status: 'missing' as const, lastSuccessAt: null }
+    : { id, company, label, status: 'connected' as const, lastSuccessAt: SYNCED_AT }));
   const contacts: Contact[] = [];
   const contracts: MemberContract[] = [];
   const payments: Payment[] = [];
@@ -67,7 +69,7 @@ export function createDemoState(): AppState {
   const ibanLinks: IbanLink[] = [];
 
   const bankPay = (id: string, contactName: string, iban: string, amountCents: number, bookedOn: IsoDate, reference: string): Payment => ({
-    id, company: 'nexus', source: 'bank', connectionId: 'bank', externalId: `bank-${id}`, amountCents, bookedOn, payerName: contactName, iban, reference, kind: 'incoming',
+    id, company: 'nexus', source: 'bank', connectionId: 'bank_qonto', externalId: `bank-${id}`, amountCents, bookedOn, payerName: contactName, iban, reference, kind: 'incoming',
   });
   const stripePay = (id: string, contactName: string, amountCents: number, bookedOn: IsoDate, reference: string): Payment => ({
     id, company: 'nexus', source: 'stripe', connectionId: 'stripe_nexus', externalId: `ch_${id.replace(/-/g, '_')}`, amountCents, bookedOn, payerName: contactName, reference, kind: 'incoming',
@@ -134,7 +136,7 @@ export function createDemoState(): AppState {
   });
 
   payments.push({
-    id: 'p-payout-1', company: 'nexus', source: 'bank', connectionId: 'bank', externalId: 'bank-po-20261110', amountCents: 148000, bookedOn: '2026-11-10',
+    id: 'p-payout-1', company: 'nexus', source: 'bank', connectionId: 'bank_qonto', externalId: 'bank-po-20261110', amountCents: 148000, bookedOn: '2026-11-10',
     payerName: 'Stripe Technologies Europe Ltd', reference: 'STRIPE PAYOUT po_1Nx20261110', kind: 'stripe_payout',
   });
 

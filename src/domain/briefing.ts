@@ -18,7 +18,7 @@ export type Briefing = {
 };
 
 /** Quellen, von denen die Geldkarte einer Firma abhängt. */
-export const MONEY_SOURCES: Record<Company, ConnectionId[]> = { nexus: ['bank', 'stripe_nexus'], zulassung: ['lexware_zulassung'] };
+export const MONEY_SOURCES: Record<Company, ConnectionId[]> = { nexus: ['bank_qonto', 'stripe_nexus'], zulassung: ['lexware_zulassung'] };
 
 export function buildBriefing(s: AppState, kind: 'morning' | 'evening' | 'weekly', now: Date): Briefing {
   const today = todayBerlin(now);

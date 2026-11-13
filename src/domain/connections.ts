@@ -4,7 +4,8 @@ export const CONNECTION_CATALOG: readonly { id: ConnectionId; company: Company |
   { id: 'lexware_nexus', company: 'nexus', label: 'Lexware NEXUS' },
   { id: 'lexware_zulassung', company: 'zulassung', label: 'Lexware Zulassungsdienst' },
   { id: 'stripe_nexus', company: 'nexus', label: 'Stripe NEXUS' },
-  { id: 'bank', company: null, label: 'Bankkonto' },
+  { id: 'bank_qonto', company: 'nexus', label: 'Qonto (NEXUS)' },
+  { id: 'bank_sparkasse', company: 'zulassung', label: 'Sparkasse (Zulassung)' },
   { id: 'gmail', company: null, label: 'Gmail' },
   { id: 'icloud', company: null, label: 'iCloud-Mail' },
   { id: 'info_mail', company: 'zulassung', label: 'info@-Postfach' },
@@ -18,7 +19,8 @@ export const HOW_TO: Record<ConnectionId, string> = {
   lexware_nexus: 'Schlüssel als Vercel-Variable LEXWARE_NEXUS_API_KEY hinterlegen (nur lesen: Kontakte, Rechnungen, Zahlungen).',
   lexware_zulassung: 'Schlüssel als Vercel-Variable LEXWARE_ZULASSUNG_API_KEY hinterlegen (nur lesen: Kontakte, Rechnungen, Zahlungen).',
   stripe_nexus: 'Schlüssel als Vercel-Variable STRIPE_RESTRICTED_KEY hinterlegen (nur lesen: Kunden, Abos, Rechnungen, Zahlungen).',
-  bank: 'CSV- oder CAMT-Export seit 1. August hochladen, später PSD2-Freigabe bei der Bank.',
+  bank_qonto: 'Qonto → Einstellungen → Integrationen → API-Schlüssel: Login und Secret Key als Vercel-Variablen QONTO_LOGIN und QONTO_SECRET_KEY hinterlegen (nur lesen).',
+  bank_sparkasse: 'Kommt als Upload (CAMT- oder CSV-Export).',
   gmail: 'Mit dem Google-Login freigeben.',
   icloud: 'App-spezifisches Passwort in der Apple-ID erstellen.',
   info_mail: 'Anbieter des info@-Postfachs klären (Zugangsart und Zugangsdaten).',
@@ -34,5 +36,5 @@ export function notConnected(sources: ConnectionId[], connections: Connection[])
 
 /** Quellen, aus denen sich der Stand eines Vertrags speist: Banküberweisung → Bank, Stripe → Stripe NEXUS. */
 export function contractSources(c: MemberContract): ConnectionId[] {
-  return c.billing === 'legacy' ? ['bank'] : ['stripe_nexus'];
+  return c.billing === 'legacy' ? ['bank_qonto'] : ['stripe_nexus'];
 }

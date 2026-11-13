@@ -106,12 +106,12 @@ describe('Rückstand je Vertragsquelle', () => {
       connections: stateWith().connections.map((c) => ({ ...c, status: status[c.id] ?? c.status })),
     });
   test('Rückstand-Hinweis braucht nur die Quelle des Vertrags', () => {
-    const st = stripeContractOverdue({ bank: 'missing', stripe_nexus: 'connected' });
+    const st = stripeContractOverdue({ bank_qonto: 'missing', stripe_nexus: 'connected' });
     expect(runDetectors(st, NOW_0930).some((i) => i.type === 'member_overdue')).toBe(true);
     expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['stripe_nexus']);
   });
   test('Sammelhinweis bleibt bei fehlender Bank, wenn Stripe-Verträge überfällig sind', () => {
-    const st = stripeContractOverdue({ bank: 'missing', stripe_nexus: 'connected' });
+    const st = stripeContractOverdue({ bank_qonto: 'missing', stripe_nexus: 'connected' });
     const two = {
       ...st,
       contracts: [
@@ -129,9 +129,9 @@ describe('Rückstand je Vertragsquelle', () => {
   test('Legacy-Vertrag ohne Bank → kein Rückstand-Hinweis', () => {
     const st = stateWith({
       contracts: [{ ...base, contactId: 'm-kaya', startDate: '2026-09-01' }],
-      connections: stateWith().connections.map((c) => (c.id === 'bank' ? { ...c, status: 'missing' as const } : c)),
+      connections: stateWith().connections.map((c) => (c.id === 'bank_qonto' ? { ...c, status: 'missing' as const } : c)),
     });
-    expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['bank']);
+    expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['bank_qonto']);
     expect(runDetectors(st, NOW_0930).some((i) => i.type === 'member_overdue')).toBe(false);
   });
 });
@@ -148,18 +148,18 @@ describe('Lebenszyklus', () => {
     expect(reconcileInsights(r1, [ins('k1'), ins('k1')], NOW_0930)).toHaveLength(1);
   });
   test('dismissed: gleiche Episode bleibt weg, nach Lücke kehrt der Hinweis zurück', () => {
-    const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank'] })], NOW_0930);
+    const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank_qonto'] })], NOW_0930);
     const dismissed: StoredInsight[] = [{ ...r1[0], status: 'dismissed' }];
-    expect(reconcileInsights(dismissed, [ins('k1', { needsSources: ['bank'] })], NOW_0930)[0].status).toBe('dismissed');
+    expect(reconcileInsights(dismissed, [ins('k1', { needsSources: ['bank_qonto'] })], NOW_0930)[0].status).toBe('dismissed');
     const gap = reconcileInsights(dismissed, [], NOW_0930);
     expect(gap[0].status).toBe('done');
-    expect(reconcileInsights(gap, [ins('k1', { needsSources: ['bank'] })], NOW_0930)[0].status).toBe('open');
+    expect(reconcileInsights(gap, [ins('k1', { needsSources: ['bank_qonto'] })], NOW_0930)[0].status).toBe('open');
     // Quelle veraltet: unklar, ob die Episode vorbei ist → bleibt dismissed
-    expect(reconcileInsights(dismissed, [], NOW_0930, ['bank'])[0].status).toBe('dismissed');
+    expect(reconcileInsights(dismissed, [], NOW_0930, ['bank_qonto'])[0].status).toBe('dismissed');
   });
   test('offen + Quelle veraltet → stale statt done', () => {
-    const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank'] })], NOW_0930);
-    expect(reconcileInsights(r1, [], NOW_0930, ['bank'])[0].status).toBe('stale');
+    const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank_qonto'] })], NOW_0930);
+    expect(reconcileInsights(r1, [], NOW_0930, ['bank_qonto'])[0].status).toBe('stale');
     expect(reconcileInsights(r1, [], NOW_0930, ['gmail'])[0].status).toBe('done');
   });
   test('done und stale kehren zurück → open', () => {
