@@ -6,6 +6,8 @@ import { todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
 import { areaStale } from '@/domain/freshness';
 import { plateInText } from '@/domain/matching/messages';
+import { invoiceOpenCents } from '@/domain/ledger/receivables';
+import { formatEuro } from '@/domain/money';
 import { monthForecast } from '@/domain/ledger/forecast';
 import type { AppState, Invoice, IsoDate, MemberContract, Payment, StoredInsight } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
@@ -65,8 +67,19 @@ export function nexusForecast(s: AppState, today: IsoDate): { expectedCents: num
 /** Eingehende NEXUS-Bankzahlungen ohne Zuordnung (Stripe-Auszahlungen gehören keinem Mitglied). */
 export const unallocatedBankPayments = (s: AppState): Payment[] =>
   s.payments.filter(
-    (p) => p.source === 'bank' && p.kind === 'incoming' && p.company === 'nexus' && !s.allocations.some((a) => a.paymentId === p.id),
+    (p) => p.source === 'bank' && p.kind === 'incoming' && p.company === 'nexus' && !p.ignoredAt && p.amountCents > 0 && !s.allocations.some((a) => a.paymentId === p.id),
   );
+
+/** Ziele für die manuelle Zuordnung: alle Verträge und offene NEXUS-Rechnungen, nach Label sortiert. */
+export function matchOptions(s: AppState): { value: string; label: string }[] {
+  const name = (id: string | null) => s.contacts.find((c) => c.id === id)?.name ?? 'Unbekannt';
+  return [
+    ...s.contracts.map((c) => ({ value: `contract:${c.id}`, label: name(c.contactId) })),
+    ...s.invoices
+      .filter((i) => i.connectionId === 'lexware_nexus' && invoiceOpenCents(s, i) > 0)
+      .map((i) => ({ value: `invoice:${i.id}`, label: `Rechnung ${i.number} · ${name(i.contactId)} · ${formatEuro(invoiceOpenCents(s, i))}` })),
+  ].sort((a, b) => a.label.localeCompare(b.label, 'de'));
+}
 
 /** Stripe-Zahlungen von Mitgliedschafts-Abos, die auf einen bestätigten Vertrag warten (Abo hat noch keinen Vertrag). */
 export const waitingStripePayments = (s: AppState): Payment[] =>

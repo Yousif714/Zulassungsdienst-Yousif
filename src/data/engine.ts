@@ -9,13 +9,14 @@ import { buildMatchContext } from '@/domain/detectors/payments';
 import type { StoreEvent } from '@/domain/events';
 import { areaStale } from '@/domain/freshness';
 import { normalizePhone, validPhone } from '@/domain/matching/messages';
-import { classifyBankTx, matchBankPayment } from '@/domain/matching/payments';
+import { bankReturnAllocations, classifyBankTx, matchBankPayment, normalizeIban, type MatchContext } from '@/domain/matching/payments';
 import { stripeAllocations } from '@/domain/matching/stripe';
 import { validateContractDraft } from '@/domain/import/contract-draft';
 import { mergeBatch } from '@/domain/import/merge';
 import { deriveProposals, findContactFor } from '@/domain/import/proposals';
+import { invoiceOpenCents } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
-import type { Action, AppState, AssistantMessage, AuditEntry, Connection, Contact, MemberContract, Message, Settings } from '@/domain/types';
+import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Connection, Contact, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
 export interface EngineContext { at: Date; isDemo: boolean; newId: () => string }
@@ -25,22 +26,48 @@ export interface EngineResult { state: AppState; created: string[] }
 
 function autoAllocate(s: AppState, at: Date, isDemo: boolean): AppState {
   let st = s;
+  // Kontext einmal bauen; nur nach einer neuen Zuordnung neu (der Rückstand ändert sich).
+  let mctx: MatchContext | null = null;
   for (const p of s.payments) {
-    if (p.source !== 'bank' || p.kind !== 'incoming' || p.company !== 'nexus') continue;
+    if (p.source !== 'bank' || p.kind !== 'incoming' || p.company !== 'nexus' || p.ignoredAt) continue;
     if (st.allocations.some((a) => a.paymentId === p.id)) continue;
-    const m = matchBankPayment(p, buildMatchContext(st, at));
-    // Rechnungsziele ordnet erst Task 4 automatisch zu.
-    if (m.confidence !== 'high' || m.target?.kind !== 'contract') continue;
-    const contract = st.contracts.find((c) => c.id === m.target!.id);
-    if (!contract) continue;
-    const name = st.contacts.find((c) => c.id === contract.contactId)?.name ?? contract.contactId;
-    st = {
-      ...st,
-      allocations: [...st.allocations, { paymentId: p.id, contractId: contract.id, amountCents: p.amountCents, method: 'auto' }],
-      audit: [...st.audit, { at: at.toISOString(), actor: 'system', text: `Automatisch zugeordnet: ${name}`, isDemo }],
-    };
+    mctx ??= buildMatchContext(st, at);
+    const m = matchBankPayment(p, mctx);
+    // Nur bei genau einem Ziel; mehrdeutig bleibt für die Bestätigung offen.
+    if (m.confidence !== 'high' || !m.target || m.candidates.length !== 1) continue;
+    const t = m.target;
+    let allocation: Allocation;
+    let text: string;
+    if (t.kind === 'contract') {
+      const contract = st.contracts.find((c) => c.id === t.id);
+      if (!contract) continue;
+      allocation = { paymentId: p.id, contractId: contract.id, amountCents: p.amountCents, method: 'auto' };
+      text = `Automatisch zugeordnet: ${contactName(st, contract.contactId)}`;
+    } else {
+      const invoice = st.invoices.find((i) => i.id === t.id);
+      if (!invoice) continue;
+      allocation = { paymentId: p.id, invoiceId: invoice.id, amountCents: p.amountCents, method: 'auto' };
+      text = `Automatisch zugeordnet: Rechnung ${invoice.number}`;
+    }
+    st = { ...st, allocations: [...st.allocations, allocation], audit: [...st.audit, { at: at.toISOString(), actor: 'system', text, isDemo }] };
+    mctx = null;
   }
   return st;
+}
+
+/** Rückbuchungen der Bank folgen dem Ziel der Originalzahlung (sobald dieses zugeordnet ist). */
+function allocateBankReturns(s: AppState, at: Date, isDemo: boolean): AppState {
+  const fresh = bankReturnAllocations(s);
+  if (fresh.length === 0) return s;
+  const nameOf = (a: Allocation) => {
+    if (a.invoiceId) return `Rechnung ${s.invoices.find((i) => i.id === a.invoiceId)?.number ?? a.invoiceId}`;
+    return contactName(s, s.contracts.find((c) => c.id === a.contractId)?.contactId);
+  };
+  return {
+    ...s,
+    allocations: [...s.allocations, ...fresh],
+    audit: [...s.audit, ...fresh.map((a) => ({ at: at.toISOString(), actor: 'system' as const, text: `Rückbuchung verrechnet: ${nameOf(a)}`, isDemo }))],
+  };
 }
 
 /** Stripe-Zahlungen bestätigter Abos dem Vertrag zuordnen (auch rückwirkend und Erstattungen). */
@@ -80,7 +107,7 @@ function settleCommitments(s: AppState, at: Date): AppState {
 
 /** Auto-Zuordnung (`high`), Zusagen prüfen, Hinweise neu abgleichen. */
 export function refresh(s: AppState, at: Date, isDemo = true): AppState {
-  const st = settleCommitments(autoAllocate(allocateStripe(s, at, isDemo), at, isDemo), at);
+  const st = settleCommitments(allocateBankReturns(autoAllocate(allocateBankReturns(allocateStripe(s, at, isDemo), at, isDemo), at, isDemo), at, isDemo), at);
   const stale = areaStale(st.connections.map((c) => c.id), st.connections, at);
   return { ...st, insights: reconcileInsights(st.insights, [...runDetectors(st, at), ...runCoach(st, at)], at, stale, st.settings.suppressedCoachKeys) };
 }
@@ -91,20 +118,44 @@ type Mutation = { state: AppState; text: string };
 
 const contactName = (s: AppState, id: string | null | undefined) => s.contacts.find((c) => c.id === id)?.name ?? 'Unbekannt';
 
-function confirmPaymentMatch(s: AppState, paymentId: string, contractId: string, at: Date): Mutation {
+type MatchTargetArg = { contractId?: string; invoiceId?: string };
+
+function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTargetArg, at: Date): Mutation {
   const p = s.payments.find((x) => x.id === paymentId);
-  const c = s.contracts.find((x) => x.id === contractId);
-  if (!p || !c) return { state: s, text: `Zuordnung nicht möglich: ${paymentId}` };
-  const ibanLinks = p.iban && !s.ibanLinks.some((l) => l.iban === p.iban)
-    ? [...s.ibanLinks, { iban: p.iban, contactId: c.contactId, confirmedAt: at.toISOString() }]
+  const c = target.contractId ? s.contracts.find((x) => x.id === target.contractId) : undefined;
+  const inv = target.invoiceId ? s.invoices.find((x) => x.id === target.invoiceId) : undefined;
+  const fail = { state: s, text: `Zuordnung nicht möglich: ${paymentId}` };
+  if (!p || (!!target.contractId === !!target.invoiceId)) return fail;
+  let allocation: Allocation;
+  let contactId: string | null;
+  let text: string;
+  if (c) {
+    allocation = { paymentId, contractId: c.id, amountCents: p.amountCents, method: 'confirmed' };
+    contactId = c.contactId;
+    text = `Zahlung über ${formatEuro(p.amountCents)} ${contactName(s, c.contactId)} zugeordnet`;
+  } else if (inv && inv.connectionId === 'lexware_nexus' && invoiceOpenCents(s, inv) > 0) {
+    allocation = { paymentId, invoiceId: inv.id, amountCents: p.amountCents, method: 'confirmed' };
+    contactId = inv.contactId;
+    text = `Zahlung über ${formatEuro(p.amountCents)} Rechnung ${inv.number} zugeordnet`;
+  } else return fail;
+  const iban = p.iban ? normalizeIban(p.iban) : '';
+  const ibanLinks = iban && contactId && !s.ibanLinks.some((l) => normalizeIban(l.iban) === iban)
+    ? [...s.ibanLinks, { iban, contactId, confirmedAt: at.toISOString() }]
     : s.ibanLinks;
+  const payments = s.payments.map((x) => {
+    if (x.id !== paymentId || !x.ignoredAt) return x;
+    const { ignoredAt: _drop, ...rest } = x;
+    return rest;
+  });
+  return { state: { ...s, payments, allocations: [...s.allocations.filter((a) => a.paymentId !== paymentId), allocation], ibanLinks }, text };
+}
+
+function dismissPayment(s: AppState, paymentId: string, at: Date): Mutation | null {
+  const p = s.payments.find((x) => x.id === paymentId);
+  if (!p || p.ignoredAt || s.allocations.some((a) => a.paymentId === paymentId)) return null;
   return {
-    state: {
-      ...s,
-      allocations: [...s.allocations.filter((a) => a.paymentId !== paymentId), { paymentId, contractId, amountCents: p.amountCents, method: 'confirmed' }],
-      ibanLinks,
-    },
-    text: `Zahlung über ${formatEuro(p.amountCents)} ${contactName(s, c.contactId)} zugeordnet`,
+    state: { ...s, payments: s.payments.map((x) => (x.id === paymentId ? { ...x, ignoredAt: at.toISOString() } : x)) },
+    text: `Buchung ausgeblendet: ${p.payerName ?? 'Unbekannt'} ${formatEuro(p.amountCents)}`,
   };
 }
 
@@ -174,7 +225,7 @@ function applyEffects(s: AppState, a: Action, ctx: EngineContext, simulated = fa
     case 'mark_invoice_settled':
       return settleInvoice(s, p.invoiceId, p.paymentId);
     case 'confirm_payment_match':
-      return confirmPaymentMatch(s, p.paymentId, p.contractId, ctx.at);
+      return confirmPaymentMatch(s, p.paymentId, { contractId: p.contractId }, ctx.at);
     default:
       return { state: s, text: `Ausgeführt (Demo): ${a.title}` };
   }
@@ -202,12 +253,17 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
   const owner = (m: Mutation, actionId?: string) => ({ state: m.state, audit: { actor: 'owner' as const, text: m.text, actionId } });
   switch (e.type) {
     case 'confirmPaymentMatch':
-      return owner(confirmPaymentMatch(s, e.paymentId, e.contractId, at));
+      return owner(confirmPaymentMatch(s, e.paymentId, e, at));
+    case 'dismissPayment': {
+      const m = dismissPayment(s, e.paymentId, at);
+      return m ? owner(m) : { state: s };
+    }
     case 'simulateTransfer': {
       const id = ctx.newId();
       const payment = {
         id, company: 'nexus' as const, source: 'bank' as const, connectionId: 'bank_qonto' as const, externalId: `demo-${id}`, amountCents: e.amountCents,
-        bookedOn: todayBerlin(at), payerName: e.payerName, iban: e.iban, reference: 'Überweisung (Demo)', kind: classifyBankTx({ payerName: e.payerName }),
+        bookedOn: todayBerlin(at), payerName: e.payerName, iban: normalizeIban(e.iban), reference: 'Überweisung (Demo)',
+        kind: classifyBankTx({ payerName: e.payerName, iban: e.iban }, new Set(s.ibanLinks.map((l) => normalizeIban(l.iban)))),
       };
       return owner({ state: { ...s, payments: [...s.payments, payment] }, text: `Überweisung simuliert: ${e.payerName}, ${formatEuro(e.amountCents)}` });
     }

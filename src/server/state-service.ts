@@ -12,7 +12,7 @@ const MAX_ATTEMPTS = 3;
 
 /** Ereignisse, die ein Client senden darf. Ausführer-, Demo-, Verbindungs- und Assistenten-Ereignisse entstehen nur auf dem Server. */
 export const CLIENT_EVENTS: ReadonlySet<StoreEvent['type']> = new Set<StoreEvent['type']>([
-  'confirmPaymentMatch', 'settleInvoice', 'linkInvoiceToJob', 'setJobStatus', 'createAction', 'editAction', 'approveAction',
+  'confirmPaymentMatch', 'dismissPayment', 'settleInvoice', 'linkInvoiceToJob', 'setJobStatus', 'createAction', 'editAction', 'approveAction',
   'retryAction', 'checkAction', 'dismissInsight', 'snoozeInsight', 'suppressCoach', 'setSlides', 'updateSettings',
   'confirmProposal', 'dismissProposal',
 ]);
@@ -57,7 +57,8 @@ const isSlides = (v: unknown) => Array.isArray(v) && v.every((x) => isObj(x) && 
 
 /** Pflichtfelder je erlaubtem Ereignis (Grundform; die Fachregeln prüft die Engine). */
 const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
-  confirmPaymentMatch: (e) => isStr(e.paymentId) && isStr(e.contractId),
+  confirmPaymentMatch: (e) => isStr(e.paymentId) && (isStr(e.contractId) !== isStr(e.invoiceId)),
+  dismissPayment: (e) => isStr(e.paymentId),
   settleInvoice: (e) => isStr(e.invoiceId) && isStr(e.paymentId),
   linkInvoiceToJob: (e) => isStr(e.jobId) && isStr(e.invoiceId),
   setJobStatus: (e) => isStr(e.jobId) && isJobStatus(e.status),

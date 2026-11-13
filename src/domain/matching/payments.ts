@@ -1,4 +1,4 @@
-import type { Contact, IbanLink, Payment } from '@/domain/types';
+import type { Allocation, AppState, Contact, IbanLink, Payment } from '@/domain/types';
 
 const STRIPE_WORDS = new Set(['stripe', 'payments', 'technologies', 'technology', 'europe', 'ltd', 'limited', 'uk', 'ie', 'inc']);
 
@@ -141,4 +141,20 @@ export function matchBankPayment(p: Payment, ctx: MatchContext): MatchResult {
 /** IBAN-Schreibweise vereinheitlichen: Leerraum raus, Großbuchstaben. */
 export function normalizeIban(s: string): string {
   return s.replace(/\s+/g, '').toUpperCase();
+}
+
+/** Rückbuchungen der Bank (Betrag < 0, `refundOf`) folgen dem Ziel der Originalzahlung; ohne Zuordnung des Originals entsteht nichts. */
+export function bankReturnAllocations(s: AppState): Allocation[] {
+  const allocated = new Set(s.allocations.map((a) => a.paymentId));
+  const out: Allocation[] = [];
+  for (const p of s.payments) {
+    if (p.source !== 'bank' || p.amountCents >= 0 || !p.refundOf || allocated.has(p.id)) continue;
+    const original = s.payments.find((x) => x.id !== p.id && x.connectionId === p.connectionId && x.externalId === p.refundOf);
+    const a = original ? s.allocations.find((x) => x.paymentId === original.id) : undefined;
+    if (!a) continue;
+    out.push(a.invoiceId
+      ? { paymentId: p.id, invoiceId: a.invoiceId, amountCents: p.amountCents, method: 'auto' }
+      : { paymentId: p.id, contractId: a.contractId!, amountCents: p.amountCents, method: 'auto' });
+  }
+  return out;
 }

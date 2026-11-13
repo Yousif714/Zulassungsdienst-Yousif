@@ -32,7 +32,7 @@ export function detectUnmatchedPayments(s: AppState, now: Date): Insight[] {
   const out: Insight[] = [];
   for (const p of s.payments) {
     // Nur NEXUS hat Mitgliedsverträge; Stripe-Zahlungen sind keine Bankzahlungen.
-    if (p.source !== 'bank' || p.kind !== 'incoming' || p.company !== 'nexus') continue;
+    if (p.source !== 'bank' || p.kind !== 'incoming' || p.company !== 'nexus' || p.ignoredAt || p.amountCents <= 0) continue;
     if (s.allocations.some((a) => a.paymentId === p.id)) continue;
     const m = matchBankPayment(p, mctx);
     if (m.confidence === 'high') continue;

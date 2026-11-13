@@ -3,7 +3,9 @@ import { createDemoState } from '@/data/seed';
 import { applyEvent, applyEvents, refresh, type EngineContext } from '@/data/engine';
 import { reducer } from '@/data/store';
 import type { StoreEvent } from '@/domain/events';
-import { NOW_0930 as NOW } from './helpers';
+import { invoiceOpenCents } from '@/domain/ledger/receivables';
+import { unallocatedBankPayments } from '@/data/selectors';
+import { NOW_0930 as NOW, base, isOpen, stateWith, tx, workshop } from './helpers';
 import { confirmedSub, stripeBatch, stripeState } from './import/helpers';
 
 const IBAN = 'DE02120300000000202051';
@@ -100,5 +102,64 @@ describe('refresh: Stripe-Zuordnung', () => {
   test('zweiter refresh ordnet nichts doppelt zu', () => {
     const once = refresh(confirmedSub(stripeState, 'sub_A', 'k-ayse'), NOW, false);
     expect(refresh(once, NOW, false).allocations).toEqual(once.allocations);
+  });
+});
+
+describe('Zuordnung Vertrag/Rechnung (Paket 2b-2)', () => {
+  const yilmaz = { ...base, id: 'k-yilmaz', contactId: 'm-yilmaz' };
+  test('Rechnungsnummer + Betrag → automatisch auf die Rechnung, Forderung 0', () => {
+    const r = refresh(stateWith({ invoices: [workshop], payments: [tx({ id: 'q1', iban: 'DE00X', reference: 'RE-1101', amountCents: 14900 })] }), NOW);
+    expect(r.allocations).toContainEqual({ paymentId: 'q1', invoiceId: 'i-ws', amountCents: 14900, method: 'auto' });
+    expect(invoiceOpenCents(r, r.invoices.find((i) => i.id === 'i-ws')!)).toBe(0);
+    expect(r.audit.at(-1)!.text).toBe('Automatisch zugeordnet: Rechnung RE-1101');
+  });
+  test('Bestätigen auf Rechnung lernt die IBAN normalisiert; zweite Zahlung → automatisch', () => {
+    let r = stateWith({ invoices: [{ ...workshop, contactId: 'm-yilmaz', totalCents: 29800, openCents: 29800 }], payments: [tx({ id: 'q1', iban: 'de12 3456', payerName: 'Firma XY', amountCents: 14900 })] });
+    r = reducer(r, { type: 'confirmPaymentMatch', paymentId: 'q1', invoiceId: 'i-ws' });
+    expect(r.ibanLinks).toContainEqual(expect.objectContaining({ iban: 'DE123456', contactId: 'm-yilmaz' }));
+    r = refresh({ ...r, payments: [...r.payments, tx({ id: 'q2', externalId: 'q2', iban: 'DE12 3456', amountCents: 14900 })] }, NOW);
+    expect(r.allocations.find((a) => a.paymentId === 'q2')).toMatchObject({ invoiceId: 'i-ws', method: 'auto' });
+  });
+  test('Bestätigen auf nicht offene oder fremde Rechnung wird abgelehnt', () => {
+    const paid = { ...workshop, status: 'paid' as const, openCents: 0 };
+    const r = reducer(stateWith({ invoices: [paid], payments: [tx({ id: 'q1' })] }), { type: 'confirmPaymentMatch', paymentId: 'q1', invoiceId: 'i-ws' });
+    expect(r.allocations).toEqual([]);
+  });
+  test('mehrdeutig → keine Auto-Zuordnung, Hinweis bleibt', () => {
+    const r = refresh(stateWith({
+      contracts: [yilmaz, { ...yilmaz, id: 'k-yilmaz-2' }],
+      ibanLinks: [{ iban: 'DE00X', contactId: 'm-yilmaz', confirmedAt: '2026-10-01T10:00:00Z' }],
+      payments: [tx({ id: 'q1', iban: 'DE00X', amountCents: 30000 })],
+    }), NOW);
+    expect(r.allocations).toEqual([]);
+    expect(isOpen(r, 'unmatched:q1')).toBe(true);
+  });
+  test('Keine Mitgliedszahlung: ausgeblendet, kein Hinweis, keine Auto-Zuordnung, idempotent', () => {
+    let r = refresh(stateWith({ payments: [tx({ id: 'q1', iban: 'DE00X', payerName: 'Fremd', amountCents: 5000 })] }), NOW);
+    expect(isOpen(r, 'unmatched:q1')).toBe(true);
+    r = refresh(reducer(r, { type: 'dismissPayment', paymentId: 'q1' }), NOW);
+    expect(r.payments[0].ignoredAt).toBeDefined();
+    expect(unallocatedBankPayments(r)).toHaveLength(0);
+    expect(isOpen(r, 'unmatched:q1')).toBe(false);
+    expect(reducer(r, { type: 'dismissPayment', paymentId: 'q1' }).payments).toEqual(r.payments);
+  });
+  test('Rückbuchung vor Zuordnung → keine Gutschrift; nach Bestätigung folgt sie dem Ziel', () => {
+    const open = refresh(stateWith({ contracts: [yilmaz], payments: [
+      tx({ id: 'q1', externalId: 't1', iban: 'DE00X', payerName: 'Selin Yilmaz', amountCents: 30000 }),
+      tx({ id: 'q2', externalId: 't2', iban: 'DE00X', amountCents: -30000, refundOf: 't1' })] }), NOW);
+    expect(open.allocations.filter((a) => a.paymentId === 'q2')).toEqual([]);
+    expect(isOpen(open, 'unmatched:q2')).toBe(false);
+    const after = reducer(open, { type: 'confirmPaymentMatch', paymentId: 'q1', contractId: 'k-yilmaz' });
+    expect(refresh(after, NOW).allocations.find((a) => a.paymentId === 'q2')).toMatchObject({ contractId: 'k-yilmaz', amountCents: -30000 });
+  });
+  test('Stripe-Auszahlung nie gutgeschrieben', () => {
+    const r = refresh(stateWith({ contracts: [yilmaz], ibanLinks: [{ iban: 'DE00X', contactId: 'm-yilmaz', confirmedAt: 'x' }],
+      payments: [tx({ id: 'q1', iban: 'DE00X', kind: 'stripe_payout', amountCents: 30000 })] }), NOW);
+    expect(r.allocations).toEqual([]);
+    expect(isOpen(r, 'unmatched:q1')).toBe(false);
+  });
+  test('simulateTransfer normalisiert die IBAN', () => {
+    const r = applyEvent(stateWith(), { type: 'simulateTransfer', iban: 'de12 3456', payerName: 'X Y', amountCents: 100 }, ctx());
+    expect(r.state.payments.at(-1)!.iban).toBe('DE123456');
   });
 });

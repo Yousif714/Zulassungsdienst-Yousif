@@ -33,6 +33,7 @@ describe('UI-Ereignisse im Echtmodus bestehen isClientEvent', () => {
     ['Ändern', { type: 'editAction', id: 'reply-1', payload: { text: 'Neu' } }],
     ['Erneut versuchen', { type: 'retryAction', id: 'reply-1' }],
     ['Prüfen', { type: 'checkAction', id: 'reply-1' }],
+    ['Buchung ausblenden', { type: 'dismissPayment', paymentId: 'p-1' }],
     ['Zahlung bestätigen', { type: 'confirmPaymentMatch', paymentId: 'p-1', contractId: contract.id }],
     ['Rechnung erledigt', { type: 'settleInvoice', invoiceId: 'i-1', paymentId: 'p-1' }],
     ['Rechnung zuordnen', { type: 'linkInvoiceToJob', jobId: job.id, invoiceId: 'i-1' }],

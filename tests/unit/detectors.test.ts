@@ -44,6 +44,11 @@ describe('Detektoren', () => {
   test('Stripe-Zahlung ohne Allocation → kein unmatched_payment', () => {
     expect(types(run({ payments: [tx({ source: 'stripe', connectionId: 'stripe_nexus' })] }))).not.toContain('unmatched_payment');
   });
+  test('ausgeblendete Buchung und Rückbuchung (Betrag ≤ 0) melden keinen Hinweis', () => {
+    expect(types(run({ payments: [tx({ payerName: 'Fremd', ignoredAt: '2026-11-12T08:00:00Z' })] }))).not.toContain('unmatched_payment');
+    expect(types(run({ payments: [tx({ payerName: 'Fremd', amountCents: -500, refundOf: 'x0' })] }))).not.toContain('unmatched_payment');
+    expect(find(run({ payments: [tx({ payerName: 'Fremd' })] }), 'unmatched_payment').needsSources).toEqual(['bank_qonto']);
+  });
   test('memberView nutzt Allocations und Ausnahmen', () => {
     const s = stateWith({ contracts: [base], payments: [tx({ id: 'p1', bookedOn: '2026-10-01' })], allocations: [{ paymentId: 'p1', contractId: 'c1', amountCents: 30000, method: 'auto' }] });
     expect(memberView(s, 'c1', '2026-11-12').status.paidCents).toBe(30000);
