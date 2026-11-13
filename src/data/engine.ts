@@ -15,6 +15,7 @@ import { stripeAllocations } from '@/domain/matching/stripe';
 import { validateContractDraft, type ContractDraft } from '@/domain/import/contract-draft';
 import { READ_LIMITS, limitReached, planFromReading, readingProposalId, textSearchDismissed } from '@/domain/import/invoice-reading';
 import { invoiceRef, membershipContractOf, retargetAllocations } from '@/domain/ledger/contracts';
+import { emptyBatch } from '@/domain/import/batch';
 import { mergeBatch } from '@/domain/import/merge';
 import { mergePortalList, normalizePortalEntries } from '@/domain/import/portal-list';
 import { deriveProposals, findContactFor, type ContractProposal } from '@/domain/import/proposals';
@@ -442,6 +443,26 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
         return next;
       });
       return owner({ state: { ...s, portalMembers: r.items, connections }, text: `Mitgliederliste übernommen: ${entries.length} Mitglieder, ${r.added} neu, ${r.missing} nicht mehr in der Liste` });
+    }
+    case 'importBankStatement': {
+      // Nur die bekannten Felder übernehmen; alles andere (refundOf, ignoredAt, company …) setzt der Server.
+      const payments = e.payments.map((p) => ({
+        company: 'zulassung' as const, source: 'bank' as const, connectionId: 'bank_sparkasse' as const, kind: 'incoming' as const,
+        externalId: p.externalId, amountCents: p.amountCents, bookedOn: p.bookedOn,
+        ...(p.payerName !== undefined ? { payerName: p.payerName } : {}),
+        ...(p.iban !== undefined ? { iban: p.iban } : {}),
+        ...(p.reference !== undefined ? { reference: p.reference } : {}),
+      }));
+      const r = mergeBatch(s, { ...emptyBatch(), payments }, ctx.newId);
+      const added = r.added.payments;
+      const cursor = r.state.payments.filter((p) => p.connectionId === 'bank_sparkasse').reduce<string | null>((m, p) => (m === null || p.bookedOn > m ? p.bookedOn : m), null);
+      const connections = r.state.connections.map((c) => {
+        if (c.id !== 'bank_sparkasse') return c;
+        const next: Connection = { ...c, status: 'connected', lastSuccessAt: at.toISOString(), sync: { cursor, complete: true, failures: 0 } };
+        delete next.lastError;
+        return next;
+      });
+      return owner({ state: { ...r.state, connections }, text: `Sparkasse-Auszug übernommen: ${added} neu, ${payments.length - added} schon vorhanden` });
     }
     case 'createPortalContract': {
       const view = portalViews(s).find((v) => v.member.externalId === e.externalId);

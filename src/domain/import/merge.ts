@@ -67,7 +67,7 @@ export function mergeBatch(s: AppState, b: ImportBatch, newId: () => string): { 
   // Zahlungen: Bestehende gewinnen (wie mergeImported, aber mit neuer ID und Zählung)
   // Qonto: Rückbuchungen mit Original verknüpfen (sonst verworfen), neue Zahlungen mit Mitglieds-IBANs klassifizieren
   const memberIbans = new Set(s.ibanLinks.map((l) => normalizeIban(l.iban)));
-  const isBank = (p: { connectionId: Payment['connectionId'] }) => p.connectionId === 'bank_qonto';
+  const isBank = (p: { connectionId: Payment['connectionId'] }) => p.connectionId === 'bank_qonto' || p.connectionId === 'bank_sparkasse';
   const bank = linkBankReturns(s.payments, b.payments.filter(isBank)).map((p) => (p.refundOf ? p : { ...p, kind: classifyBankTx(p, memberIbans) }));
   const incomingPayments = [...b.payments.filter((p) => !isBank(p)), ...bank];
   const pay = upsertImported<Payment, (typeof b.payments)[number]>(s.payments, incomingPayments, (next, old) => (old ?? next), newId);

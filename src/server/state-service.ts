@@ -15,7 +15,7 @@ const MAX_ATTEMPTS = 3;
 export const CLIENT_EVENTS: ReadonlySet<StoreEvent['type']> = new Set<StoreEvent['type']>([
   'confirmPaymentMatch', 'dismissPayment', 'settleInvoice', 'linkInvoiceToJob', 'setJobStatus', 'createAction', 'editAction', 'approveAction',
   'retryAction', 'checkAction', 'dismissInsight', 'snoozeInsight', 'suppressCoach', 'setSlides', 'updateSettings',
-  'confirmProposal', 'dismissProposal', 'confirmReadContract', 'correctContract', 'deleteReadContract', 'importPortalList', 'createPortalContract', 'ignorePortalMember', 'unignorePortalMember',
+  'confirmProposal', 'dismissProposal', 'confirmReadContract', 'correctContract', 'deleteReadContract', 'importPortalList', 'importBankStatement', 'createPortalContract', 'ignorePortalMember', 'unignorePortalMember',
 ]);
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -65,6 +65,14 @@ const isPortalEntry = (x: unknown) =>
   && (x.emails === undefined || (Array.isArray(x.emails) && x.emails.length >= 1 && x.emails.length <= 10 && x.emails.every(isPortalMail) && String(x.emails[0]).toLowerCase() === String(x.email).toLowerCase()))
   && optDate(x.joinedOn) && optDate(x.lastActiveOn) && optStr(x.joinedText, 100) && optStr(x.lastActiveText, 100);
 
+/** Strenge Form einer Sparkasse-Zahlung aus dem Client: feste Werte, Schlüssel- und Betragsgrenzen. */
+const isSparkassePayment = (x: unknown) =>
+  isObj(x) && x.company === 'zulassung' && x.source === 'bank' && x.connectionId === 'bank_sparkasse' && x.kind === 'incoming'
+  && typeof x.externalId === 'string' && /^spk-[0-9a-f]{16}$/.test(x.externalId)
+  && Number.isInteger(x.amountCents) && x.amountCents !== 0 && Math.abs(x.amountCents as number) <= 100_000_000_00
+  && isIsoDate(x.bookedOn)
+  && optStr(x.payerName, 200) && optStr(x.iban, 34) && optStr(x.reference, 500);
+
 /** Sammelzahlung: 1–50 eindeutige Rechnungs-IDs. */
 const isInvoiceIds = (v: unknown) => Array.isArray(v) && v.length >= 1 && v.length <= 50 && v.every(isStr) && new Set(v).size === v.length;
 
@@ -96,6 +104,7 @@ const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
   createPortalContract: (e) => isStr(e.externalId) && isContractDraft(e.draft) && (e.contactId === null || isStr(e.contactId)),
   ignorePortalMember: (e) => isStr(e.externalId),
   unignorePortalMember: (e) => isStr(e.externalId),
+  importBankStatement: (e) => e.connectionId === 'bank_sparkasse' && Array.isArray(e.payments) && e.payments.length >= 1 && e.payments.length <= 5000 && e.payments.every(isSparkassePayment),
   importPortalList: (e) => Array.isArray(e.entries) && e.entries.length >= 1 && e.entries.length <= 2000 && e.entries.every(isPortalEntry),
 };
 
