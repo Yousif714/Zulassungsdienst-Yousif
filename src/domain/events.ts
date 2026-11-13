@@ -41,4 +41,8 @@ export type StoreEvent =
   | { type: 'dismissProposal'; proposalId: string }
   /** Mitgliederliste aus dem Portal: zusammenführen, nie löschen. */
   | { type: 'importPortalList'; entries: PortalListEntry[] }
+  /** Vertrag für ein Portal-Mitglied ohne Vertrag; `created[0]` ist die Vertrags-ID. `contactId`: bestätigter Namenstreffer, sonst null. */
+  | { type: 'createPortalContract'; externalId: string; draft: ContractDraft; contactId: string | null }
+  /** „Kein zahlendes Mitglied“: Mitglied aus der Arbeitsliste ausblenden (idempotent). */
+  | { type: 'ignorePortalMember'; externalId: string }
   | { type: 'resetDemo' };

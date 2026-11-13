@@ -14,7 +14,8 @@ import { stripeAllocations } from '@/domain/matching/stripe';
 import { validateContractDraft } from '@/domain/import/contract-draft';
 import { mergeBatch } from '@/domain/import/merge';
 import { mergePortalList, normalizePortalEntries } from '@/domain/import/portal-list';
-import { deriveProposals, findContactFor } from '@/domain/import/proposals';
+import { deriveProposals, findContactFor, type ContractProposal } from '@/domain/import/proposals';
+import { portalProposal, portalViews } from '@/domain/portal';
 import { invoiceOpenCents } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
 import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Connection, Contact, MemberContract, Message, Settings } from '@/domain/types';
@@ -389,23 +390,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       const errors = validateContractDraft(e.draft);
       if (errors.length) return { state: s, audit: { actor: 'owner', text: `Vertrag nicht angelegt: ${errors.join(' ')}` } };
       const contractId = ctx.newId(); // zuerst: created[0] ist die Vertrags-ID
-      const found = findContactFor(p, s.contacts);
-      const reuse = found.contactId !== null && (found.match === 'ref' || found.match === 'email' || (found.match === 'name' && e.contactId === found.contactId));
-      let contacts = s.contacts;
-      let contactId: string;
-      if (reuse) {
-        contactId = found.contactId!;
-        contacts = contacts.map((c) => {
-          if (c.id !== contactId) return c;
-          const refs = c.externalRefs ?? [];
-          const missing = p.contactRefs.filter((r) => !refs.some((x) => x.connectionId === r.connectionId && x.externalId === r.externalId));
-          return missing.length ? { ...c, externalRefs: [...refs, ...missing] } : c;
-        });
-      } else {
-        contactId = ctx.newId();
-        const c: Contact = { id: contactId, company: 'nexus', kind: 'member', name: p.name, phones: [], emails: p.email ? [p.email] : [], externalRefs: [...p.contactRefs] };
-        contacts = [...contacts, c];
-      }
+      const { contacts, contactId } = attachContact(s, p, e.contactId, ctx.newId);
       const contract: MemberContract = { ...e.draft, id: contractId, contactId, billing: p.billing, origin: p.sources };
       const isSource = (x: { connectionId: string; externalId: string }) => p.sources.some((r) => r.connectionId === x.connectionId && r.externalId === x.externalId);
       const subscriptions = s.subscriptions.map((x) => (isSource(x) ? { ...x, contractId, confirmedPriceCents: x.priceCents, confirmedEndDate: x.endDate } : x));
@@ -423,6 +408,24 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
         return next;
       });
       return owner({ state: { ...s, portalMembers: r.items, connections }, text: `Mitgliederliste übernommen: ${entries.length} Mitglieder, ${r.added} neu, ${r.missing} nicht mehr in der Liste` });
+    }
+    case 'createPortalContract': {
+      const view = portalViews(s).find((v) => v.member.externalId === e.externalId);
+      if (!view) return { state: s, audit: { actor: 'owner', text: 'Portal-Mitglied nicht gefunden' } };
+      if (view.status !== 'no_invoice' && view.status !== 'invoice_only') return { state: s, audit: { actor: 'owner', text: 'Vertrag nicht angelegt: Mitglied hat schon einen Vertrag oder Vorschlag.' } };
+      const errors = validateContractDraft(e.draft);
+      if (errors.length) return { state: s, audit: { actor: 'owner', text: `Vertrag nicht angelegt: ${errors.join(' ')}` } };
+      const contractId = ctx.newId(); // zuerst: created[0] ist die Vertrags-ID
+      const p = portalProposal(view);
+      const mails = view.member.emails?.length ? view.member.emails : [view.member.email];
+      const { contacts, contactId } = attachContact(s, p, e.contactId, ctx.newId, mails);
+      const contract: MemberContract = { ...e.draft, id: contractId, contactId, billing: 'legacy', origin: p.sources };
+      return owner({ state: { ...s, contacts, contracts: [...s.contracts, contract] }, text: `Vertrag angelegt (Portal): ${view.member.name}, ${e.draft.installments} × ${formatEuro(e.draft.installmentCents)}` });
+    }
+    case 'ignorePortalMember': {
+      if (s.ignoredPortalMembers.includes(e.externalId)) return { state: s };
+      const m = s.portalMembers.find((x) => x.externalId === e.externalId);
+      return owner({ state: { ...s, ignoredPortalMembers: [...s.ignoredPortalMembers, e.externalId] }, text: `Kein zahlendes Mitglied: ${m?.name ?? e.externalId}` });
     }
     case 'dismissProposal':
       return s.dismissedProposals.includes(e.proposalId) ? { state: s } : { state: { ...s, dismissedProposals: [...s.dismissedProposals, e.proposalId] } };
@@ -465,6 +468,25 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     case 'resetDemo':
       return { state: createDemoState() };
   }
+}
+
+/** Kontakt zu einem Vorschlag: vorhandenen (Ref, E-Mail, bestätigter Namenstreffer) um Refs ergänzen, sonst neu anlegen. */
+function attachContact(s: AppState, p: ContractProposal, chosen: string | null, newId: () => string, emails?: string[]): { contacts: Contact[]; contactId: string } {
+  const found = findContactFor(p, s.contacts);
+  const reuse = found.contactId !== null && (found.match === 'ref' || found.match === 'email' || (found.match === 'name' && chosen === found.contactId));
+  if (reuse) {
+    const contactId = found.contactId!;
+    const contacts = s.contacts.map((c) => {
+      if (c.id !== contactId) return c;
+      const refs = c.externalRefs ?? [];
+      const missing = p.contactRefs.filter((r) => !refs.some((x) => x.connectionId === r.connectionId && x.externalId === r.externalId));
+      return missing.length ? { ...c, externalRefs: [...refs, ...missing] } : c;
+    });
+    return { contacts, contactId };
+  }
+  const contactId = newId();
+  const c: Contact = { id: contactId, company: 'nexus', kind: 'member', name: p.name, phones: [], emails: emails ?? (p.email ? [p.email] : []), externalRefs: [...p.contactRefs] };
+  return { contacts: [...s.contacts, c], contactId };
 }
 
 export function applyEvent(s: AppState, e: StoreEvent, ctx: EngineContext): EngineResult {

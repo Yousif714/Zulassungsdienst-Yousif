@@ -15,7 +15,7 @@ const MAX_ATTEMPTS = 3;
 export const CLIENT_EVENTS: ReadonlySet<StoreEvent['type']> = new Set<StoreEvent['type']>([
   'confirmPaymentMatch', 'dismissPayment', 'settleInvoice', 'linkInvoiceToJob', 'setJobStatus', 'createAction', 'editAction', 'approveAction',
   'retryAction', 'checkAction', 'dismissInsight', 'snoozeInsight', 'suppressCoach', 'setSlides', 'updateSettings',
-  'confirmProposal', 'dismissProposal', 'importPortalList',
+  'confirmProposal', 'dismissProposal', 'importPortalList', 'createPortalContract', 'ignorePortalMember',
 ]);
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -86,6 +86,8 @@ const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
   updateSettings: (e) => isSettingsPatch(e.patch),
   confirmProposal: (e) => isStr(e.proposalId) && isContractDraft(e.draft) && (e.contactId === null || isStr(e.contactId)),
   dismissProposal: (e) => isStr(e.proposalId),
+  createPortalContract: (e) => isStr(e.externalId) && isContractDraft(e.draft) && (e.contactId === null || isStr(e.contactId)),
+  ignorePortalMember: (e) => isStr(e.externalId),
   importPortalList: (e) => Array.isArray(e.entries) && e.entries.length >= 1 && e.entries.length <= 2000 && e.entries.every(isPortalEntry),
 };
 
