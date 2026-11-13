@@ -1,10 +1,12 @@
+import { todayBerlin } from '../clock';
 import { formatEuro } from '../money';
 import type { AppState, Insight, Subscription } from '../types';
 import { subscriptionOf } from '../matching/stripe';
 import { memberRef } from './refs';
 
 /** Hinweise auf Änderungen an Stripe-Abos mit bestätigtem Vertrag. Der Vertrag selbst bleibt unverändert. */
-export function detectSubscriptionChanges(s: AppState): Insight[] {
+export function detectSubscriptionChanges(s: AppState, now: Date): Insight[] {
+  const today = todayBerlin(now);
   const out: Insight[] = [];
   for (const sub of s.subscriptions) {
     if (!sub.contractId) continue;
@@ -26,7 +28,9 @@ export function detectSubscriptionChanges(s: AppState): Insight[] {
       });
     const note = 'Der Vertrag bleibt unverändert, bitte prüfen.';
 
-    if (sub.status === 'canceled') add('canceled', `${name}: Abo in Stripe gekündigt`, `Das Stripe-Abo wurde gekündigt. ${note}`);
+    // Reguläres Ende: Stripe beendet das Abo zum bestätigten Enddatum (cancel_at erreicht). Das ist keine Kündigung.
+    const endedAsAgreed = sub.endDate !== null && sub.endDate === sub.confirmedEndDate && sub.endDate <= today;
+    if (sub.status === 'canceled' && !endedAsAgreed) add('canceled', `${name}: Abo in Stripe gekündigt`, `Das Stripe-Abo wurde gekündigt. ${note}`);
     if (sub.endDate !== sub.confirmedEndDate) add('end', `${name}: Enddatum des Abos geändert`, `Enddatum in Stripe: ${sub.endDate ?? 'keines'} (bestätigt: ${sub.confirmedEndDate ?? 'keines'}). ${note}`);
     if (sub.priceCents !== sub.confirmedPriceCents) add('price', `${name}: Preis des Abos geändert`, `Preis in Stripe: ${money(sub.priceCents)} (bestätigt: ${money(sub.confirmedPriceCents)}). ${note}`);
     if (sub.status === 'past_due' || sub.status === 'unpaid') add('past_due', `${name}: Stripe-Zahlung fehlgeschlagen`, `Das Abo steht auf „${sub.status}“. ${note}`);

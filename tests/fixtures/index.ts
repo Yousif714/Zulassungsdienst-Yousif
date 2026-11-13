@@ -38,6 +38,13 @@ export const stripeRaw: StripeRaw = {
   disputes: disputes.data,
 };
 
+/** Query-String der Stripe-Anfragen (muss zur Anfrage des Connectors passen; Reihenfolge fest). */
+const stripeQuery = (extra: Record<string, string>, startingAfter?: string): string =>
+  `?${new URLSearchParams({ ...extra, limit: '100', ...(startingAfter ? { starting_after: startingAfter } : {}) }).toString()}`;
+const stripeSince = Date.parse('2026-06-01T00:00:00Z') / 1000 - 7200;
+/** Offene/uneinbringliche Rechnungen seit IMPORT_SINCE (Connector merkt sie sich für spätere Zahlung). */
+export const stripeOpenQuery = (status: 'open' | 'uncollectible') => `/v1/invoices${stripeQuery({ status, 'created[gte]': String(stripeSince) })}`;
+
 /** Pfad (ohne Query) → Stripe-Antwort-JSON. Erstattungen und Streitfälle tragen hier schon `invoiceId`. Einzelrechnungen unter `/v1/invoices/{id}`. */
 export const stripeRoutes: Record<string, unknown> = {
   ...Object.fromEntries(invoices.data.map((i) => [`/v1/invoices/${i.id}`, i])),
@@ -46,6 +53,8 @@ export const stripeRoutes: Record<string, unknown> = {
   '/v1/invoices': invoices,
   '/v1/refunds': refunds,
   '/v1/disputes': disputes,
+  [stripeOpenQuery('open')]: { object: 'list', data: [], has_more: false },
+  [stripeOpenQuery('uncollectible')]: { object: 'list', data: [], has_more: false },
 };
 
 type LexDetail = { id: string; voucherNumber: string; updatedDate: string; [k: string]: unknown };
@@ -103,10 +112,6 @@ export const lexwareRoutesZulassung: Record<string, unknown> = {
   [`/v1/order-confirmations/${lexOrderConfirmation('AB-Z-1').id}`]: lexOrderConfirmation('AB-Z-1'),
 };
 
-/** Query-String der Stripe-Anfragen (muss zur Anfrage des Connectors passen; Reihenfolge fest). */
-const stripeQuery = (extra: Record<string, string>, startingAfter?: string): string =>
-  `?${new URLSearchParams({ ...extra, limit: '100', ...(startingAfter ? { starting_after: startingAfter } : {}) }).toString()}`;
-const stripeSince = Date.parse('2026-06-01T00:00:00Z') / 1000 - 7200;
 const invoiceQuery = (after?: string) => `/v1/invoices${stripeQuery({ status: 'paid', 'created[gte]': String(stripeSince) }, after)}`;
 
 /** Stripe mit Mehrseiten-Rechnungen (Seite 1: A1, A2 mit has_more; Seite 2: A3, B1, D1). Exakte Query pro Seite. */
