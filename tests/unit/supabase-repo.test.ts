@@ -66,3 +66,35 @@ describe('Supabase-Repository (ohne Netz)', () => {
     expect(rpcs).toEqual([['replace_recovery_codes', { p_hashes: ['h1', 'h2'] }]]);
   });
 });
+
+describe('Supabase-Repository: Portal-Tabellen fehlen noch', () => {
+  /** Client, dessen Portal-Tabellen mit `portalError` antworten; alles andere leer. */
+  function clientWithPortalError(portalError: { message: string; code?: string }) {
+    const base = fakeClient([], () => []) as unknown as { from: (t: string) => Record<string, unknown> };
+    return {
+      ...base,
+      from: (t: string) => {
+        const b = base.from(t);
+        if (t !== 'portal_members') return b;
+        b.then = (resolve: (r: unknown) => void) => resolve({ data: null, error: portalError });
+        return b;
+      },
+    } as unknown as SupabaseClient;
+  }
+
+  it('fehlende Tabelle (PGRST205) → leere Liste, App lädt', async () => {
+    const repos = createSupabaseReposFromClient(clientWithPortalError({ code: 'PGRST205', message: "Could not find the table 'public.portal_members' in the schema cache" }));
+    const { state } = await repos.state.load();
+    expect(state.portalMembers).toEqual([]);
+  });
+
+  it('Postgres 42P01 → leere Liste', async () => {
+    const repos = createSupabaseReposFromClient(clientWithPortalError({ code: '42P01', message: 'relation "portal_members" does not exist' }));
+    expect((await repos.state.load()).state.portalMembers).toEqual([]);
+  });
+
+  it('anderer Fehler (Netz, Rechte) → load wirft', async () => {
+    const repos = createSupabaseReposFromClient(clientWithPortalError({ message: 'FetchError: network down' }));
+    await expect(repos.state.load()).rejects.toThrow(/portal_members/);
+  });
+});
