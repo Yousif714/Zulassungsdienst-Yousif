@@ -10,6 +10,7 @@ import { detectSubscriptionChanges } from './subscriptions';
 import { detectReplies } from './replies';
 import { detectStaleSources } from './sources';
 import { detectPortalAbNoInvoice, detectPortalNoInvoice } from './portal';
+import { detectReadContracts, detectReadInvoiceChanged } from './reading';
 
 export { memberView } from './members';
 
@@ -28,6 +29,8 @@ export function runDetectors(s: AppState, now: Date): Insight[] {
     ...detectStaleSources(s, now),
     ...detectPortalNoInvoice(s),
     ...detectPortalAbNoInvoice(s),
+    ...detectReadContracts(s),
+    ...detectReadInvoiceChanged(s),
   ];
   return all.filter((i) => areaStale(i.needsSources, s.connections, now).length === 0);
 }
