@@ -10,7 +10,7 @@ import { SetupChecklist } from '@/components/SetupChecklist';
 import { useAppStore } from '@/data/store';
 import { now } from '@/domain/clock';
 import { HOW_TO } from '@/domain/connections';
-import { ageMinutes } from '@/domain/freshness';
+import { ageText } from '@/domain/freshness';
 import type { Connection } from '@/domain/types';
 
 const STATUS_LABEL: Record<Connection['status'], string> = { connected: 'Verbunden', error: 'Störung', missing: 'Nicht verbunden' };
@@ -22,8 +22,7 @@ function SourceList() {
   return (
     <ListGroup title="Quellen" testId="connections">
       {state.connections.map((c) => {
-        const age = ageMinutes(c, at);
-        const subtitle = [c.company ? COMPANY_LABEL[c.company] : 'Firmenübergreifend', STATUS_LABEL[c.status], age === null ? 'Noch nie abgerufen' : `Stand vor ${age} Min.`].join(' · ');
+        const subtitle = [c.company ? COMPANY_LABEL[c.company] : 'Firmenübergreifend', STATUS_LABEL[c.status], ageText(c, at)].join(' · ');
         return (
           <div key={c.id}>
             <ListRow testId={`conn-${c.id}`} title={<span className="wrap-text">{c.label}</span>} subtitle={<span className="wrap-text">{subtitle}</span>}

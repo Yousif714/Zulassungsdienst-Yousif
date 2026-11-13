@@ -122,6 +122,11 @@ describe('Detektoren', () => {
     const r = run({ connections: [conn({ id: 'gmail', status: 'error' }), conn({ id: 'icloud', status: 'missing', lastSuccessAt: null })] }).filter((i) => i.type === 'stale_source');
     expect(r.map((i) => i.dedupeKey)).toEqual(['stale:gmail']);
   });
+  test('stale:portal_nexus hat eigenen Text', () => {
+    const r = run({ connections: [conn({ id: 'portal_nexus', status: 'connected', lastSuccessAt: '2026-10-01T08:00:00Z' }), conn({ id: 'gmail', status: 'connected', lastSuccessAt: '2026-11-12T07:00:00Z' })] }).filter((i) => i.type === 'stale_source');
+    expect(r.find((i) => i.dedupeKey === 'stale:portal_nexus')?.body).toBe('Die Mitgliederliste ist älter als 30 Tage. Bitte neu einfügen.');
+    expect(r.find((i) => i.dedupeKey === 'stale:gmail')?.body).toBe('Der letzte erfolgreiche Abruf ist älter als 45 Minuten.');
+  });
 });
 
 describe('Rückstand je Vertragsquelle', () => {

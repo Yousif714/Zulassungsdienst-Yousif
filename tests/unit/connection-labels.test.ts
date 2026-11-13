@@ -11,3 +11,4 @@ test('verbunden', () => expect(connectionSubtitle({ ...C, status: 'connected', l
 test('Störung im Klartext', () => expect(connectionSubtitle({ ...C, status: 'error', lastSuccessAt: '2026-11-12T09:10:00Z', lastError: 'Stripe: HTTP 401 bei /v1/subscriptions (Schlüssel prüfen)' }, at)).toBe('Störung: Stripe: HTTP 401 bei /v1/subscriptions (Schlüssel prüfen) · Stand vor 50 Min.'));
 test('fehlt → Anleitung', () => expect(connectionSubtitle({ ...C, status: 'missing', lastSuccessAt: null }, at)).toBe(HOW_TO.stripe_nexus));
 test('Störung ohne Stand', () => expect(connectionSubtitle({ ...C, status: 'error', lastSuccessAt: null }, at)).toBe('Störung · noch nie abgerufen'));
+test('verbunden, Stand älter als eine Stunde → Datum', () => expect(connectionSubtitle({ ...C, status: 'connected', lastSuccessAt: '2026-11-01T09:00:00Z' }, at)).toBe('Verbunden · Stand vom 01.11.2026, 10:00 Uhr'));

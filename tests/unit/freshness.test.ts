@@ -1,11 +1,23 @@
 import { describe, expect, test } from 'vitest';
-import { ageMinutes, areaStale, sourceFreshness } from '@/domain/freshness';
+import { ageMinutes, ageText, areaStale, sourceFreshness } from '@/domain/freshness';
 import { NOW_0930, conn } from './helpers';
 
 describe('Datenstand', () => {
   test('stale nach 45 Min.', () => {
     expect(sourceFreshness(conn({ lastSuccessAt: '2026-11-12T07:40:00Z' }), NOW_0930)).toBe('stale');
     expect(sourceFreshness(conn({ lastSuccessAt: '2026-11-12T08:00:00Z' }), NOW_0930)).toBe('fresh');
+  });
+  test('portal_nexus ist 29 Tage nach dem Import frisch, nach 31 Tagen veraltet; andere nach 46 Min. veraltet', () => {
+    const at = new Date('2026-11-12T08:30:00Z');
+    const c = conn({ id: 'portal_nexus', status: 'connected', lastSuccessAt: '2026-10-14T08:30:00Z' });
+    expect(sourceFreshness(c, at)).toBe('fresh');
+    expect(sourceFreshness({ ...c, lastSuccessAt: '2026-10-12T08:00:00Z' }, at)).toBe('stale');
+    expect(sourceFreshness(conn({ id: 'lexware_nexus', status: 'connected', lastSuccessAt: '2026-11-12T07:44:00Z' }), at)).toBe('stale');
+  });
+  test('ageText: Minuten, dann Datum, sonst nie abgerufen', () => {
+    expect(ageText(conn({ lastSuccessAt: '2026-11-12T08:20:00Z' }), NOW_0930)).toBe('Stand vor 10 Min.');
+    expect(ageText(conn({ lastSuccessAt: '2026-11-01T09:00:00Z' }), NOW_0930)).toBe('Stand vom 01.11.2026, 10:00 Uhr');
+    expect(ageText(conn({ lastSuccessAt: null }), NOW_0930)).toBe('Noch nie abgerufen');
   });
   test('Fehler, fehlend, nie abgerufen', () => {
     expect(sourceFreshness(conn({ status: 'error' }), NOW_0930)).toBe('error');
