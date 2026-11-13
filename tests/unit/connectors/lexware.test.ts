@@ -19,6 +19,14 @@ const limitFetches = (routes: Record<string, unknown>, n: number) => {
 const numbers = (r: { batch: { invoices: { number: string }[] } }) => r.batch.invoices.map((i) => i.number);
 const ALL = ['RE-1043', 'RE-1051', 'RE-1060', 'RE-1100', 'RE-1101', 'RE-1102', 'RE-1110'];
 
+test('Belegliste fragt voucherStatus=any (gültig für jeden Belegtyp), Entwürfe filtert der Connector', async () => {
+  const { lexwareVoucherlistQuery } = await import('@/server/connectors/lexware');
+  const q = new URLSearchParams(lexwareVoucherlistQuery(0));
+  expect(q.get('voucherType')).toBe('invoice');
+  expect(q.get('voucherStatus')).toBe('any');
+  expect(q.get('voucherDateFrom')).toBe('2026-08-01');
+});
+
 describe('pullLexware', () => {
   test('Kontakte, dann Rechnungen; Details nur für Neues', async () => {
     const calls: string[] = [];

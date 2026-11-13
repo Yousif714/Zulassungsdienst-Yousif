@@ -14,6 +14,22 @@ const spyFetch = (calls: Request[], bodies: unknown[]): typeof fetch =>
 const base = { label: 'Lexware', baseUrl: 'https://api.lexware.io', key: 'SECRET', sleep: noSleep, now: () => 1000, minIntervalMs: 500 };
 
 describe('createApiClient', () => {
+  test('HTTP 400 nennt den Grund aus der Antwort (IssueList oder message), ohne Schlüssel', async () => {
+    const issue = Response.json({ IssueList: [{ i18nKey: 'invalid_value', source: 'voucherStatus', type: 'validation_failure' }] }, { status: 400 });
+    const api = createApiClient({ ...base, fetch: spyFetch([], [issue]) });
+    const err = await api.getJson('/v1/voucherlist?x=1').catch((e: Error) => e) as Error;
+    expect(err.message).toBe('Lexware: HTTP 400 bei /v1/voucherlist (voucherStatus invalid_value)');
+
+    const msg = Response.json({ message: 'Bad sort SECRET <b>x</b>' }, { status: 400 });
+    const api2 = createApiClient({ ...base, fetch: spyFetch([], [msg]) });
+    const err2 = await api2.getJson('/v1/voucherlist').catch((e: Error) => e) as Error;
+    expect(err2.message).toBe('Lexware: HTTP 400 bei /v1/voucherlist (Bad sort *** bx/b)');
+
+    const plain = new Response('nope', { status: 400 });
+    const api3 = createApiClient({ ...base, fetch: spyFetch([], [plain]) });
+    expect((await api3.getJson('/v1/a').catch((e: Error) => e) as Error).message).toBe('Lexware: HTTP 400 bei /v1/a');
+  });
+
   test('Bearer-Schlüssel im Header, nie in der URL; zusätzliche Header', async () => {
     const calls: Request[] = [];
     const api = createApiClient({ ...base, fetch: spyFetch(calls, [{ ok: 1 }]), headers: { 'Stripe-Version': 'v1' } });

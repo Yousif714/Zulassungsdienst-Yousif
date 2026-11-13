@@ -13,7 +13,12 @@ type Obj = Record<string, any>;
 
 const PAGE_SIZE = 100;
 const MIN_INTERVAL_MS = 500; // höchstens 2 Anfragen pro Sekunde
-const VOUCHER_STATUS = 'open,paid,paidoff,voided,overdue'; // ohne draft
+// `any` gilt für jeden Belegtyp; eine Statusliste mit typfremden Werten (z. B. `paidoff`) lehnt Lexware mit 400 ab.
+// Entwürfe filtert die Schleife unten.
+const VOUCHER_STATUS = 'any';
+
+export const lexwareVoucherlistQuery = (page: number): string =>
+  new URLSearchParams({ voucherType: 'invoice', voucherStatus: VOUCHER_STATUS, voucherDateFrom: IMPORT_SINCE, sort: 'voucherDate,ASC', size: String(PAGE_SIZE), page: String(page) }).toString();
 
 function parseCursor(raw: string | null): Cursor {
   if (raw) {
@@ -50,7 +55,7 @@ export async function pullLexware(conn: LexwareConnection, cursor: string | null
     }
     for (;;) {
       const page = await get(
-        `/v1/voucherlist?${new URLSearchParams({ voucherType: 'invoice', voucherStatus: VOUCHER_STATUS, voucherDateFrom: IMPORT_SINCE, sort: 'voucherDate,ASC', size: String(PAGE_SIZE), page: String(state.page) })}`,
+        `/v1/voucherlist?${lexwareVoucherlistQuery(state.page)}`,
       );
       for (const entry of (page.content ?? []) as Obj[]) {
         if (entry.voucherStatus === 'draft' || !entry.id) continue;
