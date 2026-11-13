@@ -5,7 +5,7 @@ import { useId, useState, type FormEvent } from 'react';
 import { BackLink } from '@/components/BackLink';
 import { DemoBadge } from '@/components/DemoBadge';
 import { PageHeader } from '@/components/PageHeader';
-import { stripeLexCases, unallocatedBankPayments } from '@/data/selectors';
+import { matchOptions, stripeLexCases, unallocatedBankPayments } from '@/data/selectors';
 import { useAppStore } from '@/data/store';
 import { formatIsoDe, now } from '@/domain/clock';
 import { buildMatchContext } from '@/domain/detectors/payments';
@@ -21,47 +21,61 @@ function PaymentCard({ payment, match }: { payment: Payment; match: MatchResult 
   const { state, dispatch } = useAppStore();
   const selectId = useId();
   const [chosen, setChosen] = useState('');
-  const suggested = match.target?.kind === 'contract' ? state.contracts.find((c) => c.id === match.target!.id) : undefined;
-  const members = state.contracts
-    .map((c) => ({ id: c.id, name: nameOf(state, c.contactId) }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
-  const confirm = (contractId: string) => dispatch({ type: 'confirmPaymentMatch', paymentId: payment.id, contractId });
+  const payer = payment.payerName ?? 'Unbekannt';
+  const options = matchOptions(state);
+  const candidateValues = match.candidates.map((t) => `${t.kind}:${t.id}`);
+  const list = match.target || match.candidates.length === 0 ? options : options.filter((o) => candidateValues.includes(o.value));
+  const confirm = (value: string) => {
+    const [kind, id] = [value.slice(0, value.indexOf(':')), value.slice(value.indexOf(':') + 1)];
+    dispatch(kind === 'invoice'
+      ? { type: 'confirmPaymentMatch', paymentId: payment.id, invoiceId: id }
+      : { type: 'confirmPaymentMatch', paymentId: payment.id, contractId: id });
+  };
+  const target = match.target;
+  const invoice = target?.kind === 'invoice' ? state.invoices.find((i) => i.id === target.id) : undefined;
+  const contract = target?.kind === 'contract' ? state.contracts.find((c) => c.id === target.id) : undefined;
+  const targetName = target ? nameOf(state, target.contactId) : '';
+  const targetLabel = invoice ? `Rechnung ${invoice.number}` : targetName;
 
   return (
     <article className="card" data-testid={`match-${payment.id}`}>
       <div className="card-head">
         <div>
-          <div className="card-title">{payment.payerName ?? 'Unbekannt'}</div>
+          <div className="card-title">{payer}</div>
           <div className="card-sub">{formatIsoDe(payment.bookedOn)}{payment.reference ? ` · ${payment.reference}` : ''}</div>
         </div>
         <span className="amount card-amount">{formatEuro(payment.amountCents)}</span>
       </div>
-      {suggested ? (
+      {target && (invoice || contract) ? (
         <>
           <p className="card-text">
-            Vorschlag: <strong>{nameOf(state, suggested.contactId)}</strong>{' '}
+            Vorschlag: <strong>{invoice ? `Rechnung ${invoice.number} · ${targetName}` : targetName}</strong>{' '}
             <span className="chip" data-confidence={match.confidence}>Konfidenz {CONFIDENCE_LABEL[match.confidence]}</span>
           </p>
           <p className="card-note">{match.reason}</p>
           <div className="card-buttons">
-            <button type="button" className="btn btn-primary" aria-label={`Zahlung von ${payment.payerName ?? 'Unbekannt'} an ${nameOf(state, suggested.contactId)} bestätigen`}
-              onClick={() => confirm(suggested.id)}>Bestätigen</button>
+            <button type="button" className="btn btn-primary" aria-label={`Zahlung von ${payer} an ${targetLabel} bestätigen`}
+              onClick={() => confirm(`${target.kind}:${target.id}`)}>Ja, gehört zu {targetLabel}</button>
           </div>
         </>
       ) : (
         <>
           <p className="card-note">{match.reason}</p>
           <div className="card-buttons">
-            <label htmlFor={selectId} className="visually-hidden">Mitglied für Zahlung von {payment.payerName ?? 'Unbekannt'} wählen</label>
+            <label htmlFor={selectId} className="visually-hidden">Ziel für Zahlung von {payer} wählen</label>
             <select id={selectId} className="select" value={chosen} onChange={(e) => setChosen(e.target.value)}>
-              <option value="">Mitglied wählen …</option>
-              {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              <option value="">{match.candidates.length > 0 ? 'Zuordnung wählen …' : 'Mitglied oder Rechnung wählen …'}</option>
+              {list.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <button type="button" className="btn btn-primary" disabled={!chosen} aria-label={`Zahlung von ${payment.payerName ?? 'Unbekannt'} zuordnen`}
+            <button type="button" className="btn btn-primary" disabled={!chosen} aria-label={`Zahlung von ${payer} zuordnen`}
               onClick={() => confirm(chosen)}>Zuordnen</button>
           </div>
         </>
       )}
+      <div className="card-buttons">
+        <button type="button" className="btn btn-secondary" aria-label={`Keine Mitgliedszahlung: Zahlung von ${payer}`}
+          onClick={() => dispatch({ type: 'dismissPayment', paymentId: payment.id })}>Keine Mitgliedszahlung</button>
+      </div>
     </article>
   );
 }

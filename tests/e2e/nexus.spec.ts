@@ -33,6 +33,24 @@ test('Abnahme 4: unbekannte Überweisung zuordnen, IBAN lernen', async ({ page }
   await expect(page.getByText('Automatisch zugeordnet: Selin Yilmaz')).toBeVisible();
 });
 
+test('Zuordnen: „Ja, gehört zu …“ ordnet zu und lernt die IBAN', async ({ page }) => {
+  await page.goto('/nexus/zuordnen?reset=1');
+  const card = page.getByTestId('match-p-yilmaz-1');
+  const ja = card.getByRole('button', { name: 'Zahlung von S. Yilmaz an Selin Yilmaz bestätigen' });
+  await expect(ja).toHaveText('Ja, gehört zu Selin Yilmaz');
+  await ja.click();
+  await expect(card).toHaveCount(0);
+});
+
+test('Zuordnen: „Keine Mitgliedszahlung“ blendet aus und bleibt nach Neuladen weg', async ({ page }) => {
+  await page.goto('/nexus/zuordnen?reset=1');
+  const first = page.locator('[data-testid^="match-"]').first();
+  const id = await first.getAttribute('data-testid');
+  await first.getByRole('button', { name: 'Keine Mitgliedszahlung' }).click();
+  await page.reload();
+  await expect(page.getByTestId(id!)).toHaveCount(0);
+});
+
 test('Abnahme 5: Stripe bezahlt, Lexware offen', async ({ page }) => {
   await page.goto('/?reset=1');
   await expect(page.getByTestId('top-insights')).toBeVisible();
