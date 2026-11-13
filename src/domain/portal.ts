@@ -2,7 +2,7 @@ import { normalizeNameStrict } from './matching/payments';
 import { deriveProposals, findContactFor, type ContractProposal } from './import/proposals';
 import { isMembership } from './import/membership';
 import { formatEuro } from './money';
-import type { AppState, Contact, Invoice, PortalMember } from './types';
+import type { AppState, Contact, Invoice, OrderConfirmation, PortalMember } from './types';
 
 export type PortalStatus = 'contract' | 'proposal' | 'invoice_only' | 'no_invoice' | 'ignored';
 
@@ -10,6 +10,10 @@ export interface PortalView {
   member: PortalMember; status: PortalStatus; inLatestList: boolean;
   contactIds: string[]; nameMatch: { contactId: string; name: string } | null;
   contractId: string | null; proposalId: string | null; invoices: Invoice[];
+  /** Nicht stornierte NEXUS-Auftragsbestätigungen der Kontakte (nach Datum). Nie Forderungen. */
+  orderConfirmations: OrderConfirmation[];
+  /** „AB AB-… vorhanden, Rechnung fehlt“: ABs da, aber keine Lexware-Rechnung (auch keine Mitgliedschafts-Rechnung). */
+  abHint: string | null;
   /** IDs der anderen Portal-Mitglieder, die denselben Kontakt treffen. */
   sharedWith: string[];
 }
@@ -47,8 +51,13 @@ export function portalViews(s: AppState): PortalView[] {
       return ((f.match === 'ref' || f.match === 'email') && f.contactId !== null && ids.has(f.contactId)) || (p.email !== null && mails.has(p.email.toLowerCase()));
     });
     const invoices = s.invoices.filter((i) => i.connectionId === 'lexware_nexus' && i.contactId !== null && ids.has(i.contactId) && i.status !== 'void' && !isMembership(i.text ?? ''));
+    const anyInvoice = s.invoices.some((i) => i.connectionId === 'lexware_nexus' && i.contactId !== null && ids.has(i.contactId) && i.status !== 'void');
+    const orderConfirmations = (s.orderConfirmations ?? [])
+      .filter((x) => x.connectionId === 'lexware_nexus' && x.status !== 'void' && x.contactId !== null && ids.has(x.contactId))
+      .sort((a, b) => a.issuedOn.localeCompare(b.issuedOn) || a.number.localeCompare(b.number));
+    const abHint = orderConfirmations.length > 0 && !anyInvoice ? `AB ${orderConfirmations.map((x) => x.number).join(', ')} vorhanden, Rechnung fehlt` : null;
     const status: PortalStatus = contract ? 'contract' : hidden.has(member.externalId) ? 'ignored' : proposal ? 'proposal' : invoices.length > 0 ? 'invoice_only' : 'no_invoice';
-    return { member, status, inLatestList: member.lastSeenInListAt === latest, contactIds, nameMatch, contractId: contract?.id ?? null, proposalId: proposal?.id ?? null, invoices, sharedWith: [] };
+    return { member, status, inLatestList: member.lastSeenInListAt === latest, contactIds, nameMatch, contractId: contract?.id ?? null, proposalId: proposal?.id ?? null, invoices, orderConfirmations, abHint, sharedWith: [] };
   });
   for (const v of views) v.sharedWith = views.filter((o) => o !== v && o.contactIds.some((id) => v.contactIds.includes(id))).map((o) => o.member.id);
   return views.sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status) || a.member.name.localeCompare(b.member.name, 'de'));

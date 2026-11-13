@@ -2,7 +2,7 @@ import { daysBetween, formatIsoDe, type IsoDate } from '../clock';
 import { monthDate } from '../ledger/schedule';
 import { nameMatches, normalizeNameStrict } from '../matching/payments';
 import { formatEuro } from '../money';
-import type { AppState, Contact, ExternalRef, Invoice, Subscription } from '../types';
+import type { AppState, Contact, ExternalRef, Invoice, OrderConfirmation, Subscription } from '../types';
 import { isMembership, parseMembership } from './membership';
 
 export interface ProposalValues { totalCents: number | null; installments: number | null; installmentCents: number | null; dueDay: number | null; startDate: IsoDate | null }
@@ -10,8 +10,8 @@ export interface ContractProposal extends ProposalValues {
   id: string; name: string; email: string | null; billing: 'stripe' | 'legacy';
   sources: ExternalRef[]; // Abo bzw. Lexware-Kontakt → Vorschlags-ID und später MemberContract.origin
   contactRefs: ExternalRef[]; // stripe_nexus:cus_…, lexware_nexus:c-…
-  sourceLabel: 'Stripe' | 'Lexware' | 'Stripe + Lexware' | 'Portal';
-  references: string[]; // 'Abo sub_A', 'Rechnung RE-1043'
+  sourceLabel: 'Stripe' | 'Lexware' | 'Lexware (AB)' | 'Stripe + Lexware' | 'Portal';
+  references: string[]; // 'Abo sub_A', 'Rechnung RE-1043', 'Auftragsbestätigung AB-2001'
   complete: boolean; // vollständig / bitte ergänzen
   steps: string[]; // Rechenweg
   possibleMatch: { id: string; name: string } | null; // „gehört evtl. zu …“
@@ -74,23 +74,9 @@ function fromInvoices(contactExternalId: string, invs: Invoice[], contact: Conta
     steps.push(`${pattern.length} Rechnungen à ${formatEuro(rate)} im Monatsabstand, erste fällig am ${formatIsoDe(start)}.`);
     steps.push(months !== null ? `Laufzeit ${months} Monate × ${formatEuro(rate)} = ${formatEuro(rate * months)}.` : 'Laufzeit steht in keiner Rechnung: Anzahl bitte ergänzen.');
   } else if (sorted.length === 1) {
-    const inv = sorted[0];
-    const parsedInv = parsed(inv);
-    const { months } = parsedInv;
-    // Ohne Tag im Text: fällig zum Monatsende (31 = letzter Tag des Monats). Inhaber: „Hauptsache im Monat gezahlt“.
-    const dueDay = parsedInv.dueDay ?? MONTH_END;
-    let startDate: IsoDate = inv.issuedOn;
-    if (parsedInv.dueDay !== null) {
-      const [y, m, d] = inv.issuedOn.split('-').map(Number);
-      startDate = monthDate(y, m - 1 + (dueDay >= d ? 0 : 1), dueDay);
-    }
-    values = {
-      totalCents: inv.totalCents, installments: months, installmentCents: months ? Math.floor(inv.totalCents / months) : null,
-      dueDay, startDate,
-    };
-    steps.push(`Gesamtrechnung ${inv.number} über ${formatEuro(inv.totalCents)}${months !== null ? `, ${months} Monate` : ''}.`);
-    if (months !== null) steps.push(`${formatEuro(inv.totalCents)} ÷ ${months} = ${formatEuro(Math.floor(inv.totalCents / months))} pro Monat (abgerundet).`);
-    steps.push(parsedInv.dueDay !== null ? `Fälligkeitstag ${dueDay}. laut Rechnungstext, Start ${formatIsoDe(startDate)}.` : `Kein Fälligkeitstag im Text: fällig zum Monatsende, Start ${formatIsoDe(startDate)} (Rechnungsdatum).`);
+    const one = fromSingleDocument(sorted[0], 'Gesamtrechnung', 'Rechnungstext', 'Rechnungsdatum');
+    values = one.values;
+    steps.push(...one.steps);
   } else {
     steps.push('Rechnungen passen zu keinem Ratenmuster.');
   }
@@ -100,6 +86,42 @@ function fromInvoices(contactExternalId: string, invs: Invoice[], contact: Conta
     complete: isComplete(values), steps, possibleMatch: null,
   };
 }
+
+/** Ein Beleg über die ganze Laufzeit (Gesamtrechnung oder AB): Gesamt ÷ Monate; ohne Tag im Text zum Monatsende. */
+function fromSingleDocument(doc: { number: string; totalCents: number; issuedOn: IsoDate; text?: string }, kind: string, textLabel: string, dateLabel: string): { values: ProposalValues; steps: string[] } {
+  const parsedDoc = parseMembership(doc.text ?? '')!;
+  const { months } = parsedDoc;
+  // Ohne Tag im Text: fällig zum Monatsende (31 = letzter Tag des Monats). Inhaber: „Hauptsache im Monat gezahlt“.
+  const dueDay = parsedDoc.dueDay ?? MONTH_END;
+  let startDate: IsoDate = doc.issuedOn;
+  if (parsedDoc.dueDay !== null) {
+    const [y, m, d] = doc.issuedOn.split('-').map(Number);
+    startDate = monthDate(y, m - 1 + (dueDay >= d ? 0 : 1), dueDay);
+  }
+  const values = {
+    totalCents: doc.totalCents, installments: months, installmentCents: months ? Math.floor(doc.totalCents / months) : null,
+    dueDay, startDate,
+  };
+  const steps = [`${kind} ${doc.number} über ${formatEuro(doc.totalCents)}${months !== null ? `, ${months} Monate` : ''}.`];
+  if (months !== null) steps.push(`${formatEuro(doc.totalCents)} ÷ ${months} = ${formatEuro(Math.floor(doc.totalCents / months))} pro Monat (abgerundet).`);
+  steps.push(parsedDoc.dueDay !== null ? `Fälligkeitstag ${dueDay}. laut ${textLabel}, Start ${formatIsoDe(startDate)}.` : `Kein Fälligkeitstag im Text: fällig zum Monatsende, Start ${formatIsoDe(startDate)} (${dateLabel}).`);
+  return { values, steps };
+}
+
+/** Vorschlag aus der neuesten Mitgliedschafts-AB eines Lexware-Kontakts (nur, wenn er keine Mitgliedschafts-Rechnung hat). */
+function fromOrderConfirmation(contactExternalId: string, ab: OrderConfirmation, contact: Contact | undefined): Draft {
+  const sources = [{ connectionId: 'lexware_nexus' as const, externalId: contactExternalId }];
+  const one = fromSingleDocument(ab, 'Auftragsbestätigung', 'AB-Text', 'AB-Datum');
+  return {
+    ...one.values, id: proposalId(sources), name: contact?.name ?? contactExternalId, email: contact?.emails[0] ?? null, billing: 'legacy', sources,
+    contactRefs: [...sources], sourceLabel: 'Lexware (AB)', references: [`Auftragsbestätigung ${ab.number}`],
+    complete: isComplete(one.values), steps: [`Quelle: Lexware-Kontakt ${contact?.name ?? contactExternalId}, keine Mitgliedschafts-Rechnung.`, ...one.steps], possibleMatch: null,
+  };
+}
+
+/** Mitgliedschafts-ABs (NEXUS, nicht storniert, mit Laufzeit) mit Lexware-Kontakt. */
+export const membershipOrderConfirmations = (s: AppState): OrderConfirmation[] =>
+  (s.orderConfirmations ?? []).filter((x) => x.connectionId === 'lexware_nexus' && x.status !== 'void' && !!x.contactExternalId && (parseMembership(x.text ?? '')?.months ?? null) !== null);
 
 export function deriveProposals(s: AppState): ContractProposal[] {
   const consumed = new Set(s.contracts.flatMap((c) => (c.origin ?? []).map(refKey)));
@@ -116,10 +138,17 @@ export function deriveProposals(s: AppState): ContractProposal[] {
     if (consumed.has(refKey({ connectionId: 'lexware_nexus', externalId: i.contactExternalId }))) continue;
     byContact.set(i.contactExternalId, [...(byContact.get(i.contactExternalId) ?? []), i]);
   }
-  const lex = [...byContact].map(([id, invs]) => {
-    const contact = s.contacts.find((c) => (c.externalRefs ?? []).some((r) => r.connectionId === 'lexware_nexus' && r.externalId === id));
-    return fromInvoices(id, invs, contact);
-  });
+  const lexContact = (id: string) => s.contacts.find((c) => (c.externalRefs ?? []).some((r) => r.connectionId === 'lexware_nexus' && r.externalId === id));
+  const lex = [...byContact].map(([id, invs]) => fromInvoices(id, invs, lexContact(id)));
+  // AB nur, wenn derselbe Kontakt keine Mitgliedschafts-Rechnung hat (die Rechnung gewinnt); je Kontakt die neueste AB.
+  const newestAb = new Map<string, OrderConfirmation>();
+  for (const ab of membershipOrderConfirmations(s)) {
+    const id = ab.contactExternalId!;
+    if (byContact.has(id) || consumed.has(refKey({ connectionId: 'lexware_nexus', externalId: id }))) continue;
+    const prev = newestAb.get(id);
+    if (!prev || ab.issuedOn > prev.issuedOn || (ab.issuedOn === prev.issuedOn && ab.number > prev.number)) newestAb.set(id, ab);
+  }
+  lex.push(...[...newestAb].map(([id, ab]) => fromOrderConfirmation(id, ab, lexContact(id))));
 
   // Zusammenführen: gleiche E-Mail oder gleicher normalisierter Name; unsichere Treffer nur als Hinweis
   const mergedStripe = new Map<string, Draft>();

@@ -3,8 +3,8 @@ import { reconcileInsights, runDetectors, selectTop } from '@/domain/detectors';
 import { buildMatchContext } from '@/domain/detectors/payments';
 import { detectInvoiceOverdue } from '@/domain/detectors/invoices';
 import { detectMemberOverdue, memberView } from '@/domain/detectors/members';
-import type { Connection, PortalMember } from '@/domain/types';
-import { detectPortalNoInvoice } from '@/domain/detectors/portal';
+import type { Connection, OrderConfirmation, PortalMember } from '@/domain/types';
+import { detectPortalAbNoInvoice, detectPortalNoInvoice } from '@/domain/detectors/portal';
 import { detectStaleSources } from '@/domain/detectors/sources';
 import type { StoredInsight } from '@/domain/types';
 import { NOW_0930, base, conn, find, inv, ins, member, muellerDone, schmidtIn, stateWith, tx, types, workshop } from './helpers';
@@ -276,5 +276,38 @@ describe('Portal: Mitglieder ohne Rechnung', () => {
     expect(runDetectors(portal(members), NOW_0930).map((i) => i.dedupeKey)).toContain('portal-no-invoice');
     const stale = portal(members, { connections: [conn({ id: 'portal_nexus', status: 'connected', lastSuccessAt: '2026-10-12T08:00:00Z' }), conn({ id: 'lexware_nexus' })] });
     expect(runDetectors(stale, NOW_0930).map((i) => i.dedupeKey)).not.toContain('portal-no-invoice');
+  });
+});
+
+describe('Portal: Mitglieder mit AB, aber ohne Rechnung', () => {
+  const AT = '2026-11-12T08:00:00.000Z';
+  const pm = (email: string, name: string, lastSeenInListAt = AT): PortalMember =>
+    ({ id: `pm-${email}`, connectionId: 'portal_nexus', externalId: email, email, name, firstSeenAt: AT, lastSeenInListAt });
+  const k = (id: string, email: string) => ({ id, company: 'nexus' as const, kind: 'member' as const, name: id, phones: [], emails: [email] });
+  const ab = (id: string, contactId: string, number: string): OrderConfirmation =>
+    ({ id, company: 'nexus', connectionId: 'lexware_nexus', externalId: id, contactExternalId: id, contactId, number, totalCents: 50000, issuedOn: '2026-07-01', status: 'open', text: 'Workshop' });
+  const s = (members: PortalMember[], extra: Parameters<typeof stateWith>[0] = {}) => stateWith({
+    portalMembers: members,
+    contacts: [k('k-a', 'a@x.de'), k('k-b', 'b@x.de'), k('k-c', 'c@x.de')],
+    orderConfirmations: [ab('o1', 'k-a', 'AB-1'), ab('o2', 'k-b', 'AB-2'), ab('o3', 'k-c', 'AB-3')],
+    connections: [conn({ id: 'portal_nexus', status: 'connected', lastSuccessAt: '2026-11-12T08:00:00Z' }), conn({ id: 'lexware_nexus' })],
+    ...extra,
+  });
+
+  test('ein Sammelhinweis ohne Datum im Schlüssel; Ausgeblendete und Nicht-mehr-in-Liste zählen nicht', () => {
+    const r = detectPortalAbNoInvoice(s([pm('a@x.de', 'Anna'), pm('b@x.de', 'Berta'), pm('c@x.de', 'Carl', '2026-10-01T08:00:00.000Z')], { ignoredPortalMembers: ['b@x.de'] }));
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      dedupeKey: 'ab-ohne-rechnung', type: 'portal_ab_no_invoice', company: 'nexus', priority: 'info',
+      title: '1 Mitglied mit Auftragsbestätigung, aber ohne Rechnung', body: 'Anna (AB-1)',
+      refs: [{ kind: 'member', href: '/nexus/mitglieder', label: 'Portal-Mitglieder' }], needsSources: ['portal_nexus', 'lexware_nexus'],
+    });
+    const two = detectPortalAbNoInvoice(s([pm('a@x.de', 'Anna'), pm('b@x.de', 'Berta')]))[0];
+    expect(two.title).toBe('2 Mitglieder mit Auftragsbestätigung, aber ohne Rechnung');
+  });
+  test('keine AB ohne Rechnung → kein Hinweis; runDetectors enthält den Schlüssel', () => {
+    expect(detectPortalAbNoInvoice(s([]))).toEqual([]);
+    expect(detectPortalAbNoInvoice(s([pm('a@x.de', 'Anna')], { invoices: [inv('i-9', 10000, { company: 'nexus', connectionId: 'lexware_nexus', contactId: 'k-a' })] }))).toEqual([]);
+    expect(runDetectors(s([pm('a@x.de', 'Anna')]), NOW_0930).map((i) => i.dedupeKey)).toContain('ab-ohne-rechnung');
   });
 });

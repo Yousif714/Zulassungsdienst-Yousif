@@ -165,6 +165,7 @@ export default function PortalMembersPage() {
                         <div>{mails(m)} · <span className="chip" data-status={r.status}>{statusText(r)}</span>{!r.inLatestList && ' · nicht mehr in Liste'}</div>
                         {(joined || active) && <div>{[joined && `Beigetreten ${joined}`, active && `Zuletzt aktiv ${active}`].filter(Boolean).join(' · ')}</div>}
                         {r.sharedWith.length > 0 && <div>teilt Kontakt mit {r.sharedWith.map(nameOf).join(', ')}</div>}
+                        {r.abHint && <div data-testid={`portal-ab-${m.externalId}`}>{r.abHint}</div>}
                       </>
                     )} />
                   {actionable && (
