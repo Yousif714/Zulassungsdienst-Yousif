@@ -8,6 +8,7 @@ import { areaStale } from '@/domain/freshness';
 import { plateInText } from '@/domain/matching/messages';
 import { invoiceOpenCents } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
+import { portalViews, type PortalView } from '@/domain/portal';
 import { monthForecast } from '@/domain/ledger/forecast';
 import type { AppState, Invoice, IsoDate, MemberContract, Payment, StoredInsight } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
@@ -37,6 +38,15 @@ export function memberRows(s: AppState, today: IsoDate): MemberRow[] {
       billing: c.billing,
       notConnected: notConnected(contractSources(c), s.connections),
     };
+  });
+}
+
+/** Portal-Mitglieder mit Ampel und Rückstand des Vertrags (sonst `null` bzw. 0). */
+export function portalRows(s: AppState, today: IsoDate): (PortalView & { traffic: MemberRow['traffic'] | null; arrearsCents: number })[] {
+  const byContract = new Map(memberRows(s, today).map((r) => [r.contractId, r]));
+  return portalViews(s).map((v) => {
+    const r = v.contractId ? byContract.get(v.contractId) : undefined;
+    return { ...v, traffic: r?.traffic ?? null, arrearsCents: r?.arrearsCents ?? 0 };
   });
 }
 

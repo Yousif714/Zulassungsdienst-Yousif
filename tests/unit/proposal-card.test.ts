@@ -19,3 +19,17 @@ test('andere Treffer brauchen keine Antwort, Fehler sperren', () => {
   expect(confirmBlocker([], 'none', null, null)).toBeNull();
   expect(confirmBlocker(['Fehler'], 'none', null, null)).not.toBeNull();
 });
+
+import { renderToStaticMarkup } from 'react-dom/server';
+import { createElement } from 'react';
+import { ProposalCard } from '@/components/ProposalCard';
+import { portalProposal } from '@/domain/portal';
+
+test('dismissLabel ersetzt „Verwerfen“', () => {
+  const view = { member: { id: 'p', connectionId: 'portal_nexus' as const, externalId: 'a@b.de', email: 'a@b.de', name: 'A B', firstSeenAt: '', lastSeenInListAt: '' }, status: 'no_invoice' as const, inLatestList: true, contactIds: [], nameMatch: null, contractId: null, proposalId: null, invoices: [], sharedWith: [] };
+  const props = { proposal: portalProposal(view), contacts: [], onConfirm: () => {}, onDismiss: () => {} };
+  const custom = renderToStaticMarkup(createElement(ProposalCard, { ...props, dismissLabel: 'Kein zahlendes Mitglied' }));
+  expect(custom).toContain('Kein zahlendes Mitglied');
+  expect(custom).not.toContain('Verwerfen');
+  expect(renderToStaticMarkup(createElement(ProposalCard, props))).toContain('Verwerfen');
+});
