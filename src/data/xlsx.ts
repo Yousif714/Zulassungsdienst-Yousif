@@ -1,0 +1,163 @@
+/**
+ * Minimaler XLSX-Leser ohne Abhängigkeiten (Browser und Node 18+): entpackt die ZIP-Datei
+ * (Central Directory, gespeicherte und deflate-Einträge über DecompressionStream),
+ * liest sharedStrings, Styles (für Datumszellen) und das erste Tabellenblatt.
+ * Liefert Textzeilen für `parsePortalRows` aus `src/domain/import/portal-list.ts`.
+ * Kein Zip64, keine Verschlüsselung.
+ */
+
+const td = new TextDecoder('utf-8');
+
+async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/** Alle Dateien des Archivs: Name → Rohbytes (entpackt). */
+async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 0xffff); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error('Keine gültige XLSX-Datei (ZIP-Verzeichnis fehlt).');
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const files = new Map<string, Uint8Array>();
+  for (let n = 0; n < count; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('Beschädigtes ZIP-Verzeichnis.');
+    const method = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commentLen = dv.getUint16(p + 32, true);
+    const localOffset = dv.getUint32(p + 42, true);
+    const name = td.decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    p += 46 + nameLen + extraLen + commentLen;
+    const dataStart = localOffset + 30 + dv.getUint16(localOffset + 26, true) + dv.getUint16(localOffset + 28, true);
+    const raw = bytes.subarray(dataStart, dataStart + compSize);
+    if (method === 0) files.set(name, raw);
+    else if (method === 8) files.set(name, await inflateRaw(raw));
+    else throw new Error(`Nicht unterstütztes ZIP-Verfahren ${method}.`);
+  }
+  return files;
+}
+
+function decodeXml(s: string): string {
+  return s
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+/** Text aller `<t>`-Elemente (ohne Phonetik-Hinweise). */
+function textOf(xml: string): string {
+  const clean = xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '');
+  let out = '';
+  for (const m of clean.matchAll(/<t\b[^>]*?(?:\/>|>([\s\S]*?)<\/t>)/g)) out += decodeXml(m[1] ?? '');
+  return out;
+}
+
+function attr(attrs: string, name: string): string | undefined {
+  const m = attrs.match(new RegExp(`(?:^|\\s)${name}="([^"]*)"`));
+  return m ? decodeXml(m[1]) : undefined;
+}
+
+function sharedStrings(xml: string | undefined): string[] {
+  if (!xml) return [];
+  return [...xml.matchAll(/<si\b[^>]*?(?:\/>|>([\s\S]*?)<\/si>)/g)].map((m) => textOf(m[1] ?? ''));
+}
+
+/** Pro Zellformat-Index (`s`): ist es ein Datumsformat? */
+function dateStyles(xml: string | undefined): boolean[] {
+  if (!xml) return [];
+  const custom = new Map<number, string>();
+  for (const m of xml.matchAll(/<numFmt\b([^>]*?)\/?>/g)) {
+    const id = Number(attr(m[1], 'numFmtId'));
+    custom.set(id, attr(m[1], 'formatCode') ?? '');
+  }
+  const cellXfs = xml.match(/<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/)?.[1] ?? '';
+  return [...cellXfs.matchAll(/<xf\b([^>]*?)\/?>/g)].map((m) => {
+    const id = Number(attr(m[1], 'numFmtId') ?? 0);
+    if ((id >= 14 && id <= 22) || (id >= 45 && id <= 47)) return true;
+    const code = custom.get(id);
+    return code !== undefined && /[dmy]/i.test(code.replace(/"[^"]*"|\[[^\]]*\]|\\./g, ''));
+  });
+}
+
+/** Excel-Seriennummer → `dd.mm.yyyy` (1900-Datumssystem). */
+export function excelSerialToDate(serial: number): string {
+  const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
+}
+
+function columnIndex(ref: string): number {
+  let n = 0;
+  for (const ch of ref.replace(/[^A-Za-z]/g, '').toUpperCase()) n = n * 26 + ch.charCodeAt(0) - 64;
+  return n - 1;
+}
+
+function firstSheetPath(files: Map<string, Uint8Array>): string {
+  const wb = files.get('xl/workbook.xml');
+  const rels = files.get('xl/_rels/workbook.xml.rels');
+  if (wb && rels) {
+    const sheet = td.decode(wb).match(/<sheet\b[^>]*>/)?.[0];
+    const rid = sheet ? attr(sheet, 'r:id') : undefined;
+    if (rid) {
+      for (const m of td.decode(rels).matchAll(/<Relationship\b([^>]*?)\/?>/g)) {
+        if (attr(m[1], 'Id') !== rid) continue;
+        const target = attr(m[1], 'Target');
+        if (!target) break;
+        const path = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
+        if (files.has(path)) return path;
+      }
+    }
+  }
+  return 'xl/worksheets/sheet1.xml';
+}
+
+/** Zeilen des ersten Tabellenblatts als Text (Lücken = `''`, Datumszellen als `dd.mm.yyyy`). */
+export async function readXlsxRows(bytes: Uint8Array): Promise<string[][]> {
+  const files = await unzip(bytes);
+  const sheetBytes = files.get(firstSheetPath(files));
+  if (!sheetBytes) throw new Error('Kein Tabellenblatt in der XLSX-Datei gefunden.');
+  const get = (name: string) => (files.has(name) ? td.decode(files.get(name)) : undefined);
+  const strings = sharedStrings(get('xl/sharedStrings.xml'));
+  const dates = dateStyles(get('xl/styles.xml'));
+  const sheet = td.decode(sheetBytes);
+  const rows: string[][] = [];
+  for (const rm of sheet.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+    const row: string[] = [];
+    let next = 0;
+    for (const cm of (rm[2] ?? '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      const ref = attr(cm[1], 'r');
+      const col = ref ? columnIndex(ref) : next;
+      next = col + 1;
+      const type = attr(cm[1], 't') ?? 'n';
+      const body = cm[2] ?? '';
+      const v = body.match(/<v>([\s\S]*?)<\/v>/)?.[1];
+      let text = '';
+      if (type === 'inlineStr') text = textOf(body);
+      else if (type === 's') text = v !== undefined ? (strings[Number(v)] ?? '') : '';
+      else if (type === 'str') text = v !== undefined ? decodeXml(v) : '';
+      else if (type === 'b' || type === 'e') text = '';
+      else if (v !== undefined) {
+        const style = Number(attr(cm[1], 's') ?? -1);
+        const num = Number(v);
+        text = dates[style] && Number.isFinite(num) ? excelSerialToDate(num) : v.trim();
+      }
+      while (row.length < col) row.push('');
+      row[col] = text.trim();
+    }
+    rows.push(row);
+  }
+  return rows;
+}
