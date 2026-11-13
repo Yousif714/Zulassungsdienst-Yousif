@@ -13,6 +13,8 @@ export interface ServerEnv {
   stripeWebhookSecret?: string;
   lexwareNexusApiKey?: string;
   lexwareZulassungApiKey?: string;
+  qontoLogin?: string;
+  qontoSecretKey?: string;
 }
 
 const SUPABASE = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const;
@@ -40,5 +42,7 @@ export function readEnv(e: Record<string, string | undefined> = process.env): Se
     stripeWebhookSecret: val('STRIPE_WEBHOOK_SECRET'),
     lexwareNexusApiKey: val('LEXWARE_NEXUS_API_KEY'),
     lexwareZulassungApiKey: val('LEXWARE_ZULASSUNG_API_KEY'),
+    qontoLogin: val('QONTO_LOGIN'),
+    qontoSecretKey: val('QONTO_SECRET_KEY'),
   };
 }

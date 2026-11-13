@@ -6,7 +6,7 @@ const MAX_RETRY_WAIT_MS = 10_000;
 const MAX_RETRIES = 3;
 
 /** Kurzer, bereinigter Grund aus einer 400-Antwort (Lexware `IssueList`/`message`, Stripe `error.message`). Nie der Schlüssel. */
-async function reason(res: Response, key: string): Promise<string> {
+async function reason(res: Response, secrets: string[]): Promise<string> {
   let body: unknown;
   try {
     body = await res.json();
@@ -17,7 +17,7 @@ async function reason(res: Response, key: string): Promise<string> {
   const raw = b.IssueList?.length
     ? b.IssueList.map((i) => [i.source, i.i18nKey].filter(Boolean).join(' ')).join('; ')
     : (b.message ?? b.error?.message ?? '');
-  const clean = String(raw).split(key).join('***').replace(/[^\p{L}\p{N} .,:;_\-/*]/gu, '').trim().slice(0, 160);
+  const clean = secrets.reduce((t, k) => t.split(k).join('***'), String(raw)).replace(/[^\p{L}\p{N} .,:;_\-/*]/gu, '').trim().slice(0, 160);
   return clean ? ` (${clean})` : '';
 }
 
@@ -30,8 +30,12 @@ export function createApiClient(o: {
   now: () => number;
   minIntervalMs: number;
   headers?: Record<string, string>;
+  /** Vollständiger Authorization-Wert (z. B. Qonto `login:secret`); Standard `Bearer ${key}`. */
+  authorization?: string;
 }): { getJson(pathAndQuery: string): Promise<unknown> } {
   let lastAt: number | null = null;
+  // Alles, was nie in einer Meldung landen darf: ganzer Wert und (bei `login:secret`) beide Teile.
+  const secrets = [...new Set([o.key, o.authorization ?? '', ...o.key.split(':'), ...(o.authorization ?? '').split(':')])].filter((k) => k.length >= 3).sort((a, b) => b.length - a.length);
 
   async function send(pathAndQuery: string): Promise<Response> {
     if (lastAt !== null && o.minIntervalMs > 0) {
@@ -40,7 +44,7 @@ export function createApiClient(o: {
     }
     lastAt = o.now();
     try {
-      return await o.fetch(`${o.baseUrl}${pathAndQuery}`, { headers: { accept: 'application/json', ...o.headers, authorization: `Bearer ${o.key}` } });
+      return await o.fetch(`${o.baseUrl}${pathAndQuery}`, { headers: { accept: 'application/json', ...o.headers, authorization: o.authorization ?? `Bearer ${o.key}` } });
     } catch {
       throw new ConnectorError(`${o.label}: keine Verbindung`); // Originalfehler kann den Schlüssel enthalten
     }
@@ -58,7 +62,7 @@ export function createApiClient(o: {
         res = await send(pathAndQuery);
       }
       if (!res.ok) {
-        const hint = res.status === 401 || res.status === 403 ? ' (Schlüssel prüfen)' : res.status === 400 ? await reason(res, o.key) : '';
+        const hint = res.status === 401 || res.status === 403 ? ' (Schlüssel prüfen)' : res.status === 400 ? await reason(res, secrets) : '';
         throw new ConnectorError(`${o.label}: HTTP ${res.status} bei ${path}${hint}`);
       }
       try {

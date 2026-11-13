@@ -134,3 +134,23 @@ describe('fixtureFetch', () => {
     expect(calls).toEqual(['/p?a=1', '/p?a=2', '/q']);
   });
 });
+
+describe('createApiClient authorization', () => {
+  test('eigener Authorization-Wert ohne Bearer', async () => {
+    const calls: Request[] = [];
+    await createApiClient({ label: 'Qonto', baseUrl: 'https://thirdparty.qonto.com', key: 'LOGIN:SECRET', authorization: 'LOGIN:SECRET', fetch: spyFetch(calls, [{}]), sleep: noSleep, now: () => 1000, minIntervalMs: 0 }).getJson('/v2/organization');
+    expect(calls[0].headers.get('authorization')).toBe('LOGIN:SECRET');
+  });
+
+  test('Standard bleibt Bearer', async () => {
+    const calls: Request[] = [];
+    await createApiClient({ ...base, fetch: spyFetch(calls, [{}]) }).getJson('/v1/a');
+    expect(calls[0].headers.get('authorization')).toBe('Bearer SECRET');
+  });
+
+  test('400-Grund maskiert Login und Secret einzeln', async () => {
+    const bad = Response.json({ message: 'bad LOGINX and SECRETY' }, { status: 400 });
+    const err = await createApiClient({ ...base, label: 'Qonto', key: 'LOGINX:SECRETY', authorization: 'LOGINX:SECRETY', fetch: spyFetch([], [bad]) }).getJson('/v2/a').catch((e: Error) => e) as Error;
+    expect(err.message).toBe('Qonto: HTTP 400 bei /v2/a (bad *** and ***)');
+  });
+});
