@@ -12,3 +12,4 @@ test('Störung im Klartext', () => expect(connectionSubtitle({ ...C, status: 'er
 test('fehlt → Anleitung', () => expect(connectionSubtitle({ ...C, status: 'missing', lastSuccessAt: null }, at)).toBe(HOW_TO.stripe_nexus));
 test('Störung ohne Stand', () => expect(connectionSubtitle({ ...C, status: 'error', lastSuccessAt: null }, at)).toBe('Störung · noch nie abgerufen'));
 test('verbunden, Stand älter als eine Stunde → Datum', () => expect(connectionSubtitle({ ...C, status: 'connected', lastSuccessAt: '2026-11-01T09:00:00Z' }, at)).toBe('Verbunden · Stand vom 01.11.2026, 10:00 Uhr'));
+test('verbunden mit Teil-Störung zeigt den Hinweis', () => expect(connectionSubtitle({ ...C, status: 'connected', lastSuccessAt: '2026-11-12T09:57:00Z', lastError: 'Auftragsbestätigungen: Lexware: HTTP 400 bei /v1/voucherlist' }, at)).toBe('Verbunden · Stand vor 3 Min. · Hinweis: Auftragsbestätigungen: Lexware: HTTP 400 bei /v1/voucherlist'));

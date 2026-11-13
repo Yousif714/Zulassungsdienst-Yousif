@@ -4,7 +4,7 @@ import { cursorOutdated, emptyBatch, IMPORT_SINCE, type ImportBatch } from '@/do
 import { mapLexwareContacts, mapLexwareInvoice, mapLexwareOrderConfirmation, type LexwareConnection } from '@/domain/import/lexware';
 
 import { createApiClient } from './http';
-import { BudgetExceeded, type PullContext, type PullResult } from './types';
+import { BudgetExceeded, ConnectorError, type PullContext, type PullResult } from './types';
 
 type Phase = 'contacts' | 'invoices' | 'orderconfirmations';
 interface Cursor { phase: Phase; page: number; since: string }
@@ -65,6 +65,7 @@ export async function pullLexware(conn: LexwareConnection, cursor: string | null
   const next = (phase: Phase) => { state.phase = phase; state.page = 0; };
 
   let complete = false;
+  let warning: string | undefined;
   try {
     if (state.phase === 'contacts') {
       for (;;) {
@@ -80,10 +81,17 @@ export async function pullLexware(conn: LexwareConnection, cursor: string | null
       next('orderconfirmations');
     }
     // Auftragsbestätigungen (NEXUS und Zulassung): keine Forderungen, nur Quelle für Vorschläge und Portal-Hinweise.
-    await vouchers('orderconfirmation', '/v1/order-confirmations', ['voucherStatus', 'updatedDate'], (d) => batch.orderConfirmations.push(mapLexwareOrderConfirmation(d, conn)));
+    // Lehnt Lexware die ABs ab (Recht, Typ, Feld), bleiben die Rechnungen gültig: Hinweis statt Fehler für den ganzen Abgleich.
+    try {
+      await vouchers('orderconfirmation', '/v1/order-confirmations', ['voucherStatus', 'updatedDate'], (d) => batch.orderConfirmations.push(mapLexwareOrderConfirmation(d, conn)));
+    } catch (e) {
+      if (!(e instanceof ConnectorError)) throw e;
+      batch.orderConfirmations.length = 0;
+      warning = `Auftragsbestätigungen: ${e.message}`;
+    }
     complete = true;
   } catch (e) {
     if (!(e instanceof BudgetExceeded)) throw e;
   }
-  return { batch, cursor: complete ? null : JSON.stringify(state), complete };
+  return { batch, cursor: complete ? null : JSON.stringify(state), complete, ...(warning ? { warning } : {}) };
 }

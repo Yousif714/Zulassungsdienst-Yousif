@@ -68,7 +68,7 @@ export async function syncConnections(repos: Repos, deps: SyncDeps): Promise<Par
       const r: PullResult = id === 'stripe_nexus' ? await pullStripe(cursor, ctx)
         : id === 'bank_qonto' ? await pullQonto(cursor, ctx)
         : await pullLexware(id as LexwareConnection, cursor, ctx);
-      await dispatchEvents(repos, [{ type: 'importBatch', connectionId: id, batch: r.batch, cursor: r.cursor, complete: r.complete }], { at: deps.at, provider: deps.provider });
+      await dispatchEvents(repos, [{ type: 'importBatch', connectionId: id, batch: r.batch, cursor: r.cursor, complete: r.complete, ...(r.warning ? { warning: sanitizeError(new ConnectorError(r.warning), secrets) } : {}) }], { at: deps.at, provider: deps.provider });
       out[id] = r.complete ? 'ok' : 'partial';
     } catch (err) {
       out[id] = 'error';

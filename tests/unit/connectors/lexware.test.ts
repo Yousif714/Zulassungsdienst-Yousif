@@ -158,6 +158,21 @@ describe('pullLexware', () => {
     expect(r.batch.orderConfirmations[0]).toMatchObject({ number: 'AB-2002', status: 'void', sourceUpdatedAt: 'neu' });
   });
 
+  test('AB-Belegliste abgelehnt (400) → Rechnungen trotzdem vollständig, Hinweis statt Fehler', async () => {
+    const inner = fixtureFetch(lexwareRoutes);
+    const f = ((i: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(i);
+      return u.includes('voucherType=orderconfirmation')
+        ? Promise.resolve(Response.json({ IssueList: [{ source: 'voucherType', i18nKey: 'invalid_value' }] }, { status: 400 }))
+        : inner(i, init);
+    }) as typeof fetch;
+    const r = await pullLexware('lexware_nexus', null, ctx({ fetch: f }));
+    expect(r.complete).toBe(true);
+    expect(r.batch.invoices.length).toBeGreaterThan(0);
+    expect(r.batch.orderConfirmations).toHaveLength(0);
+    expect(r.warning).toBe('Auftragsbestätigungen: Lexware: HTTP 400 bei /v1/voucherlist (voucherType invalid_value)');
+  });
+
   test('Abbruch in der AB-Phase → Cursor phase orderconfirmations; Folgelauf holt nur die ABs', async () => {
     // Kontakte, Rechnungsliste, 7 Rechnungsdetails, AB-Liste, 1 AB-Detail
     const lim = limitFetches(lexwareRoutes, 11);
@@ -174,13 +189,13 @@ describe('pullLexware', () => {
     expect(second.batch.orderConfirmations.map((x) => x.number)).toEqual(['AB-2002', 'AB-2003']);
   });
 
-  test('400 bei der AB-Belegliste: Fehler nennt den Grund in Klammern', async () => {
+  test('400 bei der AB-Belegliste: Hinweis nennt den Grund in Klammern (kein Abbruch)', async () => {
     const inner = fixtureFetch(lexwareRoutes);
     const f = ((i: RequestInfo | URL, init?: RequestInit) => (String(i).includes('orderconfirmation')
       ? Promise.resolve(Response.json({ message: 'voucherType ungültig' }, { status: 400 }))
       : inner(i, init))) as typeof fetch;
-    const err = await pullLexware('lexware_nexus', null, ctx({ fetch: f })).then(() => { throw new Error('kein Fehler'); }, (e: Error) => e);
-    expect(err.message).toMatch(/^Lexware: HTTP 400 bei \/v1\/voucherlist \(.*voucherType ungültig.*\)$/);
+    const r = await pullLexware('lexware_nexus', null, ctx({ fetch: f }));
+    expect(r.warning).toMatch(/^Auftragsbestätigungen: Lexware: HTTP 400 bei \/v1\/voucherlist \(.*voucherType ungültig.*\)$/);
   });
 
   test('Eintrag ohne updatedDate wird nie übersprungen', async () => {

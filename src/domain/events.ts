@@ -34,7 +34,7 @@ export type StoreEvent =
   | { type: 'updateSettings'; patch: Partial<Settings> }
   | { type: 'assistantButton'; button: NonNullable<AssistantMessage['buttons']>[number] }
   /** Nur Server: Ergebnis eines Abrufs (Stripe, Lexware). */
-  | { type: 'importBatch'; connectionId: ConnectionId; batch: ImportBatch; cursor: string | null; complete: boolean }
+  | { type: 'importBatch'; connectionId: ConnectionId; batch: ImportBatch; cursor: string | null; complete: boolean; warning?: string }
   | { type: 'syncFailed'; connectionId: ConnectionId; error: string }
   /** `contactId`: „Ja“ auf „Ist das … ?“ (Name-Treffer); sonst null. */
   | { type: 'confirmProposal'; proposalId: string; draft: ContractDraft; contactId: string | null }

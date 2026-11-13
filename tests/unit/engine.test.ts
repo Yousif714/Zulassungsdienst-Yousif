@@ -65,6 +65,13 @@ describe('Abgleich-Ereignisse', () => {
   const imp = (cursor: string | null, complete: boolean): StoreEvent => ({ type: 'importBatch', connectionId: 'stripe_nexus', batch: stripeBatch, cursor, complete });
   const conn = (st: typeof s) => st.connections.find((c) => c.id === 'stripe_nexus')!;
 
+  test('importBatch mit Teil-Störung: verbunden, Hinweis als lastError; nächster sauberer Import löscht ihn', () => {
+    const warned = applyEvent(s, { ...imp(null, true), warning: 'Auftragsbestätigungen: Lexware: HTTP 400 bei /v1/voucherlist' } as StoreEvent, ctx({ isDemo: false })).state;
+    expect(conn(warned)).toMatchObject({ status: 'connected', lastError: 'Auftragsbestätigungen: Lexware: HTTP 400 bei /v1/voucherlist' });
+    const clean = applyEvent(warned, imp(null, true), ctx({ isDemo: false })).state;
+    expect(conn(clean).lastError).toBeUndefined();
+  });
+
   test('importBatch: verbunden, Stand jetzt, Cursor gespeichert, Audit nur bei Neuem', () => {
     const r = applyEvent(s, imp('c1', false), ctx({ isDemo: false })).state;
     expect(conn(r)).toMatchObject({ status: 'connected', lastSuccessAt: NOW.toISOString(), sync: { cursor: 'c1', complete: false, failures: 0 } });
