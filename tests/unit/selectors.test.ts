@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { createDemoState } from '@/data/seed';
-import { invoiceCandidates, memberRows, portalRows, nexusForecast, overdueMembers, matchOptions, stripeLexCases, unallocatedBankPayments, waitingStripePayments, zulassungKpis } from '@/data/selectors';
+import { customerInvoiceRows, customerPayments, partlyAllocatedPayments, invoiceCandidates, memberRows, portalRows, nexusForecast, overdueMembers, matchOptions, stripeLexCases, unallocatedBankPayments, waitingStripePayments, zulassungKpis } from '@/data/selectors';
 import { reducer, refresh } from '@/data/store';
 import { jobBilling } from '@/domain/billing';
-import { NOW_0930 as NOW, base, stateWith, tx, workshop } from './helpers';
+import { NOW_0930 as NOW, base, inv, sptx, stateWith, tx, workshop } from './helpers';
 import { confirmedSub, legacyNoBank, stripeState } from './import/helpers';
 
 const s = refresh(createDemoState(), NOW);
@@ -130,5 +130,41 @@ describe('Portal-Zeilen', () => {
     expect(c.arrearsCents).toBe(memberRows(merged, '2026-11-12')[0].arrearsCents);
     expect(n.traffic).toBeNull();
     expect(n.arrearsCents).toBe(0);
+  });
+});
+
+describe('Kundenseite Zulassung', () => {
+  const z600 = inv('i-z6', 60000, { dueDate: '2026-10-01', status: 'overdue' });
+  const alloc42 = { paymentId: 'sp1', invoiceId: 'i-z6', amountCents: 42000, method: 'confirmed' as const };
+  test('Kundenzeilen: Teilzahlung 420 € von 600 €', () =>
+    expect(customerInvoiceRows(stateWith({ invoices: [z600], allocations: [alloc42], payments: [sptx({ amountCents: 42000 })] }), 'd-mueller')[0])
+      .toMatchObject({ openCents: 18000, paidCents: 42000, invoice: { id: 'i-z6' } }));
+  test('Kundenzeilen: voll bezahlte Rechnung fehlt, Sortierung nach Fälligkeit', () => {
+    const rows = customerInvoiceRows(stateWith({ invoices: [inv('i-a', 1000, { dueDate: '2026-12-01' }), inv('i-b', 2000, { dueDate: '2026-11-01' }), inv('i-c', 3000, { status: 'paid', openCents: 0 })] }), 'd-mueller');
+    expect(rows.map((r) => r.invoice.id)).toEqual(['i-b', 'i-a']);
+  });
+  test('Kundenzahlungen: Lexware-bezahlt markiert, Rückbuchung markiert, neueste zuerst', () => {
+    const paidInv = inv('i-z8', 5000, { status: 'paid', openCents: 0, number: 'RE-8' });
+    const s = stateWith({
+      invoices: [z600, paidInv],
+      payments: [sptx({ id: 'sp1', amountCents: 42000, bookedOn: '2026-11-05' }), sptx({ id: 'sp2', externalId: 'spk-2', amountCents: 5000, bookedOn: '2026-11-08' }), sptx({ id: 'sp3', externalId: 'spk-3', amountCents: -2000, bookedOn: '2026-11-10' })],
+      allocations: [alloc42, { paymentId: 'sp2', invoiceId: 'i-z8', amountCents: 5000, method: 'auto' }, { paymentId: 'sp3', invoiceId: 'i-z6', amountCents: -2000, method: 'auto' }],
+    });
+    expect(customerPayments(s, 'd-mueller')).toEqual([
+      { key: 'sp3:i-z6', bookedOn: '2026-11-10', amountCents: -2000, invoiceNumber: 'RE-i-z6', paidInLexware: false, isReturn: true },
+      { key: 'sp2:i-z8', bookedOn: '2026-11-08', amountCents: 5000, invoiceNumber: 'RE-8', paidInLexware: true, isReturn: false },
+      { key: 'sp1:i-z6', bookedOn: '2026-11-05', amountCents: 42000, invoiceNumber: 'RE-i-z6', paidInLexware: false, isReturn: false },
+    ]);
+    expect(customerPayments(s, 'd-schmidt')).toEqual([]);
+  });
+  test('partlyAllocatedPayments: Überzahlung 10 € Rest', () => {
+    const i39 = inv('i-39', 39000);
+    const s = stateWith({
+      invoices: [i39],
+      payments: [sptx({ id: 'sp1', amountCents: 40000 }), sptx({ id: 'sp2', externalId: 'spk-2', amountCents: 5000 }), sptx({ id: 'sp3', externalId: 'spk-3', amountCents: 8000, ignoredAt: '2026-11-11T08:00:00Z' })],
+      allocations: [{ paymentId: 'sp1', invoiceId: 'i-39', amountCents: 39000, method: 'confirmed' }, { paymentId: 'sp3', invoiceId: 'i-39', amountCents: 1000, method: 'confirmed' }],
+    });
+    expect(partlyAllocatedPayments(s, 'zulassung').map((r) => [r.payment.id, r.restCents])).toEqual([['sp1', 1000]]);
+    expect(partlyAllocatedPayments(s, 'nexus')).toEqual([]);
   });
 });

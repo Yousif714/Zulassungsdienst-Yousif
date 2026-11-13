@@ -6,6 +6,8 @@
  * Kein Zip64, keine Verschlüsselung.
  */
 
+import { decodeXml } from '@/domain/import/xml';
+
 const td = new TextDecoder('utf-8');
 
 /** XML lesen: BOM weg, Namespace-Präfixe der Tags (`<x:row>` → `<row>`) entfernen. Attribute bleiben. */
@@ -15,7 +17,7 @@ function xmlText(bytes: Uint8Array): string {
 
 /** Obergrenze für die entpackte Gesamtgröße (Schutz vor Zip-Bomben). */
 export const MAX_UNZIPPED_BYTES = 20 * 1024 * 1024;
-const TOO_BIG = 'Die Datei ist entpackt zu groß (über 20 MB). Bitte nur die Mitgliederliste exportieren.';
+const TOO_BIG = 'Die Datei ist entpackt zu groß (über 20 MB).';
 
 /** Entpackt mit Budget: bricht beim Überschreiten ab, statt alles in den Speicher zu laden. */
 async function inflateRaw(data: Uint8Array, budget: number): Promise<Uint8Array> {
@@ -39,7 +41,7 @@ async function inflateRaw(data: Uint8Array, budget: number): Promise<Uint8Array>
 }
 
 /** Alle Dateien des Archivs: Name → Rohbytes (entpackt). */
-async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
+export async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let eocd = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 0xffff); i--) {
@@ -48,7 +50,7 @@ async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
       break;
     }
   }
-  if (eocd < 0) throw new Error('Keine gültige XLSX-Datei (ZIP-Verzeichnis fehlt).');
+  if (eocd < 0) throw new Error('Keine gültige ZIP-Datei (Verzeichnis fehlt).');
   const count = dv.getUint16(eocd + 10, true);
   let p = dv.getUint32(eocd + 16, true);
   const files = new Map<string, Uint8Array>();
@@ -72,15 +74,6 @@ async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
     files.set(name, data);
   }
   return files;
-}
-
-const ENTITIES: Record<string, string> = { lt: '<', gt: '>', quot: '"', apos: "'", amp: '&' };
-
-/** Entities in einem Durchlauf dekodieren (kein Doppeldekodieren). */
-function decodeXml(s: string): string {
-  return s.replace(/&(?:#x([0-9a-f]+)|#(\d+)|(lt|gt|quot|apos|amp));/gi, (m, h?: string, d?: string, n?: string) =>
-    h ? String.fromCodePoint(parseInt(h, 16)) : d ? String.fromCodePoint(Number(d)) : (ENTITIES[n!.toLowerCase()] ?? m),
-  );
 }
 
 /** Text aller `<t>`-Elemente (ohne Phonetik-Hinweise). */

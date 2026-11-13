@@ -16,6 +16,9 @@ export const CONNECTION_CATALOG: readonly { id: ConnectionId; company: Company |
   { id: 'claude_invoices', company: 'nexus', label: 'Claude (Rechnungen lesen)' },
 ];
 
+/** Lexware-Verbindung je Firma. */
+export const LEXWARE_OF: Record<Company, 'lexware_nexus' | 'lexware_zulassung'> = { nexus: 'lexware_nexus', zulassung: 'lexware_zulassung' };
+
 /** Kurzanleitung für die echte Anbindung in Phase 2. */
 export const HOW_TO: Record<ConnectionId, string> = {
   lexware_nexus: 'Schlüssel als Vercel-Variable LEXWARE_NEXUS_API_KEY hinterlegen (nur lesen: Kontakte, Rechnungen, Zahlungen).',

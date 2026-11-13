@@ -1,3 +1,4 @@
+import { invoiceOpenCents } from './ledger/receivables';
 import { berlinParts, formatBerlin, todayBerlin } from './clock';
 import { areaStale } from './freshness';
 import { memberView, selectTop } from './detectors';
@@ -33,7 +34,9 @@ export function buildBriefing(s: AppState, kind: 'morning' | 'evening' | 'weekly
     nexusOpen += st.openCents;
     nexusOverdue += st.arrearsCents;
   }
-  const zInv = s.invoices.filter((i) => i.company === 'zulassung' && (i.status === 'open' || i.status === 'overdue'));
+  const zInv = s.invoices
+    .filter((i) => i.company === 'zulassung')
+    .map((i) => ({ dueDate: i.dueDate, openCents: invoiceOpenCents(s, i) }));
   const zOpen = zInv.reduce((a, i) => a + i.openCents, 0);
   const zOverdue = zInv.filter((i) => i.dueDate < today).reduce((a, i) => a + i.openCents, 0);
 

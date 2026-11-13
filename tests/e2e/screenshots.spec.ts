@@ -22,6 +22,7 @@ const SHOTS: Shot[] = [
     },
   },
   { name: 'zulassung', path: '/zulassung', prepare: async (page) => { await expect(page.getByTestId('money-card-zulassung')).toBeVisible(); } },
+  { name: 'zuordnen-zulassung', path: '/zulassung/zuordnen', prepare: async (page) => { await expect(page.getByTestId('statement-upload')).toBeVisible(); } },
   { name: 'auftrag-mueller', path: '/zulassung/auftraege/j-mueller-1', prepare: async (page) => { await expect(page.getByTestId('job-rest')).toBeVisible(); } },
   {
     name: 'chat', path: '/chat',

@@ -136,3 +136,38 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 - Architektur-Test erkennt keine dynamischen Importe. `api-guard` prüft nur per Textsuche.
 - Die globale Demo-Leiste schiebt den Seitenkopf um ca. 44 px.
 - Kleinkram: Import-Reihenfolge, schwache Assertions in einzelnen Tests.
+
+## Offen aus Sparkasse-Upload (Reviews, nicht merge-blockierend)
+
+**Abnahme nach Merge (Inhaber)**
+- Je einen echten CSV- und CAMT-Export hochladen, Vorschau prüfen; `RETURN_TEXTS`, `RETURN_BANK_CODES`, `CSV_COLUMNS` und die Annahme „ganze Buchungstage“ gegen die echten Dateien prüfen; Hash-Gleichheit CSV/CAMT prüfen (CSV danach CAMT darf nichts doppeln). Ausdrücklich mit einer Sammelgutschrift und einer Rücklastschrift prüfen: CSV führt eine Sammelbuchung als eine Zeile (Sammlerreferenz), CAMT zerlegt sie je `TxDtls`; die Vorschau warnt nur (`batchBookings`), ein Abgleich fehlt.
+
+**Funktion**
+- Drag-and-drop fehlt (Spec 4.5 „wählen/ziehen“, umgesetzt nur Dateifeld).
+- CSV-MT940 nicht umgesetzt (eigenes Format, kein Mehrwert ohne echte Datei).
+- Sammelzahlung und „in Lexware bezahlt“ nur für Zulassung; NEXUS bei Bedarf nachziehen.
+- Überzahlungs-Rest nur Anzeige, kein Ausblenden.
+- „Alle offenen Rechnungen“ ohne Obergrenze; Engine lehnt > 50 ab (`MAX_SPLIT_INVOICES`), Option bei > 50 weglassen. Literal 50 in `state-service.ts` und `engine.ts` zu gemeinsamer Konstante.
+- Sammelbuchung CSV/CAMT mit echter Datei abgleichen (CAMT-Sammler über Ntry-Schlüssel Datum | Summe | Sammlerreferenz gegen CSV-Zeile) oder Format je Zeitraum festschreiben; bis dahin nur Warnung in der Vorschau.
+- Sammelzahlung auf Lexware-bezahlte Rechnungen → leere Auswahl: `matchMatches` mit zwei `paid`-Nummern liefert Kandidaten, `matchOptions` enthält nur offene Rechnungen (`PaymentCard.tsx:60`), `invoiceIds` scheitert in der Engine. Kandidaten aus `match.candidates` immer als Option zeigen und mit `invoiceAllocatableCents` verteilen.
+- Rückbuchung auf eine in Lexware bezahlte Rechnung öffnet sie nicht wieder (`invoiceOpenCents` = 0 bei `paid`, Spec 4.7 „wieder offen“): bewusst, Lexware führt.
+- `customerPayments` beschriftet jede Allocation auf eine heute `paid`-Rechnung mit „in Lexware schon bezahlt“, auch wenn sie zugeordnet wurde, als die Rechnung noch offen war (`selectors.ts:170`); nur Text.
+- „Alle offenen Rechnungen“ (`allOpenInvoiceOptions`) in `PaymentCard.tsx` gehört als Selektor neben `matchOptions`.
+- Sortierung uneinheitlich: `customerOpenInvoices` `localeCompare` ohne `'de'`, `distributeOldestFirst` mit `'de'`.
+- `shortDateDe` liegt in `import/statement.ts`, genutzt von `detectors/sources.ts` und `components/connection-labels.ts`; gehört nach `clock.ts` (neben `formatIsoDe`).
+- ZIP mit fremden `.xml`-Einträgen (`__MACOSX/._auszug.xml`, camt.052) lässt den Upload mit „kein Sparkassen-Auszug“ scheitern; `__MACOSX/` und `._` ignorieren, nur abbrechen, wenn keine Datei lesbar ist.
+- `new Date(Date.UTC(...))` in `parseDeDate`/`camtDate` (`import/sparkasse.ts`): gemeinsamer `isValidIsoDate` in `clock.ts`, den auch `state-service.ts` (`isBookingDate`) nutzt.
+- Rückbuchung trifft bei gleicher Fälligkeit die ältere Rechnung zuerst; Tie-Break nach Nummer absteigend.
+- CAMT `RvslInd=true` bei CRDT (Storno einer Ausgabe) wird als Kundenzahlung importiert; `Amt`-Fallback kann `AmtDtls/InstdAmt/Amt` greifen; selbstschließendes `<Ustrd />` (xml.ts) verschluckt das nächste Element; `account` nur von der ersten Datei im ZIP, keine Warnung bei abweichendem Konto.
+- `bookedOn`-Obergrenze nutzt echte Uhr statt Demo-Uhr; Obergrenze heute+1 Tag, 7-Tage-Hinweis höchstens 1 Tag zu spät.
+- Engine zählt verworfene Rückbuchungen ohne Original als „schon vorhanden“; Upload nur aus solchen setzt Verbindung `connected` mit `cursor: null`.
+- `iban` im Event nur Länge ≤ 34, kein Format.
+- Demo: `StatementUpload` setzt `busy` ohne `try/finally`; Demo-Dispatch liefert kein `ok` (abgelehnter Import zeigt „0 neu“). Verbindungen zeigt für Sparkasse noch „So verbindest du das (Phase 2)“ (`HOW_TO.bank_sparkasse`).
+
+**Aufräumen und Tests**
+- Dedupe-Filter mit Komma-Ausdruck in `parseSparkasse` schwer lesbar; `SkipReason 'zero'` UI-Text; „zu groß“-Text für Mitglieder neutraler; `createKeyer` wiederholt Basis-Normalisierung von `statementKey` (gemeinsame `keyBase()`); `const n` verdeckt `forEach`-Index.
+- Selektoren: `customerInvoiceRows` rechnet `invoiceOpenCents` doppelt (O(n²)); `invoicePaidCents` bei abdeckendem Vertrag undokumentiert; `partlyAllocatedPayments` nicht auf Bank beschränkt; `statementSummary` O(n·m), `returnIds` O(n²).
+- `PaymentCard`: Optionswert-Kopplung der `invoices`-Option über String fragil.
+- Testlücken: Überzahlung bei Verteilung (`invoiceIds`); Regel 1 mit `paidInLexware`-Treffer; umgekehrte Firmengrenze in `confirmPaymentMatch`; Kontext-NEXUS-Test nur `every`; CAMT-Rückbuchung = CSV-Schlüssel; mehrere `Stmt`; Rangfolge `expense` vs. `before_since`; Doppel-externalId im selben Event; E2E `toContainText('0')` zu schwach (`zulassung.spec.ts`); `briefing.test.ts` ggf. vakuum.
+- Prozess: Task 5 ohne TDD-Reihenfolge (RED nachträglich belegt).
+

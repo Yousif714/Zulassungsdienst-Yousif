@@ -1,6 +1,7 @@
 import { REJECT_REASON_DE, approve, editDraft, finishExecution, reconcileUncertain, retry, startExecution } from '@/domain/actions/machine';
 import { handleButton } from '@/domain/assistant';
 import { jobBilling } from '@/domain/billing';
+import { LEXWARE_OF } from '@/domain/connections';
 import { berlinParts, todayBerlin } from '@/domain/clock';
 import { runCoach } from '@/domain/coach';
 import { detectCommitment } from '@/domain/commitments';
@@ -14,13 +15,14 @@ import { stripeAllocations } from '@/domain/matching/stripe';
 import { validateContractDraft, type ContractDraft } from '@/domain/import/contract-draft';
 import { READ_LIMITS, limitReached, planFromReading, readingProposalId, textSearchDismissed } from '@/domain/import/invoice-reading';
 import { invoiceRef, membershipContractOf, retargetAllocations } from '@/domain/ledger/contracts';
+import { emptyBatch } from '@/domain/import/batch';
 import { mergeBatch } from '@/domain/import/merge';
 import { mergePortalList, normalizePortalEntries } from '@/domain/import/portal-list';
 import { deriveProposals, findContactFor, type ContractProposal } from '@/domain/import/proposals';
 import { portalProposal, portalViews } from '@/domain/portal';
-import { coveringContract, invoiceOpenCents } from '@/domain/ledger/receivables';
+import { coveringContract, invoiceAllocatableCents, splitPaymentOverInvoices } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
-import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Connection, ContractKind, Contact, Invoice, InvoiceReading, MemberContract, Message, Settings } from '@/domain/types';
+import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Company, Connection, ContractKind, Contact, Invoice, InvoiceReading, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
 export interface EngineContext { at: Date; isDemo: boolean; newId: () => string }
@@ -30,31 +32,38 @@ export interface EngineResult { state: AppState; created: string[] }
 
 function autoAllocate(s: AppState, at: Date, isDemo: boolean): AppState {
   let st = s;
-  // Kontext einmal bauen; nur nach einer neuen Zuordnung neu (der Rückstand ändert sich).
-  let mctx: MatchContext | null = null;
+  // Kontext je Firma einmal bauen; nur nach einer neuen Zuordnung dieser Firma neu (der Rückstand ändert sich).
+  const contexts = new Map<Company, MatchContext>();
   for (const p of s.payments) {
-    if (p.source !== 'bank' || p.kind !== 'incoming' || p.company !== 'nexus' || p.ignoredAt) continue;
+    if (p.source !== 'bank' || p.kind !== 'incoming' || p.ignoredAt) continue;
     if (st.allocations.some((a) => a.paymentId === p.id)) continue;
-    mctx ??= buildMatchContext(st, at);
-    const m = matchBankPayment(p, mctx);
+    if (!contexts.has(p.company)) contexts.set(p.company, buildMatchContext(st, at, p.company));
+    const m = matchBankPayment(p, contexts.get(p.company)!);
     // Nur bei genau einem Ziel; mehrdeutig bleibt für die Bestätigung offen.
     if (m.confidence !== 'high' || !m.target || m.candidates.length !== 1) continue;
     const t = m.target;
-    let allocation: Allocation;
+    let fresh: Allocation[];
     let text: string;
     if (t.kind === 'contract') {
       const contract = st.contracts.find((c) => c.id === t.id);
       if (!contract) continue;
-      allocation = { paymentId: p.id, contractId: contract.id, amountCents: p.amountCents, method: 'auto' };
+      fresh = [{ paymentId: p.id, contractId: contract.id, amountCents: p.amountCents, method: 'auto' }];
       text = `Automatisch zugeordnet: ${contactName(st, contract.contactId)}`;
+    } else if (t.kind === 'invoices') {
+      // Sammelzahlung: nur wenn der Betrag ohne Rest auf die Rechnungen aufgeht.
+      const split = splitPaymentOverInvoices(st, p.amountCents, t.invoiceIds);
+      if (split.restCents !== 0 || split.shares.length === 0) continue;
+      fresh = split.shares.map((x) => ({ paymentId: p.id, invoiceId: x.invoiceId, amountCents: x.amountCents, method: 'auto' as const }));
+      text = `Automatisch aufgeteilt: Rechnungen ${split.shares.map((x) => invoiceNumber(st, x.invoiceId)).join(', ')}`;
     } else {
       const invoice = st.invoices.find((i) => i.id === t.id);
       if (!invoice) continue;
-      allocation = { paymentId: p.id, invoiceId: invoice.id, amountCents: p.amountCents, method: 'auto' };
-      text = `Automatisch zugeordnet: Rechnung ${invoice.number}`;
+      const paidInLexware = contexts.get(p.company)!.invoices.find((i) => i.id === t.id)?.paidInLexware;
+      fresh = [{ paymentId: p.id, invoiceId: invoice.id, amountCents: p.amountCents, method: 'auto' }];
+      text = `Automatisch zugeordnet: Rechnung ${invoice.number}${paidInLexware ? ' (in Lexware schon bezahlt)' : ''}`;
     }
-    st = { ...st, allocations: [...st.allocations, allocation], audit: [...st.audit, { at: at.toISOString(), actor: 'system', text, isDemo }] };
-    mctx = null;
+    st = { ...st, allocations: [...st.allocations, ...fresh], audit: [...st.audit, { at: at.toISOString(), actor: 'system', text, isDemo }] };
+    contexts.delete(p.company);
   }
   return st;
 }
@@ -121,8 +130,10 @@ export function refresh(s: AppState, at: Date, isDemo = true): AppState {
 type Mutation = { state: AppState; text: string };
 
 const contactName = (s: AppState, id: string | null | undefined) => s.contacts.find((c) => c.id === id)?.name ?? 'Unbekannt';
+const invoiceNumber = (s: AppState, id: string) => s.invoices.find((i) => i.id === id)?.number ?? id;
 
-type MatchTargetArg = { contractId?: string; invoiceId?: string };
+type MatchTargetArg = { contractId?: string; invoiceId?: string; invoiceIds?: string[] };
+const MAX_SPLIT_INVOICES = 50;
 
 function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTargetArg, at: Date): Mutation {
   const p = s.payments.find((x) => x.id === paymentId);
@@ -130,33 +141,47 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
   const inv = target.invoiceId ? s.invoices.find((x) => x.id === target.invoiceId) : undefined;
   const fail = { state: s, text: `Zuordnung nicht möglich: ${paymentId}` };
   // Rückbuchungen (Betrag <= 0) folgen ihrer Originalzahlung und werden nie direkt bestätigt.
-  if (!p || p.amountCents <= 0 || (!!target.contractId === !!target.invoiceId)) return fail;
-  let allocation: Allocation;
+  const ids = target.invoiceIds;
+  if (!p || p.amountCents <= 0 || [!!target.contractId, !!target.invoiceId, ids !== undefined].filter(Boolean).length !== 1) return fail;
+  // Auto-Zuordnungen der Rückbuchungen dieser Zahlung fallen weg; refresh leitet sie vom neuen Ziel ab.
+  const returnIds = new Set(s.payments.filter((x) => x.source === 'bank' && x.connectionId === p.connectionId && !!p.externalId && x.refundOf === p.externalId).map((x) => x.id));
+  const followsOriginal = (a: Allocation) => a.method === 'auto' && returnIds.has(a.paymentId);
+  // Vorhandene Zuordnungen dieser Zahlung und ihrer Rückbuchungen werden ersetzt, zählen also beim Verteilen (und beim Deckel auf den Rechnungsbetrag) nicht mit.
+  const without: AppState = { ...s, allocations: s.allocations.filter((a) => a.paymentId !== paymentId && !followsOriginal(a)) };
+  const ownInvoice = (i: Invoice | undefined): i is Invoice => !!i && i.company === p.company && i.connectionId === LEXWARE_OF[p.company];
+  let fresh: Allocation[];
   let contactId: string | null;
   let text: string;
-  if (c) {
-    allocation = { paymentId, contractId: c.id, amountCents: p.amountCents, method: 'confirmed' };
+  if (c && s.contacts.some((x) => x.id === c.contactId && x.company === p.company)) {
+    fresh = [{ paymentId, contractId: c.id, amountCents: p.amountCents, method: 'confirmed' }];
     contactId = c.contactId;
     text = `Zahlung über ${formatEuro(p.amountCents)} ${contactName(s, c.contactId)} zugeordnet`;
-  } else if (inv && inv.connectionId === 'lexware_nexus' && invoiceOpenCents(s, inv) > 0) {
-    // Überzahlung: höchstens der offene Betrag geht auf die Rechnung.
-    allocation = { paymentId, invoiceId: inv.id, amountCents: Math.min(p.amountCents, invoiceOpenCents(s, inv)), method: 'confirmed' };
+  } else if (ownInvoice(inv) && invoiceAllocatableCents(without, inv) > 0) {
+    // Überzahlung: höchstens der offene (bzw. bei in Lexware bezahlten: der noch nicht zugeordnete) Betrag geht auf die Rechnung.
+    fresh = [{ paymentId, invoiceId: inv.id, amountCents: Math.min(p.amountCents, invoiceAllocatableCents(without, inv)), method: 'confirmed' }];
     contactId = inv.contactId;
     text = `Zahlung über ${formatEuro(p.amountCents)} Rechnung ${inv.number} zugeordnet`;
+  } else if (ids && ids.length >= 1 && ids.length <= MAX_SPLIT_INVOICES && new Set(ids).size === ids.length) {
+    // Sammelzahlung: alle Rechnungen der Firma der Zahlung, ein gemeinsamer Kontakt; älteste zuerst, Rest bleibt offen bzw. nicht zugeordnet.
+    const invoices = ids.map((id) => s.invoices.find((i) => i.id === id));
+    if (!invoices.every(ownInvoice)) return fail;
+    contactId = invoices[0].contactId;
+    if (!contactId || invoices.some((i) => i.contactId !== contactId)) return fail;
+    const split = splitPaymentOverInvoices(without, p.amountCents, ids);
+    if (split.shares.length === 0) return fail;
+    fresh = split.shares.map((x) => ({ paymentId, invoiceId: x.invoiceId, amountCents: x.amountCents, method: 'confirmed' as const }));
+    text = `Zahlung über ${formatEuro(p.amountCents)} aufgeteilt: ${split.shares.map((x) => `${invoiceNumber(s, x.invoiceId)} (${formatEuro(x.amountCents)})`).join(', ')}`;
   } else return fail;
   const iban = p.iban ? normalizeIban(p.iban) : '';
   const ibanLinks = iban && contactId && !s.ibanLinks.some((l) => normalizeIban(l.iban) === iban && l.contactId === contactId)
     ? [...s.ibanLinks, { iban, contactId, confirmedAt: at.toISOString() }]
     : s.ibanLinks;
-  // Auto-Zuordnungen der Rückbuchungen dieser Zahlung fallen weg; refresh leitet sie vom neuen Ziel ab.
-  const returnIds = new Set(s.payments.filter((x) => x.source === 'bank' && x.connectionId === p.connectionId && !!p.externalId && x.refundOf === p.externalId).map((x) => x.id));
-  const followsOriginal = (a: Allocation) => a.method === 'auto' && returnIds.has(a.paymentId);
   const payments = s.payments.map((x) => {
     if (x.id !== paymentId || !x.ignoredAt) return x;
     const { ignoredAt: _drop, ...rest } = x;
     return rest;
   });
-  return { state: { ...s, payments, allocations: [...s.allocations.filter((a) => a.paymentId !== paymentId && !followsOriginal(a)), allocation], ibanLinks }, text };
+  return { state: { ...s, payments, allocations: [...s.allocations.filter((a) => a.paymentId !== paymentId && !followsOriginal(a)), ...fresh], ibanLinks }, text };
 }
 
 function dismissPayment(s: AppState, paymentId: string, at: Date): Mutation | null {
@@ -418,6 +443,29 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
         return next;
       });
       return owner({ state: { ...s, portalMembers: r.items, connections }, text: `Mitgliederliste übernommen: ${entries.length} Mitglieder, ${r.added} neu, ${r.missing} nicht mehr in der Liste` });
+    }
+    case 'importBankStatement': {
+      // Nur die bekannten Felder übernehmen; alles andere (refundOf, ignoredAt, company …) setzt der Server.
+      const payments = e.payments.map((p) => ({
+        company: 'zulassung' as const, source: 'bank' as const, connectionId: 'bank_sparkasse' as const, kind: 'incoming' as const,
+        externalId: p.externalId, amountCents: p.amountCents, bookedOn: p.bookedOn,
+        ...(p.payerName !== undefined ? { payerName: p.payerName } : {}),
+        ...(p.iban !== undefined ? { iban: p.iban } : {}),
+        ...(p.reference !== undefined ? { reference: p.reference } : {}),
+      }));
+      const r = mergeBatch(s, { ...emptyBatch(), payments }, ctx.newId);
+      const added = r.added.payments;
+      // Cursor = spätester Stand: bisheriger Cursor, Dateiende (statementTo) oder jüngste Buchung.
+      const prevCursor = s.connections.find((c) => c.id === 'bank_sparkasse')?.sync?.cursor ?? null;
+      const cursor = [prevCursor, e.statementTo, ...r.state.payments.filter((p) => p.connectionId === 'bank_sparkasse').map((p) => p.bookedOn)]
+        .reduce<string | null>((m, d) => (d !== null && (m === null || d > m) ? d : m), null);
+      const connections = r.state.connections.map((c) => {
+        if (c.id !== 'bank_sparkasse') return c;
+        const next: Connection = { ...c, status: 'connected', lastSuccessAt: at.toISOString(), sync: { cursor, complete: true, failures: 0 } };
+        delete next.lastError;
+        return next;
+      });
+      return owner({ state: { ...r.state, connections }, text: `Sparkasse-Auszug übernommen: ${added} neu, ${payments.length - added} schon vorhanden` });
     }
     case 'createPortalContract': {
       const view = portalViews(s).find((v) => v.member.externalId === e.externalId);

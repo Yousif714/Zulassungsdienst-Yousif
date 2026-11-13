@@ -2,6 +2,7 @@ import { openInsights, nexusForecast, overdueMembers } from '@/data/selectors';
 import type { AITools, ToolName, ToolResult } from '@/domain/ai-port';
 import { todayBerlin } from '@/domain/clock';
 import { selectTop } from '@/domain/detectors';
+import { invoiceOpenCents } from '@/domain/ledger/receivables';
 import { openReplies } from '@/domain/matching/messages';
 import type { AppState, Contact } from '@/domain/types';
 
@@ -36,13 +37,14 @@ export function createStateTools(s: AppState, now: Date): AITools {
     month_money: () => {
       const f = nexusForecast(s, today);
       const month = today.slice(0, 7);
-      const open = s.invoices.filter(
-        (i) => i.company === 'zulassung' && i.status !== 'void' && i.openCents > 0 && i.dueDate.startsWith(month),
-      );
+      const open = s.invoices
+        .filter((i) => i.company === 'zulassung' && i.dueDate.startsWith(month))
+        .map((i) => invoiceOpenCents(s, i))
+        .filter((cents) => cents > 0);
       return {
         expectedCents: f.expectedCents,
         atRiskCents: f.atRiskCents,
-        zulassungOpenCents: open.reduce((n, i) => n + i.openCents, 0),
+        zulassungOpenCents: open.reduce((n, cents) => n + cents, 0),
         zulassungOpenCount: open.length,
       };
     },

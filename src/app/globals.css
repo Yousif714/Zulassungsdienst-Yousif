@@ -1373,6 +1373,12 @@ a.task-body:active {
   font-size: 17px;
 }
 
+/* Datei-Feld darf schmaler werden als seine Eigenbreite (sonst wird die Seite auf dem iPhone breiter als der Bildschirm). */
+.field,
+.field input[type="file"] {
+  min-width: 0;
+}
+
 .form-error {
   margin: 8px 0 0;
   color: var(--red);

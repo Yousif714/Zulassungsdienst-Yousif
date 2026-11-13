@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { connectionSubtitle } from '@/components/connection-labels';
+import { connectionSubtitle, statementStandText } from '@/components/connection-labels';
 import { HOW_TO } from '@/domain/connections';
 import { ageText } from '@/domain/freshness';
 import type { Connection } from '@/domain/types';
@@ -24,3 +24,18 @@ test('Limit erreicht wird genannt', () => {
   expect(connectionSubtitle({ ...CL, lastError: 'Monatslimit erreicht' }, at, { ...R, limitReached: true })).toContain('Limit erreicht');
 });
 test('Claude ohne Schlüssel → Anleitung', () => expect(connectionSubtitle({ ...CL, status: 'missing', lastSuccessAt: null }, at, R)).toBe(HOW_TO.claude_invoices));
+
+const NOW_0930 = new Date('2026-11-12T09:30:00+01:00');
+const conn = (p: Partial<Connection>): Connection => ({ ...C, ...p });
+const spk = (p: Partial<Connection>) => conn({ id: 'bank_sparkasse', company: 'zulassung', label: 'Sparkasse', status: 'connected', ...p });
+test('Sparkasse: noch kein Auszug', () => expect(statementStandText(spk({ status: 'missing', lastSuccessAt: null }), NOW_0930)).toBe('Noch kein Auszug'));
+test('Sparkasse: Auszug bis, hochgeladen vor 2 Tagen', () =>
+  expect(statementStandText(spk({ lastSuccessAt: '2026-11-10T09:00:00Z', sync: { cursor: '2026-11-09', complete: true, failures: 0 } }), NOW_0930)).toBe('Auszug bis 09.11. · hochgeladen vor 2 Tagen'));
+test('Sparkasse: hochgeladen heute und gestern (Berliner Kalendertag)', () => {
+  const sync = { cursor: '2026-11-11', complete: true, failures: 0 };
+  expect(statementStandText(spk({ lastSuccessAt: '2026-11-11T23:30:00Z', sync }), NOW_0930)).toBe('Auszug bis 11.11. · hochgeladen heute');
+  expect(statementStandText(spk({ lastSuccessAt: '2026-11-11T22:30:00Z', sync }), NOW_0930)).toBe('Auszug bis 11.11. · hochgeladen gestern');
+});
+test('Sparkasse im Echtmodus statt Anleitung', () => expect(connectionSubtitle(spk({ status: 'missing', lastSuccessAt: null }), NOW_0930)).toBe('Noch kein Auszug'));
+test('Sparkasse im Echtmodus mit Auszug', () =>
+  expect(connectionSubtitle(spk({ lastSuccessAt: '2026-11-12T08:00:00Z', sync: { cursor: '2026-11-11', complete: true, failures: 0 } }), NOW_0930)).toBe('Auszug bis 11.11. · hochgeladen heute'));

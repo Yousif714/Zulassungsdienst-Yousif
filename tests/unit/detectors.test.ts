@@ -222,6 +222,25 @@ test('Fehler-Hinweis erst ab 3 Fehlversuchen, Demo-Störung (ohne sync) sofort',
   expect(n()).toBe(1);
 });
 
+describe('Sparkasse-Auszug Frische', () => {
+  test('Auszug älter als 7 Tage → Info-Hinweis mit Auszugsdatum', () => {
+    const s = stateWith({ connections: [conn({ id: 'bank_sparkasse', lastSuccessAt: '2026-11-04T09:00:00Z', sync: { cursor: '2026-11-03', complete: true, failures: 0 } })] });
+    const r = detectStaleSources(s, NOW_0930);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ title: 'Sparkasse-Auszug ist älter als 7 Tage – neuen hochladen', body: 'Letzter Auszug bis 03.11. Neuen Export (CAMT oder CSV) hochladen.', priority: 'info', nextStep: 'Auszug hochladen', company: 'zulassung', needsSources: [] });
+  });
+  test('ohne Cursor kürzerer Text', () => {
+    const s = stateWith({ connections: [conn({ id: 'bank_sparkasse', lastSuccessAt: '2026-11-04T09:00:00Z' })] });
+    expect(detectStaleSources(s, NOW_0930)[0].body).toBe('Neuen Export (CAMT oder CSV) hochladen.');
+  });
+  test('nie hochgeladen → kein Hinweis', () => {
+    expect(detectStaleSources(stateWith({ connections: [conn({ id: 'bank_sparkasse', status: 'missing', lastSuccessAt: null })] }), NOW_0930)).toEqual([]);
+  });
+  test('frischer Auszug → kein Hinweis', () => {
+    expect(detectStaleSources(stateWith({ connections: [conn({ id: 'bank_sparkasse', lastSuccessAt: '2026-11-10T09:00:00Z' })] }), NOW_0930)).toEqual([]);
+  });
+});
+
 describe('buildMatchContext', () => {
   test('Schlüssel Vertrags-ID, abgedeckte Rechnungen mit contractId', () => {
     const covered = member('RE-1043');

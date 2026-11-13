@@ -6,6 +6,7 @@ import type { Repos, StateRepository } from '@/server/db/repository';
 import type { ActionProvider } from '@/domain/actions/machine';
 import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { Action } from '@/domain/types';
+import { addDaysIso, realNow, todayBerlin } from '@/domain/clock';
 import { NOW_0930 as NOW } from './helpers';
 import { createDemoState } from '@/data/seed';
 import { emptyBatch } from '@/domain/import/batch';
@@ -128,7 +129,29 @@ describe('Zustands-Dienst', () => {
     expect(r.state.actions.find((a) => a.id === 'a-1')?.status).toBe('executed');
   });
 
-  test.each([[{ paymentId: 'p', contractId: 'c' }, true], [{ paymentId: 'p', invoiceId: 'i' }, true], [{ paymentId: 'p', contractId: 'c', invoiceId: 'i' }, false], [{ paymentId: 'p' }, false]])(
+  const validSpk = { company: 'zulassung', source: 'bank', connectionId: 'bank_sparkasse', kind: 'incoming', externalId: 'spk-0123456789abcdef', amountCents: 64000, bookedOn: '2026-11-03', payerName: 'Autohaus Mueller GmbH', iban: 'DE00100000000000000001', reference: 'RE-Z-2026-290' };
+  const today = todayBerlin(realNow());
+  const spkEvent = (payments: unknown[], statementTo: unknown = today) => ({ type: 'importBankStatement', connectionId: 'bank_sparkasse', payments, statementTo });
+  test.each([
+    [{}, true], [{ company: 'nexus' }, false], [{ amountCents: 0 }, false], [{ amountCents: 1.5 }, false], [{ amountCents: 100_000_000_01 }, false],
+    [{ bookedOn: '12.11.2026' }, false], [{ bookedOn: '2026-13-45' }, false], [{ bookedOn: '9999-99-99' }, false], [{ bookedOn: '2026-02-31' }, false],
+    [{ bookedOn: '2026-05-31' }, false], [{ bookedOn: '2026-06-01' }, true], [{ bookedOn: today }, true], [{ bookedOn: addDaysIso(today, 1) }, true], [{ bookedOn: addDaysIso(today, 2) }, false], [{ externalId: 'abc' }, false], [{ reference: 'x'.repeat(501) }, false], [{ connectionId: 'bank_qonto' }, false],
+    [{ source: 'stripe' }, false], [{ kind: 'stripe_payout' }, false], [{ payerName: 'x'.repeat(201) }, false], [{ iban: 'D'.repeat(35) }, false],
+  ])('importBankStatement Zahlung %j erlaubt: %s', (patch, ok) => expect(isClientEvent(spkEvent([{ ...validSpk, ...patch }]))).toBe(ok));
+  test.each([
+    [today, true], [addDaysIso(today, 1), true], [addDaysIso(today, 2), false], ['2026-05-31', false], ['2026-06-01', true], ['2026-02-31', false], ['12.11.2026', false], [null, false], [20261112, false],
+  ])('importBankStatement statementTo %j erlaubt: %s', (to, ok) => expect(isClientEvent(spkEvent([validSpk], to))).toBe(ok));
+  test('importBankStatement: 0 Zahlungen mit statementTo erlaubt, 5001 abgelehnt, 5000 erlaubt', () => {
+    expect(isClientEvent(spkEvent([]))).toBe(true);
+    expect(isClientEvent(spkEvent([], null))).toBe(false);
+    expect(isClientEvent(spkEvent(Array.from({ length: 5001 }, () => validSpk)))).toBe(false);
+    expect(isClientEvent(spkEvent(Array.from({ length: 5000 }, () => validSpk)))).toBe(true);
+    expect(isClientEvent({ ...spkEvent([validSpk]), connectionId: 'bank_qonto' })).toBe(false);
+  });
+
+  test.each([[{ paymentId: 'p', contractId: 'c' }, true], [{ paymentId: 'p', invoiceId: 'i' }, true], [{ paymentId: 'p', contractId: 'c', invoiceId: 'i' }, false], [{ paymentId: 'p' }, false],
+    [{ paymentId: 'p', invoiceIds: ['a', 'b'] }, true], [{ paymentId: 'p', invoiceIds: [] }, false], [{ paymentId: 'p', invoiceIds: ['a', 'a'] }, false], [{ paymentId: 'p', invoiceId: 'a', invoiceIds: ['b'] }, false],
+    [{ paymentId: 'p', invoiceIds: Array.from({ length: 51 }, (_, i) => `i${i}`) }, false], [{ paymentId: 'p', invoiceIds: ['a', 1] }, false]])(
     'confirmPaymentMatch %j erlaubt: %s', (e, ok) => expect(isClientEvent({ type: 'confirmPaymentMatch', ...e })).toBe(ok));
   test('dismissPayment erlaubt', () => {
     expect(isClientEvent({ type: 'dismissPayment', paymentId: 'p' })).toBe(true);
@@ -165,7 +188,7 @@ describe('Zustands-Dienst', () => {
   });
 
   test('isClientEvent: nur erlaubte Ereignisse mit Grundform', () => {
-    expect(CLIENT_EVENTS.size).toBe(24);
+    expect(CLIENT_EVENTS.size).toBe(25);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);
     expect(isClientEvent({ type: 'dismissInsight', key: 'reply:m-1' })).toBe(true);
     for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {

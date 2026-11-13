@@ -11,10 +11,11 @@
 - `src/domain/` ist rein: kein React, keine Imports aus `src/data`, `src/app` oder `src/components`.
 - Geldbeträge nur in Cent und nur über Ledger- und Domain-Funktionen. In Komponenten wird nicht gerechnet. Kalendertage in Europe/Berlin über `src/domain/clock.ts`, nie `new Date()` direkt (Demo-Uhr: `now()`).
 - Wiederverwenden statt duplizieren. Das gilt besonders für Zuordnungslogik (`matching/`), Hinweis-Hrefs (`detectors/refs.ts`) und die Design-Bausteine in `src/components`.
+- Ein Kontakt kann mehrere Verträge haben (`kind` fehlt = Mitgliedschaft). Kontakt → Vertrag nur über `membershipContractOf`/`contractsOfContact` (`ledger/contracts.ts`), nie `contracts.find(c => c.contactId === …)`.
 - TDD: erst der fehlschlagende Test, dann der Code. Vor jedem Commit `npm test` und `npx tsc --noEmit`, bei UI-Änderungen zusätzlich die betroffene E2E-Spec.
 - Nichts an Zugangsdaten oder echten Integrationen ändern und nichts nach außen senden ohne ausdrückliche Freigabe.
 - Das Repo ist öffentlich: keine echten Personen-, Mitglieder- oder Bankdaten committen. Tests nutzen nur erfundene Fixtures (`@example.de`).
-- Neue Tabellen nur per idempotenter Migration in `supabase/migrations/`; der Inhaber führt sie im SQL-Editor aus, erst danach wird gemergt.
+- Neue Tabellen nur per idempotenter Migration in `supabase/migrations/`. Claude spielt sie selbst über das Supabase-MCP (`apply_migration`, Projekt `nexus-assistent`) ein, prüft danach mit `list_tables`/`execute_sql` und merged erst dann. Destruktive Änderungen (DROP, Daten löschen) nur nach Rückfrage.
 
 ## Effizienz (Kontext sparen)
 - Dateien gezielt lesen (Grep, `offset`/`limit`), keine kompletten Großdateien (`globals.css`, `seed.ts`, `store.tsx`, `package-lock.json`, Diffs) in den Hauptkontext holen.

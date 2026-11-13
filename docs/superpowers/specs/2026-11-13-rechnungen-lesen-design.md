@@ -1,6 +1,6 @@
 # Rechnungen lesen (Claude) – Design
 
-**Stand:** 13.11.2026 · **Status:** Ansatz vom Inhaber gewählt (A), Entwurf zur Freigabe.
+**Stand:** 13.11.2026 · **Status:** freigegeben, umgesetzt und live (PR #13).
 Basis: Spec `2026-11-12-nexus-assistent-design.md` (4a), Phase 2 `2026-11-12-phase2-design.md` (2d Claude), 2b-2 `2026-11-13-phase2b2-design.md` (Abschnitt 4, „Nicht in 2b-2“).
 
 ## 1. Warum
@@ -97,6 +97,14 @@ In NEXUS-Rechnungen steht oft die Gesamtsumme und irgendwo ein, zwei Sätze, das
 - **Rundungsrest:** Der Ledger gleicht schon aus (letzte Rate = Summe − Rate × (Raten − 1)). Gültig, wenn |letzte Rate − Rate| < Anzahl Raten (Cent).
 - **Kosten:** Limit pro Kalendermonat Europe/Berlin über `clock.ts`, Konstante 100 €, in diesem Paket nicht in der Oberfläche änderbar.
 - **Datenschutz:** Der Inhaber hat das Lesen der Rechnungen durch Claude ausdrücklich beauftragt (13.11.). Gesendet wird nur, was 4.3 nennt. Kein zusätzlicher Schalter; ohne `ANTHROPIC_API_KEY` passiert nichts.
+
+## 9b. Nach dem Gesamtreview festgelegt (umgesetzt)
+- Ein von Claude gelieferter, aber ungültiger Einzelwert (Tag außerhalb 1–31, ungültiges Datum, nicht ganzzahlige Raten/Rate) wird nie ersetzt: höchstens Vorschlag.
+- Ohne erste Fälligkeit, aber mit Tag: Start wie `fromSingleDocument` (`firstDueOnOrAfter`), nie vor dem Rechnungsdatum.
+- Hat ein Ratenvertrag die Rechnung als `origin`, erzeugt die Textsuche für diese Rechnung keinen Vorschlag mehr. Ist der Textsuche-Vorschlag einer Mitgliedsrechnung verworfen, liest Claude sie nicht.
+- Lesen hat eigenen Fehlerbereich (`claude_invoices`), nie Lexware. Speichern scheitert → Störung an `claude_invoices`; nach 3 Fehlschlägen in Folge nur noch in den ersten 5 Minuten jeder Stunde.
+- Aufruf nur mit ≥ 10 s Restzeit; zu knapp = nächster Lauf, kein Fehlversuch.
+- Assistent („Schick … Erinnerung“): Vertrag des Kontakts mit dem höchsten Rückstand; Text nennt dessen Betrag.
 
 ## 10. Dem Bauenden überlassen
 - Prompt-Wortlaut und Schema-Details, solange 4.3 erfüllt ist.
