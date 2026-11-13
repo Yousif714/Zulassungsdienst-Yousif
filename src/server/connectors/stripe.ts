@@ -9,7 +9,8 @@ import { BudgetExceeded, type PullContext, type PullResult } from './types';
 export { STRIPE_API_VERSION };
 
 type Phase = 'invoices' | 'refunds' | 'disputes';
-interface Cursor { createdGte: number; phase: Phase; startingAfter: string | null; since: string }
+/** `pending`: beim letzten Laufstart offene/uneinbringliche Rechnungen. Sie können lange nach ihrer Erstellung bezahlt werden, also außerhalb des Fensters. */
+interface Cursor { createdGte: number; phase: Phase; startingAfter: string | null; since: string; pending: string[] }
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Obj = Record<string, any>;
 
@@ -22,10 +23,11 @@ function parseCursor(raw: string | null): Cursor {
   if (raw) {
     try {
       const c = JSON.parse(raw) as Cursor;
-      if (!cursorOutdated(c.since) && Number.isFinite(c.createdGte) && PHASES.includes(c.phase)) return { createdGte: c.createdGte, phase: c.phase, startingAfter: c.startingAfter ?? null, since: IMPORT_SINCE };
+      const pending = Array.isArray(c.pending) && c.pending.every((x) => typeof x === 'string') ? c.pending : [];
+      if (!cursorOutdated(c.since) && Number.isFinite(c.createdGte) && PHASES.includes(c.phase)) return { createdGte: c.createdGte, phase: c.phase, startingAfter: c.startingAfter ?? null, since: IMPORT_SINCE, pending };
     } catch { /* ungültiger Cursor → Neustart */ }
   }
-  return { createdGte: sinceSec(), phase: 'invoices', startingAfter: null, since: IMPORT_SINCE };
+  return { createdGte: sinceSec(), phase: 'invoices', startingAfter: null, since: IMPORT_SINCE, pending: [] };
 }
 
 const query = (params: [string, string][], startingAfter: string | null): string =>
@@ -80,6 +82,12 @@ export async function pullStripe(cursor: string | null, ctx: PullContext): Promi
     if (cur.phase === 'invoices' && cur.startingAfter === null) {
       await readAll('/v1/subscriptions', [['status', 'all'], ['expand[]', 'data.customer'], ['expand[]', 'data.schedule']], raw.subscriptions);
       await readAll('/v1/products', [], raw.products);
+      // Seit dem letzten Laufstart nicht mehr offen → einzeln nachladen (der Mapper übernimmt nur bezahlte).
+      const open: Obj[] = [];
+      for (const status of ['open', 'uncollectible']) await readAll('/v1/invoices', [['status', status], ['created[gte]', String(sinceSec())]], open);
+      const openIds = open.map((i) => i.id as string);
+      for (const id of cur.pending) if (!openIds.includes(id)) raw.invoices.push(await get(`/v1/invoices/${encodeURIComponent(id)}`));
+      state.pending = openIds;
     }
     for (const phase of PHASES.slice(PHASES.indexOf(cur.phase))) {
       state.phase = phase;
@@ -114,10 +122,11 @@ export async function pullStripe(cursor: string | null, ctx: PullContext): Promi
     if (!(e instanceof BudgetExceeded)) throw e;
   }
 
+  raw.invoices = [...new Map(raw.invoices.map((i) => [i.id, i])).values()]; // nachgeladen und im Fenster → einmal
   const batch = mapStripe(raw as unknown as StripeRaw);
   if (complete) {
     // Wasserzeichen steigt erst jetzt; 35 Tage Überlappung fangen Nachzügler, Schlüssel machen sie unschädlich.
-    const next: Cursor = { createdGte: Math.max(cur.createdGte, Math.floor(ctx.now() / 1000) - OVERLAP_SEC), phase: 'invoices', startingAfter: null, since: IMPORT_SINCE };
+    const next: Cursor = { createdGte: Math.max(cur.createdGte, Math.floor(ctx.now() / 1000) - OVERLAP_SEC), phase: 'invoices', startingAfter: null, since: IMPORT_SINCE, pending: state.pending };
     return { batch, cursor: JSON.stringify(next), complete: true };
   }
   return { batch, cursor: JSON.stringify(state), complete: false };

@@ -5,7 +5,7 @@ import { STRIPE_API_VERSION as DOMAIN_VERSION } from '@/domain/import/stripe';
 import { fixtureFetch } from '@/server/connectors/fixture-fetch';
 import { pullStripe, STRIPE_API_VERSION } from '@/server/connectors/stripe';
 import type { PullContext } from '@/server/connectors/types';
-import { stripeRoutes, stripeRoutesPaged } from '../../fixtures';
+import { stripeOpenQuery, stripeRoutes, stripeRoutesPaged } from '../../fixtures';
 
 const NOW = Date.parse('2026-11-12T10:00:00Z');
 const ctx = (o: Partial<PullContext> = {}): PullContext => ({
@@ -30,7 +30,7 @@ describe('pullStripe', () => {
     expect(ids(r)).toEqual(expect.arrayContaining(['in_A1', 'in_A2', 'in_A3', 'in_B1', 'in_D1', 're_B1']));
     expect(r.batch.subscriptions.length).toBeGreaterThan(0);
     expect(r.batch.disputes).toEqual([{ externalId: 'dp_1', invoiceExternalId: 'in_A3' }]);
-    const firstInvoices = calls.find((c) => c.startsWith('/v1/invoices?'))!;
+    const firstInvoices = calls.find((c) => c.startsWith('/v1/invoices?status=paid'))!;
     expect(firstInvoices).toContain(`created%5Bgte%5D=${sinceSec}`); // Erstlauf ab IMPORT_SINCE
     expect(firstInvoices).toContain('status=paid');
   });
@@ -39,9 +39,9 @@ describe('pullStripe', () => {
     const calls: string[] = [];
     const first = await pullStripe(null, ctx());
     const cur = JSON.parse(first.cursor!);
-    expect(cur).toEqual({ createdGte: NOW / 1000 - 35 * 86400, phase: 'invoices', startingAfter: null, since: IMPORT_SINCE });
+    expect(cur).toEqual({ createdGte: NOW / 1000 - 35 * 86400, phase: 'invoices', startingAfter: null, since: IMPORT_SINCE, pending: [] });
     await pullStripe(first.cursor, ctx({ fetch: fixtureFetch(stripeRoutes, { calls }) }));
-    expect(calls.find((c) => c.startsWith('/v1/invoices?'))).toContain(`created%5Bgte%5D=${cur.createdGte}`);
+    expect(calls.find((c) => c.startsWith('/v1/invoices?status=paid'))).toContain(`created%5Bgte%5D=${cur.createdGte}`);
   });
 
   test('Cursor mit späterem oder ohne since → einmal Neustart ab IMPORT_SINCE (mit Abos)', async () => {
@@ -51,20 +51,20 @@ describe('pullStripe', () => {
       const old = JSON.stringify({ createdGte: later, phase: 'refunds', startingAfter: 're_X', ...(since ? { since } : {}) });
       const r = await pullStripe(old, ctx({ fetch: fixtureFetch(stripeRoutes, { calls }) }));
       expect(calls[0]).toContain('/v1/subscriptions');
-      expect(calls.find((c) => c.startsWith('/v1/invoices?'))).toContain(`created%5Bgte%5D=${sinceSec}`);
+      expect(calls.find((c) => c.startsWith('/v1/invoices?status=paid'))).toContain(`created%5Bgte%5D=${sinceSec}`);
       expect(JSON.parse(r.cursor!).since).toBe(IMPORT_SINCE);
     }
     const calls: string[] = [];
     await pullStripe(JSON.stringify({ createdGte: later, phase: 'invoices', startingAfter: null, since: IMPORT_SINCE }), ctx({ fetch: fixtureFetch(stripeRoutes, { calls }) }));
-    expect(calls.find((c) => c.startsWith('/v1/invoices?'))).toContain(`created%5Bgte%5D=${later}`);
+    expect(calls.find((c) => c.startsWith('/v1/invoices?status=paid'))).toContain(`created%5Bgte%5D=${later}`);
   });
 
   test('Abbruch mitten in der Rechnungsliste → Cursor mit starting_after; Folgelauf liefert genau den Rest', async () => {
-    const lim = limitFetches(stripeRoutesPaged, 3); // Abos, Produkte, Rechnungsseite 1
+    const lim = limitFetches(stripeRoutesPaged, 5); // Abos, Produkte, offene, uneinbringliche, Rechnungsseite 1
     const first = await pullStripe(null, ctx(lim.o));
     expect(first.complete).toBe(false);
     expect(ids(first).sort()).toEqual(['in_A1', 'in_A2']);
-    expect(JSON.parse(first.cursor!)).toEqual({ createdGte: sinceSec, phase: 'invoices', startingAfter: 'in_A2', since: IMPORT_SINCE });
+    expect(JSON.parse(first.cursor!)).toEqual({ createdGte: sinceSec, phase: 'invoices', startingAfter: 'in_A2', since: IMPORT_SINCE, pending: [] });
     const calls: string[] = [];
     const second = await pullStripe(first.cursor, ctx({ fetch: fixtureFetch(stripeRoutesPaged, { calls }) }));
     expect(second.complete).toBe(true);
@@ -74,7 +74,7 @@ describe('pullStripe', () => {
   });
 
   test('Abbruch zwischen Erstattungen und Streitfällen → Cursor phase disputes; Folgelauf nur Streitfälle', async () => {
-    const lim = limitFetches(stripeRoutesPaged, 5); // Abos, Produkte, 2 Rechnungsseiten, Erstattungen
+    const lim = limitFetches(stripeRoutesPaged, 7); // Abos, Produkte, offene, uneinbringliche, 2 Rechnungsseiten, Erstattungen
     const first = await pullStripe(null, ctx(lim.o));
     expect(first.complete).toBe(false);
     expect(ids(first)).toContain('re_B1');
@@ -141,6 +141,45 @@ describe('pullStripe', () => {
     expect(calls).toContain('/v1/invoices/in_A3');
     expect(ids(r)).toContain('in_A3');
     expect(r.batch.disputes).toEqual([{ externalId: 'dp_1', invoiceExternalId: 'in_A3' }]);
+  });
+
+  describe('Rechnungen, die lange nach ihrer Erstellung bezahlt werden', () => {
+    const later = Date.parse('2026-10-08T00:00:00Z') / 1000; // Wasserzeichen: in_A1 liegt davor
+    const paidQuery = `/v1/invoices?${new URLSearchParams({ status: 'paid', 'created[gte]': String(later), limit: '100' })}`;
+    const cursorWith = (pending: string[]) => JSON.stringify({ createdGte: later, phase: 'invoices', startingAfter: null, since: IMPORT_SINCE, pending });
+    const openList = (...invoiceIds: string[]) => ({ object: 'list', has_more: false, data: invoiceIds.map((id) => ({ id, status: 'open' })) });
+
+    test('offene Rechnungen landen im Folge-Cursor', async () => {
+      const r = await pullStripe(null, ctx({ fetch: fixtureFetch({ ...stripeRoutesPaged, [stripeOpenQuery('open')]: openList('in_X'), [stripeOpenQuery('uncollectible')]: openList('in_Y') }) }));
+      expect(JSON.parse(r.cursor!).pending).toEqual(['in_X', 'in_Y']);
+    });
+
+    test('beim letzten Lauf offen, jetzt bezahlt, vor dem Fenster erstellt → wird nachgeladen und importiert', async () => {
+      const calls: string[] = [];
+      const r = await pullStripe(cursorWith(['in_A1']), ctx({ fetch: fixtureFetch({ ...stripeRoutes, [paidQuery]: { data: [], has_more: false } }, { calls }) }));
+      expect(calls).toContain('/v1/invoices/in_A1');
+      expect(ids(r)).toContain('in_A1');
+      expect(JSON.parse(r.cursor!).pending).toEqual([]);
+    });
+
+    test('noch offen → kein Einzelabruf, bleibt im Cursor', async () => {
+      const calls: string[] = [];
+      const r = await pullStripe(cursorWith(['in_X']), ctx({ fetch: fixtureFetch({ ...stripeRoutes, [stripeOpenQuery('open')]: openList('in_X') }, { calls }) }));
+      expect(calls).not.toContain('/v1/invoices/in_X');
+      expect(JSON.parse(r.cursor!).pending).toEqual(['in_X']);
+    });
+
+    test('nachgeladene Rechnung auch in der Fensterliste → nur eine Zahlung', async () => {
+      const r = await pullStripe(cursorWith(['in_A1']), ctx({ fetch: fixtureFetch(stripeRoutes) }));
+      expect(ids(r).filter((i) => i === 'in_A1')).toHaveLength(1);
+    });
+
+    test('Cursor ohne pending (alter Stand) → leere Merkliste, kein Neustart', async () => {
+      const calls: string[] = [];
+      const old = JSON.stringify({ createdGte: later, phase: 'invoices', startingAfter: null, since: IMPORT_SINCE });
+      await pullStripe(old, ctx({ fetch: fixtureFetch(stripeRoutes, { calls }) }));
+      expect(calls.find((c) => c.startsWith('/v1/invoices?status=paid'))).toContain(`created%5Bgte%5D=${later}`);
+    });
   });
 
   test('Fehler tragen den Schlüssel nicht', async () => {
