@@ -15,6 +15,7 @@ export interface ServerEnv {
   lexwareZulassungApiKey?: string;
   qontoLogin?: string;
   qontoSecretKey?: string;
+  anthropicApiKey?: string;
 }
 
 const SUPABASE = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const;
@@ -44,5 +45,6 @@ export function readEnv(e: Record<string, string | undefined> = process.env): Se
     lexwareZulassungApiKey: val('LEXWARE_ZULASSUNG_API_KEY'),
     qontoLogin: val('QONTO_LOGIN'),
     qontoSecretKey: val('QONTO_SECRET_KEY'),
+    anthropicApiKey: val('ANTHROPIC_API_KEY'),
   };
 }
