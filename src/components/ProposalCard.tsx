@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { formatIsoDe } from '@/domain/clock';
 import { draftFromProposal, validateContractDraft, type ContractDraft } from '@/domain/import/contract-draft';
-import { findContactFor, type ContractProposal, type ProposalValues } from '@/domain/import/proposals';
+import { findContactFor, MONTH_END, type ContractProposal, type ProposalValues } from '@/domain/import/proposals';
 import { formatEuro, parseEuroInput } from '@/domain/money';
 import type { Contact } from '@/domain/types';
 
@@ -24,7 +24,7 @@ export function proposalSummary(p: ProposalValues): string {
   return [
     q(p.totalCents, formatEuro),
     `${q(p.installments, String)} × ${q(p.installmentCents, formatEuro)}`,
-    `am ${q(p.dueDay, (n) => `${n}.`)}`,
+    p.dueDay === MONTH_END ? 'zum Monatsende' : `am ${q(p.dueDay, (n) => `${n}.`)}`,
     `ab ${p.startDate === null ? '?' : formatIsoDe(p.startDate)}`,
   ].join(' · ');
 }

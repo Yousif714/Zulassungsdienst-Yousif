@@ -20,6 +20,9 @@ export interface ContractProposal extends ProposalValues {
 const refKey = (r: ExternalRef) => `${r.connectionId}:${r.externalId}`;
 export const proposalId = (sources: ExternalRef[]): string => sources.map(refKey).sort().join('+');
 
+/** Fälligkeitstag 31 = letzter Tag des Monats (`monthDate` kürzt auf die Monatslänge). */
+export const MONTH_END = 31;
+
 const NO_VALUES: ProposalValues = { totalCents: null, installments: null, installmentCents: null, dueDay: null, startDate: null };
 const isComplete = (v: ProposalValues) => Object.values(v).every((x) => x !== null);
 
@@ -72,9 +75,12 @@ function fromInvoices(contactExternalId: string, invs: Invoice[], contact: Conta
     steps.push(months !== null ? `Laufzeit ${months} Monate × ${formatEuro(rate)} = ${formatEuro(rate * months)}.` : 'Laufzeit steht in keiner Rechnung: Anzahl bitte ergänzen.');
   } else if (sorted.length === 1) {
     const inv = sorted[0];
-    const { months, dueDay } = parsed(inv);
+    const parsedInv = parsed(inv);
+    const { months } = parsedInv;
+    // Ohne Tag im Text: fällig zum Monatsende (31 = letzter Tag des Monats). Inhaber: „Hauptsache im Monat gezahlt“.
+    const dueDay = parsedInv.dueDay ?? MONTH_END;
     let startDate: IsoDate = inv.issuedOn;
-    if (dueDay !== null) {
+    if (parsedInv.dueDay !== null) {
       const [y, m, d] = inv.issuedOn.split('-').map(Number);
       startDate = monthDate(y, m - 1 + (dueDay >= d ? 0 : 1), dueDay);
     }
@@ -84,7 +90,7 @@ function fromInvoices(contactExternalId: string, invs: Invoice[], contact: Conta
     };
     steps.push(`Gesamtrechnung ${inv.number} über ${formatEuro(inv.totalCents)}${months !== null ? `, ${months} Monate` : ''}.`);
     if (months !== null) steps.push(`${formatEuro(inv.totalCents)} ÷ ${months} = ${formatEuro(Math.floor(inv.totalCents / months))} pro Monat (abgerundet).`);
-    steps.push(dueDay !== null ? `Fälligkeitstag ${dueDay}. laut Rechnungstext, Start ${formatIsoDe(startDate)}.` : `Kein Fälligkeitstag im Text: Start vorläufig ${formatIsoDe(startDate)} (Rechnungsdatum), Tag bitte ergänzen.`);
+    steps.push(parsedInv.dueDay !== null ? `Fälligkeitstag ${dueDay}. laut Rechnungstext, Start ${formatIsoDe(startDate)}.` : `Kein Fälligkeitstag im Text: fällig zum Monatsende, Start ${formatIsoDe(startDate)} (Rechnungsdatum).`);
   } else {
     steps.push('Rechnungen passen zu keinem Ratenmuster.');
   }

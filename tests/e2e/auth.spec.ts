@@ -120,14 +120,18 @@ test('Echtmodus: Verwerfen bleibt verworfen, Lexware-Vertrag zeigt „Bank nicht
   await expect(page.getByText('Überweisung · Bank nicht verbunden')).toBeVisible();
 });
 
-test('Echtmodus: unvollständiger Vorschlag lässt sich erst nach Ergänzen übernehmen', async () => {
+test('Echtmodus: Gesamtrechnung ohne Tag ist zum Monatsende fällig; leerer Tag sperrt Übernehmen, Ergänzen gibt frei', async () => {
   await page.goto('/nexus/mitglieder/vorschlaege');
   const card = page.getByTestId('proposal-lexware_nexus:c-83'); // Gesamtrechnung ohne Fälligkeitstag
-  await expect(card).toContainText('bitte ergänzen');
-  await expect(card.getByRole('button', { name: 'Übernehmen' })).toBeDisabled();
+  await expect(card).toContainText('zum Monatsende');
+  await expect(card).not.toContainText('bitte ergänzen');
+  await expect(card.getByRole('button', { name: 'Übernehmen' })).toBeEnabled();
   await card.getByRole('button', { name: 'Bearbeiten' }).click();
+  await card.getByLabel('Fälligkeitstag').fill('');
+  await expect(card.getByRole('button', { name: 'Übernehmen' })).toBeDisabled();
   await card.getByLabel('Fälligkeitstag').fill('15');
   await expect(card.getByRole('button', { name: 'Übernehmen' })).toBeEnabled();
+  await expect(card).toContainText('am 15.');
 });
 
 test('Echtmodus: „Jetzt abgleichen“ gleicht ab, zweiter Klick binnen einer Minute bittet um Geduld', async () => {
