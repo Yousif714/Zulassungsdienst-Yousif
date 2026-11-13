@@ -14,6 +14,9 @@ import { createEmptyState } from './empty-state';
 import { OFFLINE_NOTICE, reloadTo, useMode, type AppMode } from './mode';
 import { UnauthorizedError, createRealClient } from './real-client';
 import { createDemoState } from './seed';
+import { createReloadGate } from './refresh';
+
+const RELOAD_MIN_GAP_MS = 10_000;
 
 export const STORE_KEY = 'nexus-demo-v1';
 
@@ -33,7 +36,16 @@ export function reducer(s: AppState, e: StoreEvent): AppState {
 // ---------- React ----------
 
 type Dispatch = (e: StoreEvent) => Promise<{ created: string[] }>;
-type Store = { state: AppState; dispatch: Dispatch; mode: AppMode };
+export type SyncResult = 'ok' | 'wait' | 'error';
+type Store = {
+  state: AppState; dispatch: Dispatch; mode: AppMode;
+  /** Echtmodus: Zustand neu vom Server holen. Demo/offline: nichts zu tun. */
+  reload: () => Promise<void>;
+  /** Echtmodus: Abgleich mit den Quellen anstoßen und den neuen Zustand übernehmen. */
+  syncNow: () => Promise<SyncResult>;
+};
+const noop = async () => {};
+const noSync = async (): Promise<SyncResult> => 'ok';
 const StoreContext = createContext<Store | null>(null);
 /** Nur für den KI-Client: übernimmt einen vom Server gelieferten Zustand (Echtmodus). */
 const AdoptContext = createContext<(s: AppState) => void>(() => {});
@@ -110,7 +122,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
   }, [sink]);
 
   if (!state) return null;
-  return <StoreContext.Provider value={{ state, dispatch, mode: 'demo' }}>{children}</StoreContext.Provider>;
+  return <StoreContext.Provider value={{ state, dispatch, mode: 'demo', reload: noop, syncNow: noSync }}>{children}</StoreContext.Provider>;
 }
 
 /**
@@ -122,6 +134,9 @@ function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; child
   const [state, setState] = useState<AppState | null>(() => (mode === 'offline' ? createEmptyState() : null));
   const [notice, setNotice] = useState(mode === 'offline' ? OFFLINE_NOTICE : '');
   const loaded = useRef(false);
+  // Schreibzugriffe laufen: ein gleichzeitig geladener Zustand wäre älter als die Antwort und wird verworfen.
+  const writes = useRef({ pending: 0, epoch: 0 });
+  const gate = useRef(createReloadGate(RELOAD_MIN_GAP_MS));
 
   useEffect(() => {
     if (mode === 'offline' || loaded.current) return;
@@ -134,6 +149,9 @@ function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; child
   }, [client, mode]);
 
   const dispatch = useCallback<Dispatch>(async (e) => {
+    const w = writes.current;
+    w.pending += 1;
+    w.epoch += 1;
     try {
       const r = await client.dispatch(e);
       setState(r.state);
@@ -143,8 +161,50 @@ function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; child
       if (err instanceof UnauthorizedError) reloadTo('/anmelden');
       else setNotice(SAVE_FAILED);
       return { created: [] };
+    } finally {
+      w.pending -= 1;
+      w.epoch += 1;
     }
   }, [client]);
+
+  /** Holt den Zustand neu; Fehler lassen den alten Stand stehen. Läuft zwischendurch ein Schreibzugriff, gewinnt dessen Antwort. */
+  const reload = useCallback(async () => {
+    const w = writes.current;
+    if (w.pending > 0) return;
+    const epoch = w.epoch;
+    try {
+      const s = await client.load();
+      if (w.pending === 0 && w.epoch === epoch) setState(s);
+    } catch (err) {
+      if (err instanceof UnauthorizedError) reloadTo('/anmelden');
+    }
+  }, [client]);
+
+  const syncNow = useCallback(async (): Promise<SyncResult> => {
+    try {
+      const r = await client.syncNow();
+      if (!r.ok) return 'wait';
+      if (writes.current.pending === 0) setState(r.state);
+      return 'ok';
+    } catch (err) {
+      if (err instanceof UnauthorizedError) reloadTo('/anmelden');
+      return 'error';
+    }
+  }, [client]);
+
+  // Die installierte App bleibt im Hintergrund am Leben: beim Zurückkehren neu laden (höchstens alle 10 s).
+  useEffect(() => {
+    if (mode === 'offline') return;
+    const back = () => {
+      if (document.visibilityState === 'visible' && gate.current()) void reload();
+    };
+    document.addEventListener('visibilitychange', back);
+    window.addEventListener('focus', back);
+    return () => {
+      document.removeEventListener('visibilitychange', back);
+      window.removeEventListener('focus', back);
+    };
+  }, [mode, reload]);
 
   const adopt = useCallback((s: AppState) => {
     setState(s);
@@ -153,7 +213,7 @@ function RealStoreProvider({ mode, children }: { mode: 'real' | 'offline'; child
 
   if (!state) return null;
   return (
-    <StoreContext.Provider value={{ state, dispatch, mode }}>
+    <StoreContext.Provider value={{ state, dispatch, mode, reload, syncNow }}>
       <AdoptContext.Provider value={adopt}>
         <p role="status" className="store-notice">{notice}</p>
         {children}

@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { COMPANY_LABEL } from '@/components/MoneyCard';
@@ -39,13 +41,33 @@ function SourceList() {
   );
 }
 
+/** Echtmodus: stößt den Abgleich mit den Quellen an (höchstens einmal pro Minute). */
+function SyncNowButton() {
+  const { syncNow } = useAppStore();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const run = async () => {
+    setBusy(true);
+    setMsg('');
+    const r = await syncNow();
+    setBusy(false);
+    setMsg(r === 'wait' ? 'Bitte kurz warten' : r === 'error' ? 'Abgleich fehlgeschlagen' : 'Abgeglichen');
+  };
+  return (
+    <div className="sync-now">
+      <button type="button" className="btn btn-secondary" disabled={busy} onClick={run}>{busy ? 'Gleiche ab …' : 'Jetzt abgleichen'}</button>
+      <p role="status" className="sync-now-msg" data-testid="sync-now-msg">{msg}</p>
+    </div>
+  );
+}
+
 /** Echtmodus: Einrichtungs-Liste statt Simulation. Demo und offline: Quellenliste. */
 export default function ConnectionsPage() {
   const { state, mode } = useAppStore();
   return (
     <>
       <PageHeader title="Verbindungen" />
-      {mode === 'real' ? <SetupChecklist connections={state.connections} /> : <SourceList />}
+      {mode === 'real' ? <><SetupChecklist connections={state.connections} /><SyncNowButton /></> : <SourceList />}
     </>
   );
 }

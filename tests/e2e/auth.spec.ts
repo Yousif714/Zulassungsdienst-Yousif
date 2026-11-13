@@ -129,3 +129,12 @@ test('Echtmodus: unvollständiger Vorschlag lässt sich erst nach Ergänzen übe
   await card.getByLabel('Fälligkeitstag').fill('15');
   await expect(card.getByRole('button', { name: 'Übernehmen' })).toBeEnabled();
 });
+
+test('Echtmodus: „Jetzt abgleichen“ gleicht ab, zweiter Klick binnen einer Minute bittet um Geduld', async () => {
+  await page.goto('/verbindungen');
+  await page.getByRole('button', { name: 'Jetzt abgleichen' }).click();
+  await expect(page.getByTestId('sync-now-msg')).toHaveText('Abgeglichen');
+  await expect(page.getByTestId('setup-checklist')).toBeVisible();
+  await page.getByRole('button', { name: 'Jetzt abgleichen' }).click();
+  await expect(page.getByTestId('sync-now-msg')).toHaveText('Bitte kurz warten');
+});
