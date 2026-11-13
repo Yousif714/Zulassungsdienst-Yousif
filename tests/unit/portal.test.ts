@@ -97,3 +97,20 @@ test('portalProposal ohne Rechnung: alle Werte null, Portal-Liste', () => {
   const v = portalViews(fiveState()).find((x) => x.status === 'no_invoice')!;
   expect(portalProposal(v)).toMatchObject({ totalCents: null, installments: null, installmentCents: null, dueDay: null, startDate: null, references: ['Portal-Liste'], complete: false });
 });
+
+test('ein Kontakt, zwei Portal-Mitglieder: beide zeigen ihn, sharedWith gesetzt, Summe zählt einmal', () => {
+  const s = {
+    ...stateWith({ contacts: [contact({ id: 'k1', emails: ['x@b.de'] })], contracts: [contract('v1', 'k1')] }),
+    portalMembers: [pm('x@b.de', 'Anna'), pm('y@b.de', 'Anna Zweit', AT, { emails: ['y@b.de', 'x@b.de'] })],
+  };
+  const v = portalViews(s);
+  expect(v.map((x) => [x.member.externalId, x.status, x.contactIds, x.sharedWith])).toEqual([
+    ['x@b.de', 'contract', ['k1'], ['pm-y@b.de']], ['y@b.de', 'contract', ['k1'], ['pm-x@b.de']],
+  ]);
+  expect(portalSummary(v)).toMatchObject({ total: 2, contract: 1 });
+});
+
+test('Ref-Treffer nur bei Firma nexus', () => {
+  const c = contact({ id: 'k1', company: 'zulassung', externalRefs: [{ connectionId: 'portal_nexus', externalId: 'a@b.de' }] });
+  expect(linkPortalMember(pm('a@b.de', 'A'), [c]).contactIds).toEqual([]);
+});

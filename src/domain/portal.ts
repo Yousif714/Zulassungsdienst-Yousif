@@ -10,13 +10,15 @@ export interface PortalView {
   member: PortalMember; status: PortalStatus; inLatestList: boolean;
   contactIds: string[]; nameMatch: { contactId: string; name: string } | null;
   contractId: string | null; proposalId: string | null; invoices: Invoice[];
+  /** IDs der anderen Portal-Mitglieder, die denselben Kontakt treffen. */
+  sharedWith: string[];
 }
 
 const memberEmails = (m: PortalMember): string[] => [...new Set((m.emails ?? [m.email]).map((e) => e.trim().toLowerCase()).filter((e) => e !== ''))];
 
 /** Zuordnung: 1. externalRef `portal_nexus:<id>`, 2. alle NEXUS-Kontakte mit gleicher E-Mail, 3. nur Namensvorschlag. */
 export function linkPortalMember(m: PortalMember, contacts: Contact[]): { contactIds: string[]; nameMatch: { contactId: string; name: string } | null } {
-  const byRef = contacts.filter((c) => (c.externalRefs ?? []).some((r) => r.connectionId === 'portal_nexus' && r.externalId === m.externalId));
+  const byRef = contacts.filter((c) => c.company === 'nexus' && (c.externalRefs ?? []).some((r) => r.connectionId === 'portal_nexus' && r.externalId === m.externalId));
   if (byRef.length > 0) return { contactIds: byRef.map((c) => c.id), nameMatch: null };
   const nexus = contacts.filter((c) => c.company === 'nexus');
   const mails = new Set(memberEmails(m));
@@ -34,24 +36,28 @@ export function portalViews(s: AppState): PortalView[] {
   const proposals = deriveProposals(s);
   const nexusContacts = s.contacts.filter((c) => c.company === 'nexus');
   const hidden = new Set(s.ignoredPortalMembers);
+  const proposalContact = new Map(proposals.map((p) => [p.id, findContactFor(p, nexusContacts)]));
   const views = s.portalMembers.map((member): PortalView => {
     const { contactIds, nameMatch } = linkPortalMember(member, s.contacts);
     const ids = new Set(contactIds);
     const mails = new Set(memberEmails(member));
     const contract = s.contracts.find((c) => ids.has(c.contactId) || (c.origin ?? []).some((o) => o.connectionId === 'portal_nexus' && o.externalId === member.externalId));
     const proposal = proposals.find((p) => {
-      const f = findContactFor(p, nexusContacts);
+      const f = proposalContact.get(p.id)!;
       return ((f.match === 'ref' || f.match === 'email') && f.contactId !== null && ids.has(f.contactId)) || (p.email !== null && mails.has(p.email.toLowerCase()));
     });
     const invoices = s.invoices.filter((i) => i.connectionId === 'lexware_nexus' && i.contactId !== null && ids.has(i.contactId) && i.status !== 'void' && !isMembership(i.text ?? ''));
     const status: PortalStatus = contract ? 'contract' : hidden.has(member.externalId) ? 'ignored' : proposal ? 'proposal' : invoices.length > 0 ? 'invoice_only' : 'no_invoice';
-    return { member, status, inLatestList: member.lastSeenInListAt === latest, contactIds, nameMatch, contractId: contract?.id ?? null, proposalId: proposal?.id ?? null, invoices };
+    return { member, status, inLatestList: member.lastSeenInListAt === latest, contactIds, nameMatch, contractId: contract?.id ?? null, proposalId: proposal?.id ?? null, invoices, sharedWith: [] };
   });
+  for (const v of views) v.sharedWith = views.filter((o) => o !== v && o.contactIds.some((id) => v.contactIds.includes(id))).map((o) => o.member.id);
   return views.sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status) || a.member.name.localeCompare(b.member.name, 'de'));
 }
 
 export function portalSummary(v: PortalView[]): { total: number; contract: number; proposal: number; invoiceOnly: number; noInvoice: number; ignored: number; notInList: number; listAt: string | null } {
-  const count = (st: PortalStatus) => v.filter((x) => x.status === st).length;
+  // Ein Kontakt, den mehrere Mitglieder treffen, zählt je Status nur einmal.
+  const key = (x: PortalView) => x.contractId ?? x.proposalId ?? (x.contactIds.length > 0 ? [...x.contactIds].sort().join('+') : x.member.id);
+  const count = (st: PortalStatus) => new Set(v.filter((x) => x.status === st).map(key)).size;
   const listAt = v.reduce<string | null>((max, x) => (max === null || x.member.lastSeenInListAt > max ? x.member.lastSeenInListAt : max), null);
   return {
     total: v.filter((x) => x.status !== 'ignored').length, contract: count('contract'), proposal: count('proposal'), invoiceOnly: count('invoice_only'), noInvoice: count('no_invoice'), ignored: count('ignored'),
