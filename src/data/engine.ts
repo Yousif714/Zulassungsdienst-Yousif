@@ -418,7 +418,10 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       const contractId = ctx.newId(); // zuerst: created[0] ist die Vertrags-ID
       const p = portalProposal(view);
       const mails = view.member.emails?.length ? view.member.emails : [view.member.email];
-      const { contacts, contactId } = attachContact(s, p, e.contactId, ctx.newId, mails);
+      // Gleiche Zuordnung wie die Status-Ableitung (portalViews): Ref, dann beliebige Mitglieds-E-Mail, Name nur mit Bestätigung.
+      const hit = view.contactIds[0] ?? null;
+      const found = hit !== null ? { match: 'ref' as const, contactId: hit, name: null } : view.nameMatch ? { match: 'name' as const, contactId: view.nameMatch.contactId, name: view.nameMatch.name } : { match: 'none' as const, contactId: null, name: null };
+      const { contacts, contactId } = attachContact(s, p, e.contactId, ctx.newId, { found, emails: mails });
       const contract: MemberContract = { ...e.draft, id: contractId, contactId, billing: 'legacy', origin: p.sources };
       return owner({ state: { ...s, contacts, contracts: [...s.contracts, contract] }, text: `Vertrag angelegt (Portal): ${view.member.name}, ${e.draft.installments} × ${formatEuro(e.draft.installmentCents)}` });
     }
@@ -471,8 +474,8 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
 }
 
 /** Kontakt zu einem Vorschlag: vorhandenen (Ref, E-Mail, bestätigter Namenstreffer) um Refs ergänzen, sonst neu anlegen. */
-function attachContact(s: AppState, p: ContractProposal, chosen: string | null, newId: () => string, emails?: string[]): { contacts: Contact[]; contactId: string } {
-  const found = findContactFor(p, s.contacts);
+function attachContact(s: AppState, p: ContractProposal, chosen: string | null, newId: () => string, portal?: { found: ReturnType<typeof findContactFor>; emails: string[] }): { contacts: Contact[]; contactId: string } {
+  const found = portal?.found ?? findContactFor(p, s.contacts);
   const reuse = found.contactId !== null && (found.match === 'ref' || found.match === 'email' || (found.match === 'name' && chosen === found.contactId));
   if (reuse) {
     const contactId = found.contactId!;
@@ -485,7 +488,7 @@ function attachContact(s: AppState, p: ContractProposal, chosen: string | null, 
     return { contacts, contactId };
   }
   const contactId = newId();
-  const c: Contact = { id: contactId, company: 'nexus', kind: 'member', name: p.name, phones: [], emails: emails ?? (p.email ? [p.email] : []), externalRefs: [...p.contactRefs] };
+  const c: Contact = { id: contactId, company: 'nexus', kind: 'member', name: p.name, phones: [], emails: portal?.emails ?? (p.email ? [p.email] : []), externalRefs: [...p.contactRefs] };
   return { contacts: [...s.contacts, c], contactId };
 }
 

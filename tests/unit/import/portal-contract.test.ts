@@ -49,6 +49,15 @@ test('E-Mail-Kontakt wird genutzt und um Portal-Ref ergänzt', () => {
   expect(r.state.contacts[0].externalRefs).toEqual([{ connectionId: 'portal_nexus', externalId: 'neu@example.de' }]);
 });
 
+test('Kontakt mit nur der Zweit-E-Mail wird wiederverwendet', () => {
+  const s0: AppState = { ...portalState, portalMembers: portalState.portalMembers.map((m) => (m.externalId === 'neu@example.de' ? { ...m, emails: ['neu@example.de', 'zweit@example.de'] } : m)) };
+  const s = withContact(s0, { emails: ['Zweit@example.de'] });
+  const r = applyEvent(s, e, ctx());
+  expect(r.state.contacts).toHaveLength(1);
+  expect(r.state.contracts[0].contactId).toBe('k1');
+  expect(r.state.contacts[0].externalRefs).toEqual([{ connectionId: 'portal_nexus', externalId: 'neu@example.de' }]);
+});
+
 test('Namenstreffer nur mit Bestätigung wiederverwendet', () => {
   const s = withContact(portalState, { name: 'Paula Neu' });
   const no = applyEvent(s, e, ctx());
