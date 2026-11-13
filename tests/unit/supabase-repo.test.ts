@@ -93,6 +93,16 @@ describe('Supabase-Repository: Portal-Tabellen fehlen noch', () => {
     expect((await repos.state.load()).state.portalMembers).toEqual([]);
   });
 
+  it('fehlende Tabelle order_confirmations → leere Liste, App lädt', async () => {
+    const base = fakeClient([], () => []) as unknown as { from: (t: string) => Record<string, unknown> };
+    const client = { ...base, from: (t: string) => {
+      const b = base.from(t);
+      if (t === 'order_confirmations') b.then = (resolve: (r: unknown) => void) => resolve({ data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.order_confirmations' in the schema cache" } });
+      return b;
+    } } as unknown as SupabaseClient;
+    expect((await createSupabaseReposFromClient(client).state.load()).state.orderConfirmations).toEqual([]);
+  });
+
   it('anderer Fehler (Netz, Rechte) → load wirft', async () => {
     const repos = createSupabaseReposFromClient(clientWithPortalError({ message: 'FetchError: network down' }));
     await expect(repos.state.load()).rejects.toThrow(/portal_members/);

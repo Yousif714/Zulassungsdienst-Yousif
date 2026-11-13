@@ -6,8 +6,8 @@ import type { AppState } from '@/domain/types';
 /** `ord` = Position im AppState-Array; die Persistenz muss danach sortieren (kein impliziter Tabellenreihenfolge-Vertrag). */
 export type Row = { id: string; ord: number; data: unknown; connection_id?: string | null; external_id?: string | null; dedupe_key?: string };
 
-type ArrayKey = 'connections' | 'contacts' | 'contracts' | 'payments' | 'invoices' | 'messages' | 'commitments' | 'events' | 'calls' | 'content' | 'vehicles' | 'jobs' | 'actions' | 'subscriptions' | 'portalMembers';
-const SIMPLE: ArrayKey[] = ['connections', 'contacts', 'contracts', 'payments', 'invoices', 'messages', 'commitments', 'events', 'calls', 'content', 'vehicles', 'jobs', 'actions', 'subscriptions', 'portalMembers'];
+type ArrayKey = 'connections' | 'contacts' | 'contracts' | 'payments' | 'invoices' | 'messages' | 'commitments' | 'events' | 'calls' | 'content' | 'vehicles' | 'jobs' | 'actions' | 'subscriptions' | 'portalMembers' | 'orderConfirmations';
+const SIMPLE: ArrayKey[] = ['connections', 'contacts', 'contracts', 'payments', 'invoices', 'messages', 'commitments', 'events', 'calls', 'content', 'vehicles', 'jobs', 'actions', 'subscriptions', 'portalMembers', 'orderConfirmations'];
 
 /** AppState-Schlüssel → Tabelle (job_runs läuft ausschließlich über claimJobRun). */
 export const TABLES = {
@@ -17,10 +17,11 @@ export const TABLES = {
   ibanLinks: 'iban_links', exceptions: 'contract_exceptions', audit: 'audit', settings: 'settings',
   subscriptions: 'subscriptions', dismissedProposals: 'dismissed_proposals',
   portalMembers: 'portal_members', ignoredPortalMembers: 'ignored_portal_members',
+  orderConfirmations: 'order_confirmations',
 } as const;
 export type TableName = (typeof TABLES)[keyof typeof TABLES];
 /** Tabellen mit Schlüsselspalten connection_id/external_id (eindeutig je Quelle). */
-export const WITH_EXTERNAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['payments', 'invoices', 'messages', 'events', 'subscriptions', 'portal_members']);
+export const WITH_EXTERNAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['payments', 'invoices', 'messages', 'events', 'subscriptions', 'portal_members', 'order_confirmations']);
 const TABLE_NAMES = [...new Set(Object.values(TABLES))] as TableName[];
 
 export type ChangeSet = Record<TableName, { upsert: Row[]; delete: string[] }>;

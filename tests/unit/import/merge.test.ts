@@ -122,3 +122,17 @@ test('ignorierte oder Stripe-Auszahlungs-Zahlungen sind kein Original', () => {
   const s = mergeBatch(hidden, { ...emptyBatch(), payments: [bankPay('r1', -1000, '2026-10-02')] }, seq()).state;
   expect(s.payments.map((p) => p.externalId)).toEqual(['o1']);
 });
+
+test('Auftragsbestätigungen: eigene Liste, Kontakt aufgelöst (auch nachträglich), idempotent, nie Rechnung', () => {
+  const ab = { company: 'nexus' as const, connectionId: 'lexware_nexus' as const, externalId: 'oc-1', contactExternalId: 'c-77', number: 'AB-1', totalCents: 120000, issuedOn: '2026-07-01', status: 'open' as const, text: 'Mitgliedschaft 12 Monate' };
+  const a = mergeBatch(empty, { ...emptyBatch(), orderConfirmations: [ab] }, seq()).state;
+  expect(a.orderConfirmations).toHaveLength(1);
+  expect(a.orderConfirmations[0].contactId).toBeNull();
+  expect(a.invoices).toEqual([]);
+  const b = mergeBatch(a, { ...emptyBatch(), contacts: lexContactsNexus }, seq()).state;
+  const murat = b.contacts.find((c) => c.name === 'Murat Demir')!;
+  expect(b.orderConfirmations[0].contactId).toBe(murat.id);
+  const c = mergeBatch(b, { ...emptyBatch(), orderConfirmations: [{ ...ab, totalCents: 130000 }] }, seq());
+  expect(c.state.orderConfirmations).toHaveLength(1);
+  expect(c.state.orderConfirmations[0]).toMatchObject({ id: b.orderConfirmations[0].id, totalCents: 130000, contactId: murat.id });
+});

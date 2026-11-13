@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 
-import { lexwareCompany, mapLexwareContacts, mapLexwareInvoice } from '@/domain/import/lexware';
-import { idOf, lexContacts, lexDetail, updatedOf } from '../../fixtures';
+import { lexwareCompany, mapLexwareContacts, mapLexwareInvoice, mapLexwareOrderConfirmation } from '@/domain/import/lexware';
+import { idOf, lexContacts, lexDetail, lexOrderConfirmation, updatedOf } from '../../fixtures';
 
 const inv = (n: string) => mapLexwareInvoice(lexDetail(n), 'lexware_nexus');
 const withTotal = (d: object, gross: number) => ({ ...d, totalPrice: { currency: 'EUR', totalGrossAmount: gross } });
@@ -56,4 +56,18 @@ test('Firma: Kontaktpersonen (leere weggelassen), Person ohne Feld', () => {
   const cs = mapLexwareContacts(lexContacts('nexus'), 'lexware_nexus');
   expect(cs.find((c) => c.name === 'Fahrschule Beispiel GmbH')?.contactPersons).toEqual(['Anna Beispiel']);
   expect(cs.find((c) => c.name === 'Murat Demir')).not.toHaveProperty('contactPersons');
+});
+
+test('Auftragsbestätigung: Felder, Text, Cent; keine Forderungsfelder', () => {
+  const ab = mapLexwareOrderConfirmation(lexOrderConfirmation('AB-2001'), 'lexware_nexus');
+  expect(ab).toEqual({
+    company: 'nexus', connectionId: 'lexware_nexus', externalId: 'oc-AB-2001', number: 'AB-2001', totalCents: 120000, issuedOn: '2026-07-03',
+    status: 'open', contactExternalId: 'c-84', sourceUpdatedAt: '2026-07-03T09:00:00.000+02:00', text: expect.stringContaining('NEXUS-Mitgliedschaft 12 Monate'),
+  });
+  expect(ab).not.toHaveProperty('openCents');
+  expect(ab).not.toHaveProperty('dueDate');
+  expect(mapLexwareOrderConfirmation(lexOrderConfirmation('AB-Z-1'), 'lexware_zulassung')).toMatchObject({ company: 'zulassung', connectionId: 'lexware_zulassung', number: 'AB-Z-1', totalCents: 23800 });
+  expect(mapLexwareOrderConfirmation({ ...lexOrderConfirmation('AB-2002'), voucherStatus: 'voided' }, 'lexware_nexus').status).toBe('void');
+  const bare = mapLexwareOrderConfirmation({ id: 'x', voucherNumber: 'AB-9', voucherDate: '2026-07-01T00:00:00.000+02:00' }, 'lexware_nexus');
+  expect(bare).toEqual({ company: 'nexus', connectionId: 'lexware_nexus', externalId: 'x', number: 'AB-9', totalCents: 0, issuedOn: '2026-07-01', status: 'open' });
 });

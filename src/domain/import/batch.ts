@@ -1,4 +1,4 @@
-import type { Contact, ExternalRef, Invoice, IsoDate, Payment, Subscription } from '@/domain/types';
+import type { Contact, ExternalRef, Invoice, IsoDate, OrderConfirmation, Payment, Subscription } from '@/domain/types';
 
 /** Erstimport holt nur Daten ab diesem Tag; danach inkrementell. */
 export const IMPORT_SINCE: IsoDate = '2026-06-01';
@@ -8,6 +8,7 @@ export const cursorOutdated = (since: unknown): boolean => typeof since !== 'str
 
 export type ImportedContact = Omit<Contact, 'id' | 'externalRefs'> & { externalRefs: ExternalRef[] };
 export type ImportedInvoice = Omit<Invoice, 'id' | 'contactId'>;
+export type ImportedOrderConfirmation = Omit<OrderConfirmation, 'id' | 'contactId'>;
 export type ImportedPayment = Omit<Payment, 'id'>;
 export type ImportedSubscription = Omit<Subscription, 'id' | 'contractId' | 'confirmedPriceCents' | 'confirmedEndDate' | 'disputes'>;
 export interface ImportedDispute { externalId: string; invoiceExternalId: string | null }
@@ -18,6 +19,7 @@ export interface ImportBatch {
   payments: ImportedPayment[];
   subscriptions: ImportedSubscription[];
   disputes: ImportedDispute[];
+  orderConfirmations: ImportedOrderConfirmation[];
 }
 
-export const emptyBatch = (): ImportBatch => ({ contacts: [], invoices: [], payments: [], subscriptions: [], disputes: [] });
+export const emptyBatch = (): ImportBatch => ({ contacts: [], invoices: [], payments: [], subscriptions: [], disputes: [], orderConfirmations: [] });

@@ -108,12 +108,52 @@
       },
       "phoneNumbers": {},
       "archived": false
+    },
+    {
+      "id": "c-84",
+      "version": 1,
+      "roles": {
+        "customer": {
+          "number": 10084
+        }
+      },
+      "person": {
+        "firstName": "Tom",
+        "lastName": "Beispiel"
+      },
+      "emailAddresses": {
+        "business": [
+          "tom@example.de"
+        ]
+      },
+      "phoneNumbers": {},
+      "archived": false
+    },
+    {
+      "id": "c-85",
+      "version": 1,
+      "roles": {
+        "customer": {
+          "number": 10085
+        }
+      },
+      "person": {
+        "firstName": "Lisa",
+        "lastName": "Beispiel"
+      },
+      "emailAddresses": {
+        "business": [
+          "lisa@example.de"
+        ]
+      },
+      "phoneNumbers": {},
+      "archived": false
     }
   ],
   "first": true,
   "last": true,
   "totalPages": 1,
-  "totalElements": 5,
+  "totalElements": 7,
   "number": 0,
   "size": 100
 }

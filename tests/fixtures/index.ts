@@ -15,6 +15,12 @@ import invRE1110 from './lexware/invoice-RE-1110.json';
 import invRZ500 from './lexware/invoice-RZ-500.json';
 import voucherlistNexus from './lexware/voucherlist-nexus.json';
 import voucherlistZulassung from './lexware/voucherlist-zulassung.json';
+import ab2001 from './lexware/order-confirmation-AB-2001.json';
+import ab2002 from './lexware/order-confirmation-AB-2002.json';
+import ab2003 from './lexware/order-confirmation-AB-2003.json';
+import abZ1 from './lexware/order-confirmation-AB-Z-1.json';
+import voucherlistAbNexus from './lexware/voucherlist-orderconfirmations-nexus.json';
+import voucherlistAbZulassung from './lexware/voucherlist-orderconfirmations-zulassung.json';
 
 import type { StripeRaw } from '@/domain/import/stripe';
 
@@ -59,9 +65,23 @@ export const idOf = (number: string): string => lexDetail(number).id;
 /** `updatedDate` der Rechnung zur Nummer. */
 export const updatedOf = (number: string): string => lexDetail(number).updatedDate;
 
+/** Synthetische Lexware-Auftragsbestätigungen (Rohdaten wie von GET /v1/order-confirmations/{id}). */
+const abDetails: LexDetail[] = [ab2001, ab2002, ab2003, abZ1] as LexDetail[];
+/** AB-2001: Tom (c-84) Mitgliedschaft 12 Monate · AB-2002: Lisa (c-85) Workshop · AB-2003: Murat (c-77, hat Rechnungen) · AB-Z-1: Zulassung. */
+export const lexOrderConfirmation = (number: string): LexDetail => {
+  const d = abDetails.find((x) => x.voucherNumber === number);
+  if (!d) throw new Error(`Lexware-AB-Fixture fehlt: ${number}`);
+  return d;
+};
+/** Exakte Belegliste-Anfrage für Auftragsbestätigungen (Seite `page`); muss zur Anfrage des Connectors passen. */
+export const lexAbListQuery = (page: number): string =>
+  `/v1/voucherlist?${new URLSearchParams({ voucherType: 'orderconfirmation', voucherStatus: 'any', voucherDateFrom: '2026-06-01', sort: 'voucherDate,ASC', size: '100', page: String(page) }).toString()}`;
+
 /** Pfad → Lexware-Antwort-JSON (Verbindung NEXUS). Zulassung: `lexwareRoutesZulassung`. */
 export const lexwareRoutes: Record<string, unknown> = {
   '/v1/voucherlist': voucherlistNexus,
+  [lexAbListQuery(0)]: voucherlistAbNexus,
+  ...Object.fromEntries(['AB-2001', 'AB-2002', 'AB-2003'].map((n) => [`/v1/order-confirmations/${lexOrderConfirmation(n).id}`, lexOrderConfirmation(n)])),
   '/v1/contacts': contactsNexus,
   ...Object.fromEntries(lexInvoices('nexus').map((d) => [`/v1/invoices/${d.id}`, d])),
 };
@@ -69,6 +89,8 @@ export const lexwareRoutesZulassung: Record<string, unknown> = {
   '/v1/voucherlist': voucherlistZulassung,
   '/v1/contacts': contactsZulassung,
   [`/v1/invoices/${idOf('RZ-500')}`]: lexDetail('RZ-500'),
+  [lexAbListQuery(0)]: voucherlistAbZulassung,
+  [`/v1/order-confirmations/${lexOrderConfirmation('AB-Z-1').id}`]: lexOrderConfirmation('AB-Z-1'),
 };
 
 /** Query-String der Stripe-Anfragen (muss zur Anfrage des Connectors passen; Reihenfolge fest). */

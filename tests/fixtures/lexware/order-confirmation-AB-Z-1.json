@@ -1,0 +1,32 @@
+{
+  "id": "oc-AB-Z-1",
+  "organizationId": "org-test",
+  "createdDate": "2026-06-15T09:00:00.000+02:00",
+  "updatedDate": "2026-06-15T09:00:00.000+02:00",
+  "version": 1,
+  "language": "de",
+  "archived": false,
+  "voucherStatus": "open",
+  "voucherNumber": "AB-Z-1",
+  "voucherDate": "2026-06-15T00:00:00.000+02:00",
+  "address": {
+    "contactId": "c-200"
+  },
+  "lineItems": [
+    {
+      "type": "custom",
+      "name": "Zulassung Neufahrzeug",
+      "description": "inkl. Kennzeichen",
+      "quantity": 1,
+      "unitName": "Stück"
+    }
+  ],
+  "totalPrice": {
+    "currency": "EUR",
+    "totalNetAmount": 200.0,
+    "totalGrossAmount": 238.0
+  },
+  "title": "Auftragsbestätigung",
+  "introduction": "Vielen Dank für Ihren Auftrag.",
+  "remark": "Die Rechnung folgt separat."
+}

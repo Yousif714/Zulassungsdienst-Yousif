@@ -1,0 +1,32 @@
+{
+  "id": "oc-AB-2002",
+  "organizationId": "org-test",
+  "createdDate": "2026-07-10T09:00:00.000+02:00",
+  "updatedDate": "2026-07-10T09:00:00.000+02:00",
+  "version": 1,
+  "language": "de",
+  "archived": false,
+  "voucherStatus": "open",
+  "voucherNumber": "AB-2002",
+  "voucherDate": "2026-07-10T00:00:00.000+02:00",
+  "address": {
+    "contactId": "c-85"
+  },
+  "lineItems": [
+    {
+      "type": "custom",
+      "name": "Workshop-Paket Social Media",
+      "description": "Zwei Termine",
+      "quantity": 1,
+      "unitName": "Stück"
+    }
+  ],
+  "totalPrice": {
+    "currency": "EUR",
+    "totalNetAmount": 420.17,
+    "totalGrossAmount": 500.0
+  },
+  "title": "Auftragsbestätigung",
+  "introduction": "Vielen Dank für Ihren Auftrag.",
+  "remark": "Die Rechnung folgt separat."
+}

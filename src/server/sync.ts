@@ -61,7 +61,7 @@ export async function syncConnections(repos: Repos, deps: SyncDeps): Promise<Par
         continue;
       }
       const known = new Map<string, string | undefined>(
-        id === 'bank_qonto' ? [] : state.invoices.filter((i) => i.connectionId === id).map((i) => [i.externalId, i.sourceUpdatedAt]),
+        id === 'bank_qonto' ? [] : [...state.invoices, ...(state.orderConfirmations ?? [])].filter((i) => i.connectionId === id).map((i) => [i.externalId, i.sourceUpdatedAt]),
       );
       const ctx: PullContext = { fetch: deps.fetch, key, sleep: deps.sleep, now: deps.now, deadline, known };
       const cursor = conn.sync?.cursor ?? null;

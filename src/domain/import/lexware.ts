@@ -1,5 +1,5 @@
 import type { Company, Invoice, IsoDate } from '../types';
-import type { ImportedContact, ImportedInvoice } from './batch';
+import type { ImportedContact, ImportedInvoice, ImportedOrderConfirmation } from './batch';
 
 export type LexwareConnection = 'lexware_nexus' | 'lexware_zulassung';
 
@@ -60,6 +60,28 @@ export function mapLexwareInvoice(detail: unknown, conn: LexwareConnection): Imp
     issuedOn,
     dueDate: d.dueDate ? day(d.dueDate) : issuedOn,
     status,
+    ...(text ? { text } : {}),
+    ...(d.address?.contactId ? { contactExternalId: d.address.contactId } : {}),
+    ...(d.updatedDate ? { sourceUpdatedAt: d.updatedDate } : {}),
+  };
+}
+
+/**
+ * Lexware-Auftragsbestätigung (GET /v1/order-confirmations/{id}) → AB. Gleiche Felder wie die Rechnung
+ * (voucherNumber, voucherDate, voucherStatus, address.contactId, totalPrice.totalGrossAmount, Texte); ohne Restbetrag
+ * und Fälligkeit, denn eine AB ist keine Forderung.
+ */
+export function mapLexwareOrderConfirmation(detail: unknown, conn: LexwareConnection): ImportedOrderConfirmation {
+  const d = detail as Obj;
+  const text = invoiceText(d);
+  return {
+    company: lexwareCompany[conn],
+    connectionId: conn,
+    externalId: d.id,
+    number: d.voucherNumber,
+    totalCents: euroToCents(d.totalPrice?.totalGrossAmount),
+    issuedOn: day(d.voucherDate),
+    status: d.voucherStatus === 'voided' ? 'void' : 'open',
     ...(text ? { text } : {}),
     ...(d.address?.contactId ? { contactExternalId: d.address.contactId } : {}),
     ...(d.updatedDate ? { sourceUpdatedAt: d.updatedDate } : {}),

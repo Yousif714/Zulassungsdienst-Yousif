@@ -99,3 +99,15 @@ describe('Migration Portal', () => {
     expect(p).toMatch(/v_allowed constant text\[\] := array\[[^\]]*'ignored_portal_members'/);
   });
 });
+
+describe('Migration Auftragsbestätigungen', () => {
+  it('idempotent, apply_changes kennt order_confirmations als Tabelle mit Schlüsselspalten', () => {
+    const p = read(`${DIR}/20261116000000_auftragsbestaetigungen.sql`);
+    expect(p).toContain('create table if not exists order_confirmations (');
+    expect(p).toContain('create unique index if not exists order_confirmations_connection_external_key');
+    expect(p).toContain('alter table order_confirmations enable row level security;');
+    expect(p).toMatch(/v_external constant text\[\] := array\[[^\]]*'order_confirmations'/);
+    expect(p).toMatch(/v_allowed constant text\[\] := array\[[^\]]*'ignored_portal_members', 'order_confirmations'/);
+    expect(p).not.toMatch(/drop table|truncate|alter table \w+ drop/);
+  });
+});

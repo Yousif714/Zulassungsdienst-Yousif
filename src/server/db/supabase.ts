@@ -14,7 +14,7 @@ function columns(t: TableName): string {
 }
 
 /** Tabellen, die fehlen dürfen (Migration noch nicht eingespielt). */
-const OPTIONAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['portal_members', 'ignored_portal_members']);
+const OPTIONAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['portal_members', 'ignored_portal_members', 'order_confirmations']);
 
 function fail(what: string, error: { message: string; code?: string }): never {
   throw Object.assign(new Error(`Supabase ${what}: ${error.message}`), { code: error.code });
