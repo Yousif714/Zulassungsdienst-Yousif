@@ -18,6 +18,9 @@ describe('readEnv', () => {
     });
   });
 
+  test('Qonto-Schlüssel optional', () => expect(readEnv(FULL).qontoLogin).toBeUndefined());
+  test('Qonto-Schlüssel gelesen', () => expect(readEnv({ ...FULL, QONTO_LOGIN: 'l', QONTO_SECRET_KEY: 's' })).toMatchObject({ qontoLogin: 'l', qontoSecretKey: 's' }));
+
   test('Schlüssel sind optional', () => {
     const e = readEnv(FULL);
     expect([e.stripeRestrictedKey, e.stripeWebhookSecret, e.lexwareNexusApiKey, e.lexwareZulassungApiKey]).toEqual([undefined, undefined, undefined, undefined]);

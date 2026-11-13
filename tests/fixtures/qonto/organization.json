@@ -1,0 +1,8 @@
+{
+  "organization": {
+    "slug": "nexus-test",
+    "bank_accounts": [
+      { "id": "acc-main", "slug": "nexus-main", "iban": "DE89 3704 0044 0532 0130 00", "currency": "EUR", "status": "active" }
+    ]
+  }
+}

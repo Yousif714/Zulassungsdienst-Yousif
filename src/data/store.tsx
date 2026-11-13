@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { DemoProvider } from '@/domain/actions/demo-provider';
 import { REJECT_REASON_DE } from '@/domain/actions/machine';
 import { now } from '@/domain/clock';
+import { ensureCatalogConnections, migrateState } from '@/domain/migrate';
 import type { StoreEvent } from '@/domain/events';
 import { newId } from '@/domain/ids';
 import type { AppState } from '@/domain/types';
@@ -71,7 +72,7 @@ export function loadInitial(
   } catch {
     s = createDemoState();
   }
-  return { state: refresh(s, at), stripReset: false };
+  return { state: refresh(ensureCatalogConnections(migrateState(s)), at), stripReset: false };
 }
 
 function DemoStoreProvider({ children }: { children: ReactNode }) {

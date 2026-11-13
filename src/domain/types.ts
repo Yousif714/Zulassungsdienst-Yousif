@@ -1,9 +1,9 @@
 export type Company = 'nexus' | 'zulassung';
 export type IsoDate = string; // 'YYYY-MM-DD'
-export type ConnectionId = 'lexware_nexus'|'lexware_zulassung'|'stripe_nexus'|'bank'|'gmail'|'icloud'|'info_mail'|'calendar'|'whatsapp_kunden'|'whatsapp_assistent';
+export type ConnectionId = 'lexware_nexus'|'lexware_zulassung'|'stripe_nexus'|'bank_qonto'|'bank_sparkasse'|'gmail'|'icloud'|'info_mail'|'calendar'|'whatsapp_kunden'|'whatsapp_assistent';
 export interface ExternalRef { connectionId: ConnectionId; externalId: string }
 export interface Connection { id: ConnectionId; company: Company | null; label: string; status: 'connected'|'missing'|'error'; lastSuccessAt: string | null; lastError?: string; sync?: { cursor: string | null; complete: boolean; failures: number } }
-export interface Contact { id: string; company: Company; kind: 'member'|'private'|'dealer'; name: string; phones: string[]; emails: string[]; externalRefs?: ExternalRef[] }
+export interface Contact { id: string; company: Company; kind: 'member'|'private'|'dealer'; name: string; phones: string[]; emails: string[]; externalRefs?: ExternalRef[]; contactPersons?: string[] }
 export interface MemberContract { id: string; contactId: string; totalCents: number; installments: number; installmentCents: number; dueDay: number; startDate: IsoDate; billing: 'legacy'|'stripe'; specialTerms?: string; catchUpMode: 'first_rate'|'spread'; origin?: ExternalRef[] }
 export type ContractException =
   | { kind: 'deferral'; from: IsoDate; to: IsoDate }
@@ -11,8 +11,9 @@ export type ContractException =
   | { kind: 'due_day_shift'; from: IsoDate; newDueDay: number };
 export interface Installment { no: number; dueDate: IsoDate; amountCents: number }
 export interface InstallmentState extends Installment { paidCents: number; paidOn: IsoDate | null }
-export interface Payment { id: string; company: Company; source: 'bank'|'stripe'|'manual'; connectionId: ConnectionId | null; externalId: string; amountCents: number; bookedOn: IsoDate; payerName?: string; iban?: string; reference?: string; kind: 'incoming'|'stripe_payout'; subscriptionExternalId?: string; refundOf?: string }
-export interface Allocation { paymentId: string; contractId: string; amountCents: number; method: 'auto'|'confirmed'|'manual' }
+export interface Payment { id: string; company: Company; source: 'bank'|'stripe'|'manual'; connectionId: ConnectionId | null; externalId: string; amountCents: number; bookedOn: IsoDate; payerName?: string; iban?: string; reference?: string; kind: 'incoming'|'stripe_payout'; subscriptionExternalId?: string; refundOf?: string; ignoredAt?: string }
+interface AllocationBase { paymentId: string; amountCents: number; method: 'auto'|'confirmed'|'manual' }
+export type Allocation = (AllocationBase & { contractId: string; invoiceId?: undefined }) | (AllocationBase & { invoiceId: string; contractId?: undefined })
 export interface IbanLink { iban: string; contactId: string; confirmedAt: string }
 export interface Invoice { id: string; company: Company; source: 'lexware'|'stripe'; connectionId: ConnectionId; externalId: string; contactId: string | null; number: string; totalCents: number; openCents: number; issuedOn: IsoDate; dueDate: IsoDate; status: 'open'|'paid'|'overdue'|'void'; text?: string; settledByPaymentId?: string; contactExternalId?: string; sourceUpdatedAt?: string }
 export interface Message { id: string; channel: 'whatsapp'|'email'; connectionId: ConnectionId; externalId: string; threadId: string; direction: 'in'|'out'; from: string; to: string; body: string; sentAt: string; contactId: string | null; jobId: string | null; needsReply: boolean; doneManually?: boolean }

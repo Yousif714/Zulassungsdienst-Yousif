@@ -83,11 +83,11 @@ test('WhatsApp-Assistent: Doppelklick auf Senden sendet nur einmal', async ({ pa
 
 test('Verbindungen: Anleitung für Phase 2 je Verbindung', async ({ page }) => {
   await page.goto('/verbindungen?reset=1');
-  const bank = page.getByTestId('conn-bank');
+  const bank = page.getByTestId('conn-bank_qonto');
   await expect(bank).toContainText('Stand vor 10 Min.');
-  await page.getByTestId('conn-help-bank').getByText('So verbindest du das (Phase 2)').click();
-  await expect(page.getByTestId('conn-help-bank')).toContainText('CAMT');
-  await expect(page.getByText('So verbindest du das (Phase 2)')).toHaveCount(10);
+  await page.getByTestId('conn-help-bank_qonto').getByText('So verbindest du das (Phase 2)').click();
+  await expect(page.getByTestId('conn-help-bank_qonto')).toContainText('QONTO_LOGIN');
+  await expect(page.getByText('So verbindest du das (Phase 2)')).toHaveCount(11);
 });
 
 test('Protokoll: jeder Eintrag, neueste zuerst, mit Demo-Etikett', async ({ page }) => {

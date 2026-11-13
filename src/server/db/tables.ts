@@ -1,5 +1,6 @@
 import 'server-only';
 import { createEmptyState } from '@/data/empty-state';
+import { migrateState } from '@/domain/migrate';
 import type { AppState } from '@/domain/types';
 
 /** `ord` = Position im AppState-Array; die Persistenz muss danach sortieren (kein impliziter Tabellenreihenfolge-Vertrag). */
@@ -46,12 +47,12 @@ export function toRows(s: AppState): Record<TableName, Row[]> {
   r.assistant_messages = s.assistantChat.map((x, i) => ({ id: x.id, ord: i, data: x }));
   const seen = new Map<string, number>();
   r.allocations = s.allocations.map((x, i) => {
-    const pair = `${x.paymentId}:${x.contractId}`;
+    const pair = `${x.paymentId}:${x.contractId ?? `inv:${x.invoiceId}`}`;
     const n = seen.get(pair) ?? 0;
     seen.set(pair, n + 1);
     return { id: `${pair}:${n}`, ord: i, data: x };
   });
-  r.iban_links = s.ibanLinks.map((x, i) => ({ id: x.iban, ord: i, data: x }));
+  r.iban_links = s.ibanLinks.map((x, i) => ({ id: `${x.iban}:${x.contactId}`, ord: i, data: x }));
   r.contract_exceptions = Object.entries(s.exceptions).map(([id, data], i) => ({ id, ord: i, data }));
   r.audit = s.audit.map((x, i) => ({ id: auditId(i), ord: i, data: x }));
   r.dismissed_proposals = s.dismissedProposals.map((x, i) => ({ id: x, ord: i, data: x }));
@@ -76,9 +77,11 @@ export function fromRows(input: Partial<Record<TableName, Row[]>>): AppState {
   if (settings) s.settings = settings.data as AppState['settings'];
   // Frische Datenbank oder neuer Katalog-Eintrag: jede bekannte Verbindung existiert immer (sonst fehlen
   // Einrichtungs-Checkliste und „Noch nichts verbunden“).
-  const known = new Set(s.connections.map((c) => c.id));
-  for (const c of createEmptyState().connections) if (!known.has(c.id)) s.connections.push(c);
-  return s;
+  // Erst migrieren (bank → bank_qonto), sonst entstünde bank_qonto doppelt.
+  const m = migrateState(s);
+  const known = new Set(m.connections.map((c) => c.id));
+  const connections = [...m.connections, ...createEmptyState().connections.filter((c) => !known.has(c.id))];
+  return { ...m, connections };
 }
 
 export function diffState(prev: AppState, next: AppState): ChangeSet {

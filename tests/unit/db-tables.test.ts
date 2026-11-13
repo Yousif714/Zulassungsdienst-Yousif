@@ -5,7 +5,7 @@ import { toRows, fromRows, diffState, TABLES } from '@/server/db/tables';
 import { createEmptyState } from '@/data/empty-state';
 import type { Subscription } from '@/domain/types';
 
-import { NOW_0930 as NOW } from './helpers';
+import { NOW_0930 as NOW, stateWith } from './helpers';
 
 const demo = () => {
   const s = createDemoState();
@@ -20,6 +20,20 @@ describe('tables', () => {
   it('Rundreise toRows/fromRows ist verlustfrei', () => {
     const s = demo();
     expect(fromRows(toRows(s))).toEqual(s);
+  });
+  it('IBAN-Links: gleiche IBAN bei zwei Kontakten ergibt zwei Zeilen mit eindeutiger id; alte Zeile (id = IBAN) wird ersetzt', () => {
+    const l = (contactId: string) => ({ iban: 'DE55', contactId, confirmedAt: 'x' });
+    const prev = { ...demo(), ibanLinks: [l('a')] };
+    const next = { ...prev, ibanLinks: [l('a'), l('b')] };
+    const rows = toRows(next).iban_links;
+    expect(new Set(rows.map((r) => r.id)).size).toBe(2);
+    expect(fromRows(toRows(next)).ibanLinks).toEqual(next.ibanLinks);
+    const d = diffState(prev, next).iban_links;
+    expect(d.upsert.length).toBeGreaterThanOrEqual(1);
+    // Zeilen im bisherigen Format (id = IBAN) bleiben lesbar
+    const old = toRows(prev);
+    old.iban_links = [{ id: 'DE55', ord: 0, data: l('a') }];
+    expect(fromRows(old).ibanLinks).toEqual([l('a')]);
   });
   it('doppelte Allocation-Paare bekommen laufende Nummern', () => {
     const rows = toRows(demo()).allocations;
@@ -98,5 +112,13 @@ describe('Verträge-Tabellen', () => {
     const s = fromRows({});
     expect(s.subscriptions).toEqual([]);
     expect(s.dismissedProposals).toEqual([]);
+  });
+});
+
+describe('Zuordnung auf Rechnung', () => {
+  it('eigene Zeilen-ID, Rundreise', () => {
+    const s = stateWith({ allocations: [{ paymentId: 'p', invoiceId: 'i1', amountCents: 1, method: 'auto' }] });
+    expect(toRows(s).allocations[0].id).toBe('p:inv:i1:0');
+    expect(fromRows(toRows(s)).allocations).toEqual(s.allocations);
   });
 });

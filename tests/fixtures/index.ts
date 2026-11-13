@@ -92,3 +92,37 @@ export const lexwareRoutesPaged: Record<string, unknown> = {
   [vl(0)]: { ...voucherlistNexus, content: voucherlistNexus.content.slice(0, 4), first: true, last: false, totalPages: 2, number: 0 },
   [vl(1)]: { ...voucherlistNexus, content: voucherlistNexus.content.slice(4), first: false, last: true, totalPages: 2, number: 1 },
 };
+
+import qontoOrganizationJson from './qonto/organization.json';
+import qontoTransactionsJson from './qonto/transactions.json';
+
+/** Qonto-Rohdaten (Organisation einkontig, Buchungen eine Seite). */
+export const qontoOrganization = qontoOrganizationJson;
+export const qontoTransactions = qontoTransactionsJson;
+/** Pfad (ohne Query) → Qonto-Antwort-JSON. Mehrseitig/mehrkontig: `qontoRoutesPaged` (Task 7). */
+export const qontoRoutes: Record<string, unknown> = {
+  '/v2/organization': qontoOrganizationJson,
+  '/v2/transactions': qontoTransactionsJson,
+};
+
+const qTx = (ids: string[]) => qontoTransactionsJson.transactions.filter((t) => ids.includes(t.transaction_id));
+const qPage = (ids: string[], page: number, next: number | null) => ({ transactions: qTx(ids), meta: { current_page: page, next_page: next, per_page: 100, total_pages: 2 } });
+const qtq = (account: string, page: number) =>
+  `/v2/transactions?${new URLSearchParams([['bank_account_id', account], ['status[]', 'completed'], ['settled_at_from', '2026-07-31T22:00:00.000Z'], ['sort_by', 'settled_at:asc'], ['per_page', '100'], ['current_page', String(page)]]).toString()}`;
+/** Qonto mit zwei EUR-Konten (acc-2, acc-main), einem USD- und einem geschlossenen Konto (ohne Route: Abruf wäre 404); acc-main hat zwei Seiten. */
+export const qontoRoutesPaged: Record<string, unknown> = {
+  '/v2/organization': {
+    organization: {
+      slug: 'nexus-test',
+      bank_accounts: [
+        { id: 'acc-main', currency: 'EUR', status: 'active' },
+        { id: 'acc-usd', currency: 'USD', status: 'active' },
+        { id: 'acc-closed', currency: 'EUR', status: 'closed' },
+        { id: 'acc-2', currency: 'EUR', status: 'active' },
+      ],
+    },
+  },
+  [qtq('acc-2', 1)]: qPage(['t-return', 't-usd', 't-july'], 1, null),
+  [qtq('acc-main', 1)]: qPage(['t-demir-1', 't-demir-2', 't-krueger-ws'], 1, 2),
+  [qtq('acc-main', 2)]: qPage(['t-stripe', 't-kaya-ref', 't-out'], 2, null),
+};

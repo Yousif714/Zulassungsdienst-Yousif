@@ -4,6 +4,7 @@ export const base: MemberContract = { id:'c1', contactId:'m1', totalCents:120000
 
 import { applyEvent } from '@/data/engine';
 import { executeApproved } from '@/data/executor';
+import type { ExpectedContract, MatchContext } from '@/domain/matching/payments';
 import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { AppState, Connection, Contact, IbanLink, Insight, Invoice, Job, Message, Payment, Vehicle } from '@/domain/types';
 
@@ -17,11 +18,11 @@ export const contacts: Contact[] = [
   { id: 'd-mueller', company: 'zulassung', kind: 'dealer', name: 'Autohaus Müller', phones: [], emails: [] },
 ];
 export const ibanLinks: IbanLink[] = [{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: '2026-10-01T10:00:00Z' }];
-export const expected = new Map<string, { nextRateCents: number; arrearsCents: number }>([
-  ['m-kaya', { nextRateCents: 30000, arrearsCents: 15000 }],
-  ['m-yilmaz', { nextRateCents: 30000, arrearsCents: 0 }],
+export const expected = new Map<string, ExpectedContract>([
+  ['k-kaya', { contactId: 'm-kaya', rateCents: 30000, nextRateCents: 30000, arrearsCents: 15000, openCents: 90000 }],
+  ['k-yilmaz', { contactId: 'm-yilmaz', rateCents: 30000, nextRateCents: 30000, arrearsCents: 0, openCents: 120000 }],
 ]);
-export const ctx = { contacts, ibanLinks, expected };
+export const ctx: MatchContext = { contacts, ibanLinks, expected, invoices: [] };
 
 export const vehicles: Vehicle[] = [
   { id: 'v-bot', contactId: 'd-mueller', vin: 'WVWZZZ1KZAW123456', plate: 'BOT-MK 456', model: 'Golf' },
@@ -31,15 +32,15 @@ export const jobs: Job[] = [
 ];
 
 export function tx(p: Partial<Payment> = {}): Payment {
-  return { id: 'p1', company: 'nexus', source: 'bank', connectionId: 'bank', externalId: 'x1', amountCents: 30000, bookedOn: '2026-11-12', kind: 'incoming', ...p };
+  return { id: 'p1', company: 'nexus', source: 'bank', connectionId: 'bank_qonto', externalId: 'x1', amountCents: 30000, bookedOn: '2026-11-12', kind: 'incoming', ...p };
 }
 export function msg(p: Partial<Message> = {}): Message {
   return { id: 'm1', channel: 'whatsapp', connectionId: 'whatsapp_kunden', externalId: 'e1', threadId: 't1', direction: 'in', from: '+49151000', to: '+49000', body: 'Hallo', sentAt: '2026-11-12T05:30:00Z', contactId: null, jobId: null, needsReply: false, ...p };
 }
 
-const ALL_IDS: Connection['id'][] = ['lexware_nexus','lexware_zulassung','stripe_nexus','bank','gmail','icloud','info_mail','calendar','whatsapp_kunden','whatsapp_assistent'];
+const ALL_IDS: Connection['id'][] = ['lexware_nexus','lexware_zulassung','stripe_nexus','bank_qonto','bank_sparkasse','gmail','icloud','info_mail','calendar','whatsapp_kunden','whatsapp_assistent'];
 export function conn(p: Partial<Connection> = {}): Connection {
-  return { id: 'bank', company: null, label: p.id ?? 'bank', status: 'connected', lastSuccessAt: new Date(NOW_0930.getTime() - 10 * 60_000).toISOString(), ...p };
+  return { id: 'bank_qonto', company: null, label: p.id ?? 'bank_qonto', status: 'connected', lastSuccessAt: new Date(NOW_0930.getTime() - 10 * 60_000).toISOString(), ...p };
 }
 export function stateWith(p: Partial<AppState> = {}): AppState {
   return {
@@ -53,6 +54,8 @@ export function stateWith(p: Partial<AppState> = {}): AppState {
 export function inv(id: string, totalCents: number, p: Partial<Invoice> = {}): Invoice {
   return { id, company: 'zulassung', source: 'lexware', connectionId: 'lexware_zulassung', externalId: `x-${id}`, contactId: 'd-mueller', number: `RE-${id}`, totalCents, openCents: totalCents, issuedOn: '2026-11-10', dueDate: '2026-12-10', status: 'open', ...p };
 }
+export const workshop = inv('i-ws', 14900, { company: 'nexus', connectionId: 'lexware_nexus', contactId: 'm-kaya', number: 'RE-1101', dueDate: '2026-09-26', status: 'overdue', text: 'Workshop' });
+export const member = (id: string) => inv(id, 30000, { company: 'nexus', connectionId: 'lexware_nexus', contactId: 'm-x', contactExternalId: 'c-77', number: id, text: 'NEXUS-Mitgliedschaft 6 Monate, Rate 1' });
 export function ins(dedupeKey: string, p: Partial<Insight> = {}): Insight {
   return { dedupeKey, type: 'reply_waiting', company: null, priority: 'today', title: dedupeKey, body: '', refs: [], nextStep: 'Antwort senden', needsSources: [], ...p };
 }

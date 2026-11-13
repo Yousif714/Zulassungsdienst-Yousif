@@ -15,7 +15,7 @@ afterEach(() => { setClockMode('demo'); setNowForTests(null); });
 describe('leerer Startzustand', () => {
   test('alle Verbindungen fehlen, Listen leer', () => {
     const e = createEmptyState();
-    expect(e.connections.length).toBe(10);
+    expect(e.connections.length).toBe(11);
     expect(e.connections.every((c) => c.status === 'missing' && c.lastSuccessAt === null)).toBe(true);
     expect(e.contacts).toEqual([]);
     expect(e.exceptions).toEqual({});
@@ -33,8 +33,8 @@ describe('leerer Startzustand', () => {
   });
   test('notConnected', () => {
     const e = createEmptyState();
-    expect(notConnected(['bank', 'stripe_nexus'], e.connections)).toBe(true);
-    const cs = e.connections.map((c) => (c.id === 'bank' ? { ...c, status: 'error' as const } : c));
-    expect(notConnected(['bank', 'stripe_nexus'], cs)).toBe(false);
+    expect(notConnected(['bank_qonto', 'stripe_nexus'], e.connections)).toBe(true);
+    const cs = e.connections.map((c) => (c.id === 'bank_qonto' ? { ...c, status: 'error' as const } : c));
+    expect(notConnected(['bank_qonto', 'stripe_nexus'], cs)).toBe(false);
   });
 });

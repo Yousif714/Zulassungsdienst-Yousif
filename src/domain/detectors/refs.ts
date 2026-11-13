@@ -12,3 +12,4 @@ export const invoiceRef = (inv: { id: string; company: 'nexus' | 'zulassung'; co
   href: inv.company === 'nexus' || !inv.contactId ? '/nexus/zuordnen' : `/zulassung/kunden/${inv.contactId}`,
   label,
 });
+export const receivableRef = (invoiceId: string, label: string): Ref => ({ kind: 'invoice', id: invoiceId, href: '/nexus/offen', label });

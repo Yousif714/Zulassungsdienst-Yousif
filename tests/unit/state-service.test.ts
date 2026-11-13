@@ -128,8 +128,15 @@ describe('Zustands-Dienst', () => {
     expect(r.state.actions.find((a) => a.id === 'a-1')?.status).toBe('executed');
   });
 
+  test.each([[{ paymentId: 'p', contractId: 'c' }, true], [{ paymentId: 'p', invoiceId: 'i' }, true], [{ paymentId: 'p', contractId: 'c', invoiceId: 'i' }, false], [{ paymentId: 'p' }, false]])(
+    'confirmPaymentMatch %j erlaubt: %s', (e, ok) => expect(isClientEvent({ type: 'confirmPaymentMatch', ...e })).toBe(ok));
+  test('dismissPayment erlaubt', () => {
+    expect(isClientEvent({ type: 'dismissPayment', paymentId: 'p' })).toBe(true);
+    expect(isClientEvent({ type: 'dismissPayment' })).toBe(false);
+  });
+
   test('isClientEvent: nur erlaubte Ereignisse mit Grundform', () => {
-    expect(CLIENT_EVENTS.size).toBe(16);
+    expect(CLIENT_EVENTS.size).toBe(17);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);
     expect(isClientEvent({ type: 'dismissInsight', key: 'reply:m-1' })).toBe(true);
     for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {

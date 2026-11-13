@@ -7,7 +7,9 @@ export type InboundChannel = 'whatsapp' | 'app';
 
 /** Alle Ereignisse, die den App-Zustand ändern (Store, Assistent, später Phase-2-Anbindungen). */
 export type StoreEvent =
-  | { type: 'confirmPaymentMatch'; paymentId: string; contractId: string }
+  /** Genau eins von `contractId` und `invoiceId`. */
+  | { type: 'confirmPaymentMatch'; paymentId: string; contractId?: string; invoiceId?: string }
+  | { type: 'dismissPayment'; paymentId: string }
   | { type: 'simulateTransfer'; iban: string; payerName: string; amountCents: number }
   | { type: 'settleInvoice'; invoiceId: string; paymentId: string }
   | { type: 'linkInvoiceToJob'; jobId: string; invoiceId: string }

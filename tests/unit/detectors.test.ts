@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { reconcileInsights, runDetectors, selectTop } from '@/domain/detectors';
+import { buildMatchContext } from '@/domain/detectors/payments';
+import { detectInvoiceOverdue } from '@/domain/detectors/invoices';
 import { detectMemberOverdue, memberView } from '@/domain/detectors/members';
 import type { Connection } from '@/domain/types';
 import { detectStaleSources } from '@/domain/detectors/sources';
 import type { StoredInsight } from '@/domain/types';
-import { NOW_0930, base, conn, find, inv, ins, muellerDone, schmidtIn, stateWith, tx, types } from './helpers';
+import { NOW_0930, base, conn, find, inv, ins, member, muellerDone, schmidtIn, stateWith, tx, types, workshop } from './helpers';
 
 const run = (p: Parameters<typeof stateWith>[0]) => runDetectors(stateWith(p), NOW_0930);
 
@@ -42,6 +44,11 @@ describe('Detektoren', () => {
   });
   test('Stripe-Zahlung ohne Allocation → kein unmatched_payment', () => {
     expect(types(run({ payments: [tx({ source: 'stripe', connectionId: 'stripe_nexus' })] }))).not.toContain('unmatched_payment');
+  });
+  test('ausgeblendete Buchung und Rückbuchung (Betrag ≤ 0) melden keinen Hinweis', () => {
+    expect(types(run({ payments: [tx({ payerName: 'Fremd', ignoredAt: '2026-11-12T08:00:00Z' })] }))).not.toContain('unmatched_payment');
+    expect(types(run({ payments: [tx({ payerName: 'Fremd', amountCents: -500, refundOf: 'x0' })] }))).not.toContain('unmatched_payment');
+    expect(find(run({ payments: [tx({ payerName: 'Fremd' })] }), 'unmatched_payment').needsSources).toEqual(['bank_qonto']);
   });
   test('memberView nutzt Allocations und Ausnahmen', () => {
     const s = stateWith({ contracts: [base], payments: [tx({ id: 'p1', bookedOn: '2026-10-01' })], allocations: [{ paymentId: 'p1', contractId: 'c1', amountCents: 30000, method: 'auto' }] });
@@ -82,6 +89,24 @@ describe('Detektoren', () => {
     expect(r[0].amountCents).toBe(3000);
     expect(r[0].dedupeKey).toBe('inv-over:d-mueller');
   });
+  test('NEXUS: ein Sammelhinweis mit Anzahl und Summe', () => {
+    const r = detectInvoiceOverdue(stateWith({ invoices: [workshop, { ...workshop, id: 'i-2', number: 'RE-1102', openCents: 60000, totalCents: 60000, text: 'Event-Ticket' }] }), NOW_0930).filter((i) => i.company === 'nexus');
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ dedupeKey: 'inv-over:nexus', title: '2 Rechnungen überfällig, zusammen 749,00 €', priority: 'today', needsSources: ['lexware_nexus'], amountCents: 74900, nextStep: 'Offene Forderungen ansehen' });
+    expect(r[0].refs).toHaveLength(2);
+    expect(r[0].refs.every((x) => x.href === '/nexus/offen')).toBe(true);
+  });
+  test('NEXUS: abgedeckte Mitgliedsrechnung und bezahlte zählen nicht', () => {
+    const covered = { ...member('RE-1043'), contactExternalId: 'c-77', dueDate: '2026-10-01', status: 'overdue' as const };
+    const st = stateWith({
+      contracts: [{ ...base, id: 'k77', contactId: 'm-kaya', origin: [{ connectionId: 'lexware_nexus', externalId: 'c-77' }] }],
+      invoices: [covered, { ...workshop, status: 'paid', openCents: 0 }],
+    });
+    expect(detectInvoiceOverdue(st, NOW_0930).filter((i) => i.company === 'nexus')).toHaveLength(0);
+    const one = detectInvoiceOverdue({ ...st, invoices: [covered, workshop] }, NOW_0930).filter((i) => i.company === 'nexus');
+    expect(one).toHaveLength(1);
+    expect(one[0].title).toBe('1 Rechnung überfällig, zusammen 149,00 €');
+  });
   test('call_slides_missing: heute now, morgen today', () => {
     const call = (id: string, startsAt: string) => ({ id, series: 's', startsAt, topic: 'T', slideCount: 5, slidesStatus: 'todo' as const, slides: [] });
     const r = run({ calls: [call('c-heute', '2026-11-12T17:00:00Z'), call('c-morgen', '2026-11-13T17:00:00Z'), call('c-spaet', '2026-11-20T17:00:00Z')] }).filter((i) => i.type === 'call_slides_missing');
@@ -106,12 +131,12 @@ describe('Rückstand je Vertragsquelle', () => {
       connections: stateWith().connections.map((c) => ({ ...c, status: status[c.id] ?? c.status })),
     });
   test('Rückstand-Hinweis braucht nur die Quelle des Vertrags', () => {
-    const st = stripeContractOverdue({ bank: 'missing', stripe_nexus: 'connected' });
+    const st = stripeContractOverdue({ bank_qonto: 'missing', stripe_nexus: 'connected' });
     expect(runDetectors(st, NOW_0930).some((i) => i.type === 'member_overdue')).toBe(true);
     expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['stripe_nexus']);
   });
   test('Sammelhinweis bleibt bei fehlender Bank, wenn Stripe-Verträge überfällig sind', () => {
-    const st = stripeContractOverdue({ bank: 'missing', stripe_nexus: 'connected' });
+    const st = stripeContractOverdue({ bank_qonto: 'missing', stripe_nexus: 'connected' });
     const two = {
       ...st,
       contracts: [
@@ -129,9 +154,9 @@ describe('Rückstand je Vertragsquelle', () => {
   test('Legacy-Vertrag ohne Bank → kein Rückstand-Hinweis', () => {
     const st = stateWith({
       contracts: [{ ...base, contactId: 'm-kaya', startDate: '2026-09-01' }],
-      connections: stateWith().connections.map((c) => (c.id === 'bank' ? { ...c, status: 'missing' as const } : c)),
+      connections: stateWith().connections.map((c) => (c.id === 'bank_qonto' ? { ...c, status: 'missing' as const } : c)),
     });
-    expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['bank']);
+    expect(detectMemberOverdue(st, NOW_0930)[0].needsSources).toEqual(['bank_qonto']);
     expect(runDetectors(st, NOW_0930).some((i) => i.type === 'member_overdue')).toBe(false);
   });
 });
@@ -148,18 +173,18 @@ describe('Lebenszyklus', () => {
     expect(reconcileInsights(r1, [ins('k1'), ins('k1')], NOW_0930)).toHaveLength(1);
   });
   test('dismissed: gleiche Episode bleibt weg, nach Lücke kehrt der Hinweis zurück', () => {
-    const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank'] })], NOW_0930);
+    const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank_qonto'] })], NOW_0930);
     const dismissed: StoredInsight[] = [{ ...r1[0], status: 'dismissed' }];
-    expect(reconcileInsights(dismissed, [ins('k1', { needsSources: ['bank'] })], NOW_0930)[0].status).toBe('dismissed');
+    expect(reconcileInsights(dismissed, [ins('k1', { needsSources: ['bank_qonto'] })], NOW_0930)[0].status).toBe('dismissed');
     const gap = reconcileInsights(dismissed, [], NOW_0930);
     expect(gap[0].status).toBe('done');
-    expect(reconcileInsights(gap, [ins('k1', { needsSources: ['bank'] })], NOW_0930)[0].status).toBe('open');
+    expect(reconcileInsights(gap, [ins('k1', { needsSources: ['bank_qonto'] })], NOW_0930)[0].status).toBe('open');
     // Quelle veraltet: unklar, ob die Episode vorbei ist → bleibt dismissed
-    expect(reconcileInsights(dismissed, [], NOW_0930, ['bank'])[0].status).toBe('dismissed');
+    expect(reconcileInsights(dismissed, [], NOW_0930, ['bank_qonto'])[0].status).toBe('dismissed');
   });
   test('offen + Quelle veraltet → stale statt done', () => {
-    const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank'] })], NOW_0930);
-    expect(reconcileInsights(r1, [], NOW_0930, ['bank'])[0].status).toBe('stale');
+    const r1 = reconcileInsights([], [ins('k1', { needsSources: ['bank_qonto'] })], NOW_0930);
+    expect(reconcileInsights(r1, [], NOW_0930, ['bank_qonto'])[0].status).toBe('stale');
     expect(reconcileInsights(r1, [], NOW_0930, ['gmail'])[0].status).toBe('done');
   });
   test('done und stale kehren zurück → open', () => {
@@ -189,4 +214,20 @@ test('Fehler-Hinweis erst ab 3 Fehlversuchen, Demo-Störung (ohne sync) sofort',
   expect(n(2)).toBe(0);
   expect(n(3)).toBe(1);
   expect(n()).toBe(1);
+});
+
+describe('buildMatchContext', () => {
+  test('Schlüssel Vertrags-ID, abgedeckte Rechnungen mit contractId', () => {
+    const covered = member('RE-1043');
+    const s = stateWith({
+      contracts: [{ ...base, id: 'k77', contactId: 'm-kaya', origin: [{ connectionId: 'lexware_nexus', externalId: 'c-77' }] }],
+      invoices: [covered, workshop, { ...member('RE-1044'), status: 'paid' }],
+    });
+    const c = buildMatchContext(s, NOW_0930);
+    expect([...c.expected.keys()]).toEqual(['k77']);
+    expect(c.expected.get('k77')).toMatchObject({ contactId: 'm-kaya', rateCents: 30000 });
+    expect(c.invoices.map((i) => i.id)).toEqual(['RE-1043', 'i-ws']);
+    expect(c.invoices[0]).toMatchObject({ contractId: 'k77', openCents: 0 });
+    expect(c.invoices[1]).toMatchObject({ contractId: null, openCents: 14900 });
+  });
 });

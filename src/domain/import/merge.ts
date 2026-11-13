@@ -1,4 +1,5 @@
 import type { ImportBatch } from '@/domain/import/batch';
+import { classifyBankTx, linkBankReturns, normalizeIban } from '@/domain/matching/payments';
 import { upsertImported } from '@/domain/matching/imports';
 import type { AppState, Contact, ExternalRef, Invoice, Payment, Subscription } from '@/domain/types';
 
@@ -11,12 +12,20 @@ const refKey = (r: ExternalRef) => `${r.connectionId}:${r.externalId}`;
  * Bestätigungswerte, erledigte Rechnungen) wird nie überschrieben. Verträge fasst der Import gar nicht an.
  */
 export function mergeBatch(s: AppState, b: ImportBatch, newId: () => string): { state: AppState; added: MergeAdded } {
-  // Kontakte: bekannter externalRef → unverändert, sonst neu
+  // Kontakte: bekannter externalRef → unverändert (nur Kontaktpersonen werden nachgezogen), sonst neu
   const contacts: Contact[] = [...s.contacts];
   const known = new Set(contacts.flatMap((c) => (c.externalRefs ?? []).map(refKey)));
   let addedContacts = 0;
   for (const c of b.contacts) {
-    if (c.externalRefs.some((r) => known.has(refKey(r)))) continue;
+    const knownRef = c.externalRefs.find((r) => known.has(refKey(r)));
+    if (knownRef) {
+      const at = contacts.findIndex((x) => (x.externalRefs ?? []).some((r) => refKey(r) === refKey(knownRef)));
+      // fehlt das Feld im Batch, bleiben vorhandene Kontaktpersonen unverändert
+      if (at >= 0 && c.contactPersons && JSON.stringify(contacts[at].contactPersons) !== JSON.stringify(c.contactPersons)) {
+        contacts[at] = { ...contacts[at], contactPersons: c.contactPersons };
+      }
+      continue;
+    }
     c.externalRefs.forEach((r) => known.add(refKey(r)));
     contacts.push({ ...c, id: newId() });
     addedContacts++;
@@ -47,7 +56,12 @@ export function mergeBatch(s: AppState, b: ImportBatch, newId: () => string): { 
   const invoices = inv.items.map((i) => (i.contactId === null && i.contactExternalId ? { ...i, contactId: resolveContact(i) } : i));
 
   // Zahlungen: Bestehende gewinnen (wie mergeImported, aber mit neuer ID und Zählung)
-  const pay = upsertImported<Payment, (typeof b.payments)[number]>(s.payments, b.payments, (next, old) => (old ?? next), newId);
+  // Qonto: Rückbuchungen mit Original verknüpfen (sonst verworfen), neue Zahlungen mit Mitglieds-IBANs klassifizieren
+  const memberIbans = new Set(s.ibanLinks.map((l) => normalizeIban(l.iban)));
+  const isBank = (p: { connectionId: Payment['connectionId'] }) => p.connectionId === 'bank_qonto';
+  const bank = linkBankReturns(s.payments, b.payments.filter(isBank)).map((p) => (p.refundOf ? p : { ...p, kind: classifyBankTx(p, memberIbans) }));
+  const incomingPayments = [...b.payments.filter((p) => !isBank(p)), ...bank];
+  const pay = upsertImported<Payment, (typeof b.payments)[number]>(s.payments, incomingPayments, (next, old) => (old ?? next), newId);
 
   // Abos
   const sub = upsertImported<Subscription, (typeof b.subscriptions)[number]>(

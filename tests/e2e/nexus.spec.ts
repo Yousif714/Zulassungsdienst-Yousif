@@ -26,11 +26,48 @@ test('Abnahme 3: Übernahme Referenzbeispiel', async ({ page }) => {
 
 test('Abnahme 4: unbekannte Überweisung zuordnen, IBAN lernen', async ({ page }) => {
   await page.goto('/nexus/zuordnen?reset=1');
-  await page.getByTestId('match-p-yilmaz-1').getByRole('button', { name: 'Bestätigen' }).click();
+  await page.getByTestId('match-p-yilmaz-1').getByRole('button', { name: /Ja, gehört zu/ }).click();
   await page.getByRole('button', { name: 'Überweisung simulieren' }).click();
   await page.getByLabel('IBAN').fill('DE02120300000000202051'); await page.getByLabel('Name').fill('Selin Yilmaz'); await page.getByLabel('Betrag').fill('300');
   await page.getByRole('button', { name: 'Buchen' }).click();
   await expect(page.getByText('Automatisch zugeordnet: Selin Yilmaz')).toBeVisible();
+});
+
+test('Zuordnen: „Ja, gehört zu …“ ordnet zu und lernt die IBAN', async ({ page }) => {
+  await page.goto('/nexus/zuordnen?reset=1');
+  const card = page.getByTestId('match-p-yilmaz-1');
+  const ja = card.getByRole('button', { name: 'Ja, gehört zu Selin Yilmaz (Zahlung von S. Yilmaz)', exact: true });
+  await expect(ja).toHaveText('Ja, gehört zu Selin Yilmaz');
+  await ja.click();
+  await expect(card).toHaveCount(0);
+  // IBAN gelernt: eine zweite Zahlung derselben IBAN wird automatisch zugeordnet.
+  await page.getByRole('button', { name: 'Überweisung simulieren' }).click();
+  await page.getByLabel('IBAN').fill('DE02120300000000202051'); await page.getByLabel('Name').fill('Selin Yilmaz'); await page.getByLabel('Betrag').fill('300');
+  await page.getByRole('button', { name: 'Buchen' }).click();
+  await expect(page.getByText('Automatisch zugeordnet: Selin Yilmaz')).toBeVisible();
+});
+
+test('Zuordnen: „Andere Zuordnung …“ erlaubt eine Korrektur trotz Vorschlag', async ({ page }) => {
+  await page.goto('/nexus/zuordnen?reset=1');
+  const card = page.getByTestId('match-p-yilmaz-1');
+  await expect(card.getByRole('button', { name: 'Ja, gehört zu Selin Yilmaz (Zahlung von S. Yilmaz)', exact: true })).toBeVisible();
+  const other = card.getByRole('button', { name: 'Andere Zuordnung … (Zahlung von S. Yilmaz)', exact: true });
+  await expect(other).toHaveText('Andere Zuordnung …');
+  await other.click();
+  const select = card.getByRole('combobox');
+  expect(await select.locator('option').count()).toBeGreaterThan(2);
+  await select.selectOption({ index: 1 });
+  await card.getByRole('button', { name: 'Zuordnen (Zahlung von S. Yilmaz)', exact: true }).click();
+  await expect(card).toHaveCount(0);
+});
+
+test('Zuordnen: „Keine Mitgliedszahlung“ blendet aus und bleibt nach Neuladen weg', async ({ page }) => {
+  await page.goto('/nexus/zuordnen?reset=1');
+  const first = page.locator('[data-testid^="match-"]').first();
+  const id = await first.getAttribute('data-testid');
+  await first.getByRole('button', { name: 'Keine Mitgliedszahlung' }).click();
+  await page.reload();
+  await expect(page.getByTestId(id!)).toHaveCount(0);
 });
 
 test('Abnahme 5: Stripe bezahlt, Lexware offen', async ({ page }) => {
@@ -114,7 +151,7 @@ test('Erinnerung: eigene Aktion je Rückstandsstand', async ({ page }) => {
 
 test('Wiederholte Knöpfe nennen im Namen, worum es geht', async ({ page }) => {
   await page.goto('/nexus/zuordnen?reset=1');
-  await expect(page.getByRole('button', { name: 'Zahlung von S. Yilmaz an Selin Yilmaz bestätigen', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ja, gehört zu Selin Yilmaz (Zahlung von S. Yilmaz)', exact: true })).toBeVisible();
   await page.goto('/zulassung/auftraege/j-mueller-1');
   await expect(page.getByRole('button', { name: 'Rechnung RE-Z-2026-311 zuordnen', exact: true })).toBeVisible();
 });
@@ -132,7 +169,7 @@ test('Bank nicht verbunden: Übernahme-Seite zeigt keinen Rückstand und keinen 
   await page.evaluate(() => {
     const key = 'nexus-demo-v1';
     const s = JSON.parse(localStorage.getItem(key)!);
-    s.connections = s.connections.map((c: { id: string }) => (c.id === 'bank' ? { ...c, status: 'missing', lastSuccessAt: null } : c));
+    s.connections = s.connections.map((c: { id: string }) => (c.id === 'bank_qonto' ? { ...c, status: 'missing', lastSuccessAt: null } : c));
     localStorage.setItem(key, JSON.stringify(s));
   });
   await page.goto(`/nexus/mitglieder/${KAYA}/uebernahme`);
@@ -140,4 +177,35 @@ test('Bank nicht verbunden: Übernahme-Seite zeigt keinen Rückstand und keinen 
   await expect(page.getByTestId('arrears')).toHaveCount(0);
   await expect(page.getByTestId('rate-preview')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Stripe-Plan vorbereiten/ })).toHaveCount(0);
+});
+
+test('NEXUS → Offen: Summe oben, sortiert nach Überfälligkeit', async ({ page }) => {
+  await page.goto('/nexus?reset=1');
+  await page.getByTestId('open-link').click();
+  await expect(page).toHaveURL(/\/nexus\/offen$/);
+  await expect(page.getByTestId('receivables-total')).toContainText('Summe offen');
+  const rows = page.locator('[data-testid^="receivable-"]');
+  await expect(rows.first()).toBeVisible();
+  const texts = await rows.allInnerTexts();
+  const overdue = texts.map((t) => /fällig seit (\d{2})\.(\d{2})\.(\d{4})/.exec(t)).filter((m) => m !== null)
+    .map((m) => `${m![3]}-${m![2]}-${m![1]}`);
+  expect(overdue.length).toBeGreaterThan(0);
+  expect(overdue).toEqual([...overdue].sort());
+  const contractRow = page.locator('a[data-testid^="receivable-contract:"]').first();
+  await expect(contractRow).toHaveAttribute('href', /\/nexus\/mitglieder\/.+/);
+});
+
+test('NEXUS → Offen: bei veralteten Daten nur Hinweis, keine Summe, kein „Nichts offen“', async ({ page }) => {
+  await page.goto('/nexus?reset=1');
+  await expect(page.getByTestId('open-link')).toBeVisible();
+  await page.evaluate(() => {
+    const key = 'nexus-demo-v1';
+    const s = JSON.parse(localStorage.getItem(key)!);
+    s.connections = s.connections.map((c: { id: string }) => (c.id === 'bank_qonto' ? { ...c, status: 'missing', lastSuccessAt: null } : c));
+    localStorage.setItem(key, JSON.stringify(s));
+  });
+  await page.goto('/nexus/offen');
+  await expect(page.getByTestId('stale-note')).toContainText('Datenstand zu alt');
+  await expect(page.getByTestId('receivables-total')).toHaveCount(0);
+  await expect(page.getByText('Nichts offen.')).toHaveCount(0);
 });

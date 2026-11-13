@@ -1,6 +1,6 @@
 import { daysBetween, formatIsoDe, type IsoDate } from '../clock';
 import { monthDate } from '../ledger/schedule';
-import { nameMatches, normalizeName } from '../matching/payments';
+import { nameMatches, normalizeNameStrict } from '../matching/payments';
 import { formatEuro } from '../money';
 import type { AppState, Contact, ExternalRef, Invoice, Subscription } from '../types';
 import { isMembership, parseMembership } from './membership';
@@ -126,7 +126,7 @@ export function deriveProposals(s: AppState): ContractProposal[] {
   const rest: Draft[] = [];
   const free = [...stripe];
   const same = (a: Draft, b: Draft) =>
-    (a.email !== null && b.email !== null && a.email.toLowerCase() === b.email.toLowerCase()) || (normalizeName(a.name) !== '' && normalizeName(a.name) === normalizeName(b.name));
+    (a.email !== null && b.email !== null && a.email.toLowerCase() === b.email.toLowerCase()) || (normalizeNameStrict(a.name) !== '' && normalizeNameStrict(a.name) === normalizeNameStrict(b.name));
   for (const l of lex) {
     const hit = free.find((x) => same(x, l));
     if (!hit) { rest.push(l); continue; }
@@ -167,8 +167,8 @@ export function findContactFor(p: ContractProposal, contacts: Contact[]): { matc
     const byEmail = contacts.find((c) => c.emails.some((x) => x.toLowerCase() === e));
     if (byEmail) return hit('email', byEmail);
   }
-  const n = normalizeName(p.name);
-  const byName = n === '' ? undefined : contacts.find((c) => normalizeName(c.name) === n);
+  const n = normalizeNameStrict(p.name);
+  const byName = n === '' ? undefined : contacts.find((c) => normalizeNameStrict(c.name) === n);
   if (byName) return hit('name', byName);
   return { match: 'none', contactId: null, name: null };
 }

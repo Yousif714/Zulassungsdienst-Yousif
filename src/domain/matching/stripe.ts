@@ -11,9 +11,9 @@ export function subscriptionOf(s: AppState, p: Payment): Subscription | undefine
  * Das Abo kommt aus `subscriptionExternalId`, bei Erstattungen notfalls über die erstattete Zahlung.
  * Zugeordnet wird nur, wenn das Abo einen bestätigten Vertrag hat (auch rückwirkend).
  */
-export function stripeAllocations(s: AppState): Allocation[] {
+export function stripeAllocations(s: AppState): Extract<Allocation, { contractId: string }>[] {
   const allocated = new Set(s.allocations.map((a) => a.paymentId));
-  const out: Allocation[] = [];
+  const out: Extract<Allocation, { contractId: string }>[] = [];
   for (const p of s.payments) {
     if (p.source !== 'stripe' || p.kind !== 'incoming' || allocated.has(p.id) || p.amountCents === 0) continue;
     const sub = subscriptionOf(s, p);

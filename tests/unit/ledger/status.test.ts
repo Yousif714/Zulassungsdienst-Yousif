@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { buildSchedule } from '@/domain/ledger/schedule';
 import { allocate } from '@/domain/ledger/allocate';
-import { memberStatus } from '@/domain/ledger/status';
+import { memberStatus, trafficFor } from '@/domain/ledger/status';
 import { base } from '../helpers';
 
 const s = buildSchedule(base, []);
@@ -50,3 +50,5 @@ describe('Erstattungen', () => {
   });
   test('gleicher Tag: Zahlung vor Erstattung', () => expect(allocate(s, [{ bookedOn: '2026-10-01', amountCents: -30000 }, { bookedOn: '2026-10-01', amountCents: 30000 }]).states[0].paidCents).toBe(0));
 });
+
+test.each([[0, 0, 'green'], [100, 7, 'yellow'], [100, 8, 'red']])('trafficFor(%i, %i) = %s', (a, d, t) => expect(trafficFor(a, d)).toBe(t));

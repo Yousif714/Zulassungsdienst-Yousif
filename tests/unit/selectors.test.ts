@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { createDemoState } from '@/data/seed';
-import { invoiceCandidates, memberRows, nexusForecast, overdueMembers, stripeLexCases, unallocatedBankPayments, waitingStripePayments, zulassungKpis } from '@/data/selectors';
+import { invoiceCandidates, memberRows, nexusForecast, overdueMembers, matchOptions, stripeLexCases, unallocatedBankPayments, waitingStripePayments, zulassungKpis } from '@/data/selectors';
 import { reducer, refresh } from '@/data/store';
 import { jobBilling } from '@/domain/billing';
-import { NOW_0930 as NOW } from './helpers';
+import { NOW_0930 as NOW, base, stateWith, tx, workshop } from './helpers';
 import { confirmedSub, legacyNoBank, stripeState } from './import/helpers';
 
 const s = refresh(createDemoState(), NOW);
@@ -99,5 +99,17 @@ describe('Verträge je Quelle', () => {
   test('Stripe-Zahlung ohne Abo wartet nicht', () => {
     const st = { ...stripeState, payments: stripeState.payments.map((p) => (p.externalId === 'in_A1' ? { ...p, subscriptionExternalId: undefined } : p)) };
     expect(waitingStripePayments(st).map((p) => p.externalId)).not.toContain('in_A1');
+  });
+});
+
+describe('Zuordnungsziele', () => {
+  test('matchOptions: Verträge und offene Rechnungen', () => {
+    const o = matchOptions(stateWith({ contracts: [{ ...base, contactId: 'm-kaya' }], invoices: [workshop] }));
+    expect(o.map((x) => x.value)).toEqual(expect.arrayContaining(['contract:c1', 'invoice:i-ws']));
+    expect(o.find((x) => x.value === 'invoice:i-ws')!.label).toContain('RE-1101');
+  });
+  test('unallocatedBankPayments: ohne ausgeblendete und Rückbuchungen', () => {
+    const s = stateWith({ payments: [tx({ id: 'a' }), tx({ id: 'b', ignoredAt: 'x' }), tx({ id: 'c', amountCents: -100 })] });
+    expect(unallocatedBankPayments(s).map((p) => p.id)).toEqual(['a']);
   });
 });

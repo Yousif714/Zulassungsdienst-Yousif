@@ -24,7 +24,7 @@ describe('Coach: Schnellantwort', () => {
 
 describe('Coach: Fälligkeitstag', () => {
   const contract: MemberContract = { id: 'mc-b', contactId: 'm-kaya', totalCents: 300000, installments: 12, installmentCents: 25000, dueDay: 1, startDate: '2026-09-01', billing: 'legacy', catchUpMode: 'first_rate' };
-  const pay = (id: string, bookedOn: string): Payment => ({ id, company: 'nexus', source: 'bank', connectionId: 'bank', externalId: id, amountCents: 25000, bookedOn, kind: 'incoming' });
+  const pay = (id: string, bookedOn: string): Payment => ({ id, company: 'nexus', source: 'bank', connectionId: 'bank_qonto', externalId: id, amountCents: 25000, bookedOn, kind: 'incoming' });
   const alloc = (id: string): Allocation => ({ paymentId: id, contractId: 'mc-b', amountCents: 25000, method: 'confirmed' });
   const st = (days: string[]) =>
     stateWith({ contracts: [contract], payments: days.map((d, i) => pay(`p${i}`, d)), allocations: days.map((_, i) => alloc(`p${i}`)) });

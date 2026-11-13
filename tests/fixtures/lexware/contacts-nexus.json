@@ -79,12 +79,41 @@
       },
       "phoneNumbers": {},
       "archived": false
+    },
+    {
+      "id": "c-90",
+      "version": 1,
+      "roles": {
+        "customer": {
+          "number": 10090
+        }
+      },
+      "company": {
+        "name": "Fahrschule Beispiel GmbH",
+        "contactPersons": [
+          {
+            "firstName": "Anna",
+            "lastName": "Beispiel"
+          },
+          {
+            "firstName": "",
+            "lastName": ""
+          }
+        ]
+      },
+      "emailAddresses": {
+        "business": [
+          "info@fahrschule-beispiel.de"
+        ]
+      },
+      "phoneNumbers": {},
+      "archived": false
     }
   ],
   "first": true,
   "last": true,
   "totalPages": 1,
-  "totalElements": 4,
+  "totalElements": 5,
   "number": 0,
   "size": 100
 }

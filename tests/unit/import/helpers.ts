@@ -54,7 +54,7 @@ export const confirmedSub = (s: AppState, externalId: string, contractId: string
 /** Legacy-Vertrag (Banküberweisung), Bank nicht verbunden. */
 export const legacyNoBank: AppState = (() => {
   const s = stateWith({ contracts: [{ id: 'c1', contactId: 'm1', totalCents: 120000, installments: 4, installmentCents: 30000, dueDay: 1, startDate: '2026-10-01', billing: 'legacy', catchUpMode: 'first_rate' }] });
-  return { ...s, connections: s.connections.map((c) => (c.id === 'bank' ? { ...c, status: 'missing' as const, lastSuccessAt: null } : c)) };
+  return { ...s, connections: s.connections.map((c) => (c.id === 'bank_qonto' ? { ...c, status: 'missing' as const, lastSuccessAt: null } : c)) };
 })();
 
 /** Speicher im Arbeitsspeicher (wie Web-Storage). */

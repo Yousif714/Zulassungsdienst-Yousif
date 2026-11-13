@@ -1346,6 +1346,12 @@ a.task-body:active {
   min-width: 0;
 }
 
+/* Auswahl in Karten: eigene Zeile, damit der Button daneben nie aus dem Bildschirm ragt. */
+.card-buttons .select {
+  flex: 1 1 100%;
+  max-width: 100%;
+}
+
 .sim-form {
   display: grid;
   gap: 10px;
