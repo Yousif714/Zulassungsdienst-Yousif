@@ -3,12 +3,13 @@ import type { ActionProvider } from '@/domain/actions/machine';
 import type { ConnectionId } from '@/domain/types';
 import type { LexwareConnection } from '@/domain/import/lexware';
 import type { Repos } from './db/repository';
+import { pullQonto } from './connectors/qonto';
 import { pullLexware } from './connectors/lexware';
 import { pullStripe } from './connectors/stripe';
 import { ConnectorError, type PullContext, type PullResult } from './connectors/types';
 import { dispatchEvents } from './state-service';
 
-export type SyncId = 'stripe_nexus' | 'lexware_nexus' | 'lexware_zulassung';
+export type SyncId = 'stripe_nexus' | 'lexware_nexus' | 'bank_qonto' | 'lexware_zulassung';
 export type ConnectorKeys = Partial<Record<SyncId, string>>;
 export interface SyncDeps {
   at: () => Date;
@@ -22,7 +23,17 @@ export interface SyncDeps {
 }
 export type SyncOutcome = 'ok' | 'partial' | 'error' | 'skipped';
 
-const ORDER: SyncId[] = ['stripe_nexus', 'lexware_nexus', 'lexware_zulassung'];
+const ORDER: SyncId[] = ['stripe_nexus', 'lexware_nexus', 'bank_qonto', 'lexware_zulassung'];
+
+/** Alle zu maskierenden Geheimnisse: jeder Schlüssel und jeder Teil von 'login:secret' (≥ 8 Zeichen). */
+export function syncSecrets(keys: ConnectorKeys): string[] {
+  const out = new Set<string>();
+  for (const k of Object.values(keys)) {
+    if (!k) continue;
+    for (const part of [k, ...k.split(':')]) if (part.length >= 8) out.add(part);
+  }
+  return [...out];
+}
 
 /** Nur die Meldung eines ConnectorError (bereits sicher), sonst fester Text. Geheimnisse werden zusätzlich maskiert. */
 export function sanitizeError(err: unknown, secrets: string[]): string {
@@ -33,7 +44,7 @@ export function sanitizeError(err: unknown, secrets: string[]): string {
 
 export async function syncConnections(repos: Repos, deps: SyncDeps): Promise<Partial<Record<ConnectionId, SyncOutcome>>> {
   const out: Partial<Record<ConnectionId, SyncOutcome>> = {};
-  const secrets = Object.values(deps.keys).filter((k): k is string => !!k);
+  const secrets = syncSecrets(deps.keys);
   const deadline = deps.now() + deps.budgetMs; // geteilt über alle Verbindungen
   for (const id of ORDER) {
     if (deps.only && !deps.only.includes(id)) continue;
@@ -50,11 +61,13 @@ export async function syncConnections(repos: Repos, deps: SyncDeps): Promise<Par
         continue;
       }
       const known = new Map<string, string | undefined>(
-        state.invoices.filter((i) => i.connectionId === id).map((i) => [i.externalId, i.sourceUpdatedAt]),
+        id === 'bank_qonto' ? [] : state.invoices.filter((i) => i.connectionId === id).map((i) => [i.externalId, i.sourceUpdatedAt]),
       );
       const ctx: PullContext = { fetch: deps.fetch, key, sleep: deps.sleep, now: deps.now, deadline, known };
       const cursor = conn.sync?.cursor ?? null;
-      const r: PullResult = id === 'stripe_nexus' ? await pullStripe(cursor, ctx) : await pullLexware(id as LexwareConnection, cursor, ctx);
+      const r: PullResult = id === 'stripe_nexus' ? await pullStripe(cursor, ctx)
+        : id === 'bank_qonto' ? await pullQonto(cursor, ctx)
+        : await pullLexware(id as LexwareConnection, cursor, ctx);
       await dispatchEvents(repos, [{ type: 'importBatch', connectionId: id, batch: r.batch, cursor: r.cursor, complete: r.complete }], { at: deps.at, provider: deps.provider });
       out[id] = r.complete ? 'ok' : 'partial';
     } catch (err) {

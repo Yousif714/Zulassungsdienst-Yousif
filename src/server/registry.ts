@@ -43,7 +43,9 @@ export function getSyncDeps(o: { only?: ConnectionId[]; budgetMs?: number } = {}
   const env = readEnv();
   return {
     at: realNow,
-    keys: { stripe_nexus: env.stripeRestrictedKey, lexware_nexus: env.lexwareNexusApiKey, lexware_zulassung: env.lexwareZulassungApiKey },
+    keys: { stripe_nexus: env.stripeRestrictedKey, lexware_nexus: env.lexwareNexusApiKey,
+      bank_qonto: env.qontoLogin && env.qontoSecretKey ? `${env.qontoLogin}:${env.qontoSecretKey}` : undefined,
+      lexware_zulassung: env.lexwareZulassungApiKey },
     fetch: (...a) => fetch(...a),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     now: () => realNow().getTime(),
