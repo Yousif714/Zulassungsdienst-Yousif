@@ -77,12 +77,14 @@ export default function PortalMembersPage() {
 
   const ignoredCount = rows.filter((r) => r.status === 'ignored').length;
   const filters = ignoredCount > 0 ? [...FILTERS, { value: 'ignored' as const, label: `Ausgeblendet (${ignoredCount})` }] : FILTERS;
+  // Letztes ausgeblendetes Mitglied wieder eingeblendet: Segment verschwindet, also auf „Alle“ zurück.
+  const active: Filter = filter === 'ignored' && ignoredCount === 0 ? 'all' : filter;
   const visible = rows.filter((r) => {
-    if (filter === 'ignored') return r.status === 'ignored';
+    if (active === 'ignored') return r.status === 'ignored';
     if (r.status === 'ignored') return false;
-    if (filter === 'all') return true;
-    if (filter === 'no_invoice') return r.status === 'no_invoice' || r.status === 'invoice_only';
-    return r.status === filter;
+    if (active === 'all') return true;
+    if (active === 'no_invoice') return r.status === 'no_invoice' || r.status === 'invoice_only';
+    return r.status === active;
   }).sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.member.name.localeCompare(b.member.name, 'de'));
   const nameOf = (id: string) => rows.find((r) => r.member.id === id)?.member.name ?? id;
   const statusText = (r: (typeof rows)[number]): string => ({
@@ -144,7 +146,7 @@ export default function PortalMembersPage() {
         <section className="list-group" aria-labelledby="portal-title">
           <div className="list-group-headline">
             <h2 id="portal-title" className="list-group-title">Mitglieder</h2>
-            <Segmented name="portal-filter" legend="Portal-Mitglieder filtern" value={filter} onChange={setFilter} options={filters} />
+            <Segmented name="portal-filter" legend="Portal-Mitglieder filtern" value={active} onChange={setFilter} options={filters} />
           </div>
           <ul className="list-group-body">
             {visible.length === 0 && <li><ListRow title="Keine Mitglieder in dieser Ansicht." /></li>}
