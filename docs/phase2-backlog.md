@@ -76,6 +76,7 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 - Korrigieren und Löschen für alle Verträge, nicht nur für von Claude gelesene.
 - Token-Kosten bei abgebrochener Antwort (max_tokens, kaputtes JSON) mitzählen.
 - Prompt mit echten Rechnungstexten prüfen (erste Lesungen im Protokoll ansehen).
+- Review-Minors: Claude-Antwort zur Laufzeit prüfen (Schema), `quote` fehlt → leer; Briefing ohne ruhende Verträge; ein Überfällig-Hinweis je Kontakt statt je Vertrag; Referenz-Zuordnung, wenn Lexware die Quellrechnung auf bezahlt setzt; Kosten und Limit in einer Währung; Löschen auch nach „Passt“; doppelte Lesekosten bei parallelen Läufen; nur in der App offene Rechnungen lesen; Hinweis „als bezahlt markiert“ mit Erledigen-Knopf.
 
 ## Offen aus dem Portal-Abgleich (Reviews, nicht merge-blockierend)
 - `OPTIONAL_TABLES` in `src/server/db/supabase.ts` entfernen, sobald die Migration `20261115000000_portal.sql` sicher eingespielt ist.
