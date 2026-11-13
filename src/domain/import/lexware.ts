@@ -76,6 +76,10 @@ export function mapLexwareContacts(json: unknown[], conn: LexwareConnection): Im
     const name = isCompany
       ? String(c.company.name ?? '')
       : [c.person?.firstName, c.person?.lastName].filter(Boolean).join(' ');
+    // Lexware-Feld company.contactPersons[].firstName/lastName: gegen Doku prüfen
+    const persons: string[] = isCompany && Array.isArray(c.company.contactPersons)
+      ? c.company.contactPersons.map((x: Obj) => [x.firstName, x.lastName].filter(Boolean).join(' ')).filter(Boolean)
+      : [];
     return {
       company,
       kind: company === 'nexus' ? 'member' : isCompany ? 'dealer' : 'private',
@@ -83,6 +87,7 @@ export function mapLexwareContacts(json: unknown[], conn: LexwareConnection): Im
       phones: flat(c.phoneNumbers, ['fax']),
       emails: [...new Set(flat(c.emailAddresses).map((e) => e.toLowerCase()))],
       externalRefs: [{ connectionId: conn, externalId: c.id }],
+      ...(persons.length ? { contactPersons: persons } : {}),
     };
   });
 }

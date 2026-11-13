@@ -92,3 +92,15 @@ export const lexwareRoutesPaged: Record<string, unknown> = {
   [vl(0)]: { ...voucherlistNexus, content: voucherlistNexus.content.slice(0, 4), first: true, last: false, totalPages: 2, number: 0 },
   [vl(1)]: { ...voucherlistNexus, content: voucherlistNexus.content.slice(4), first: false, last: true, totalPages: 2, number: 1 },
 };
+
+import qontoOrganizationJson from './qonto/organization.json';
+import qontoTransactionsJson from './qonto/transactions.json';
+
+/** Qonto-Rohdaten (Organisation einkontig, Buchungen eine Seite). */
+export const qontoOrganization = qontoOrganizationJson;
+export const qontoTransactions = qontoTransactionsJson;
+/** Pfad (ohne Query) → Qonto-Antwort-JSON. Mehrseitig/mehrkontig: `qontoRoutesPaged` (Task 7). */
+export const qontoRoutes: Record<string, unknown> = {
+  '/v2/organization': qontoOrganizationJson,
+  '/v2/transactions': qontoTransactionsJson,
+};

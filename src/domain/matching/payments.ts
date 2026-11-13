@@ -1,3 +1,4 @@
+import type { ImportedPayment } from '@/domain/import/batch';
 import type { Allocation, AppState, Contact, IbanLink, Payment } from '@/domain/types';
 
 const STRIPE_WORDS = new Set(['stripe', 'payments', 'technologies', 'technology', 'europe', 'ltd', 'limited', 'uk', 'ie', 'inc']);
@@ -141,6 +142,30 @@ export function matchBankPayment(p: Payment, ctx: MatchContext): MatchResult {
 /** IBAN-Schreibweise vereinheitlichen: Leerraum raus, Großbuchstaben. */
 export function normalizeIban(s: string): string {
   return s.replace(/\s+/g, '').toUpperCase();
+}
+
+/**
+ * Rückbuchungen (Betrag < 0) mit ihrem Original verknüpfen (`refundOf`): gleiche Verbindung, Betrag spiegelbildlich,
+ * gleiche IBAN, nicht später gebucht, jüngstes zuerst, jedes Original nur einmal. Ohne Original wird die Rückbuchung verworfen.
+ * Bereits bekannte Rückbuchungen bleiben unberührt (Bestehendes gewinnt).
+ */
+export function linkBankReturns(payments: Payment[], incoming: ImportedPayment[]): ImportedPayment[] {
+  const known = new Set(payments.map((p) => `${p.connectionId}:${p.externalId}`));
+  const used = new Set(payments.filter((p) => p.refundOf).map((p) => `${p.connectionId}:${p.refundOf}`));
+  const pool = [...payments, ...incoming.filter((p) => p.amountCents > 0)];
+  const out: ImportedPayment[] = [];
+  for (const p of incoming) {
+    if (p.amountCents >= 0 || known.has(`${p.connectionId}:${p.externalId}`)) { out.push(p); continue; }
+    const iban = p.iban ? normalizeIban(p.iban) : undefined;
+    const original = pool
+      .filter((o) => o.connectionId === p.connectionId && o.amountCents === -p.amountCents && o.bookedOn <= p.bookedOn
+        && !!iban && !!o.iban && normalizeIban(o.iban) === iban && !used.has(`${o.connectionId}:${o.externalId}`))
+      .sort((a, b) => (a.bookedOn < b.bookedOn ? 1 : a.bookedOn > b.bookedOn ? -1 : 0))[0];
+    if (!original) continue;
+    used.add(`${original.connectionId}:${original.externalId}`);
+    out.push({ ...p, refundOf: original.externalId });
+  }
+  return out;
 }
 
 /** Rückbuchungen der Bank (Betrag < 0, `refundOf`) folgen dem Ziel der Originalzahlung; ohne Zuordnung des Originals entsteht nichts. */

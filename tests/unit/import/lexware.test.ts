@@ -52,3 +52,8 @@ test('Fax ist keine Telefonnummer', () => {
   const c = mapLexwareContacts([{ id: 'x', person: { lastName: 'A' }, phoneNumbers: { business: ['089 1'], mobile: ['0170 2'], fax: ['089 99'] } }], 'lexware_nexus')[0];
   expect(c.phones).toEqual(['089 1', '0170 2']);
 });
+test('Firma: Kontaktpersonen (leere weggelassen), Person ohne Feld', () => {
+  const cs = mapLexwareContacts(lexContacts('nexus'), 'lexware_nexus');
+  expect(cs.find((c) => c.name === 'Fahrschule Beispiel GmbH')?.contactPersons).toEqual(['Anna Beispiel']);
+  expect(cs.find((c) => c.name === 'Murat Demir')).not.toHaveProperty('contactPersons');
+});
