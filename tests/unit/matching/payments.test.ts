@@ -67,13 +67,13 @@ describe('Mehrdeutig', () => {
     expect(r.candidates.map((c) => c.id).sort()).toEqual(['k-kaya', 'k-kaya2']);
   });
   test('IBAN-Kontakt mit Vertrag und gleich hoher Rechnung → Auswahl', () => {
-    const r = matchBankPayment(tx({ iban: IBAN_KAYA, amountCents: 30000 }), { ...ctx, invoices: [{ id: 'i1', number: 'RE-9', contactId: 'm-kaya', openCents: 30000, contractId: null }] });
+    const r = matchBankPayment(tx({ iban: IBAN_KAYA, amountCents: 30000 }), { ...ctx, invoices: [{ id: 'i1', number: 'RE-9', contactId: 'm-kaya', openCents: 30000, contractId: null, dueDate: '2026-12-01', totalCents: 30000 }] });
     expect(r).toMatchObject({ confidence: 'medium', target: null });
     expect(r.candidates).toHaveLength(2);
   });
 });
 describe('Rechnungsnummer', () => {
-  const ws = { id: 'i-ws', number: 'RE-1101', contactId: 'm-sven', openCents: 14900, contractId: null };
+  const ws = { id: 'i-ws', number: 'RE-1101', contactId: 'm-sven', openCents: 14900, contractId: null, dueDate: '2026-09-26', totalCents: 14900 };
   test('Nummer + Betrag → automatisch auf die Rechnung', () =>
     expect(target(matchBankPayment(tx({ iban: 'DE00X', payerName: 'S. Krüger', reference: 'Rechnung re 1101 Workshop', amountCents: 14900 }), { ...ctx, invoices: [ws] }))).toBe('invoice:i-ws'));
   test('Nummer + Betrag → hoch', () =>

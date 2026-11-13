@@ -9,6 +9,7 @@ import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { AppState, Connection, Contact, IbanLink, Insight, Invoice, Job, Message, Payment, Vehicle } from '@/domain/types';
 
 export const IBAN_KAYA = 'DE89370400440532013000';
+export const IBAN_MUELLER = 'DE00100000000000000001';
 export const NOW_0930 = new Date('2026-11-12T08:30:00Z');
 
 export const contacts: Contact[] = [
@@ -22,7 +23,7 @@ export const expected = new Map<string, ExpectedContract>([
   ['k-kaya', { contactId: 'm-kaya', rateCents: 30000, nextRateCents: 30000, arrearsCents: 15000, openCents: 90000 }],
   ['k-yilmaz', { contactId: 'm-yilmaz', rateCents: 30000, nextRateCents: 30000, arrearsCents: 0, openCents: 120000 }],
 ]);
-export const ctx: MatchContext = { contacts, ibanLinks, expected, invoices: [] };
+export const ctx: MatchContext = { company: 'nexus', contacts, ibanLinks, expected, invoices: [] };
 
 export const vehicles: Vehicle[] = [
   { id: 'v-bot', contactId: 'd-mueller', vin: 'WVWZZZ1KZAW123456', plate: 'BOT-MK 456', model: 'Golf' },
@@ -33,6 +34,9 @@ export const jobs: Job[] = [
 
 export function tx(p: Partial<Payment> = {}): Payment {
   return { id: 'p1', company: 'nexus', source: 'bank', connectionId: 'bank_qonto', externalId: 'x1', amountCents: 30000, bookedOn: '2026-11-12', kind: 'incoming', ...p };
+}
+export function sptx(p: Partial<Payment> = {}): Payment {
+  return tx({ company: 'zulassung', connectionId: 'bank_sparkasse', id: 'sp1', externalId: 'spk-0000000000000001', ...p });
 }
 export function msg(p: Partial<Message> = {}): Message {
   return { id: 'm1', channel: 'whatsapp', connectionId: 'whatsapp_kunden', externalId: 'e1', threadId: 't1', direction: 'in', from: '+49151000', to: '+49000', body: 'Hallo', sentAt: '2026-11-12T05:30:00Z', contactId: null, jobId: null, needsReply: false, ...p };

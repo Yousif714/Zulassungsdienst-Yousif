@@ -1,6 +1,7 @@
 import { REJECT_REASON_DE, approve, editDraft, finishExecution, reconcileUncertain, retry, startExecution } from '@/domain/actions/machine';
 import { handleButton } from '@/domain/assistant';
 import { jobBilling } from '@/domain/billing';
+import { LEXWARE_OF } from '@/domain/connections';
 import { berlinParts, todayBerlin } from '@/domain/clock';
 import { runCoach } from '@/domain/coach';
 import { detectCommitment } from '@/domain/commitments';
@@ -20,7 +21,7 @@ import { deriveProposals, findContactFor, type ContractProposal } from '@/domain
 import { portalProposal, portalViews } from '@/domain/portal';
 import { coveringContract, invoiceOpenCents } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
-import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Connection, ContractKind, Contact, Invoice, InvoiceReading, MemberContract, Message, Settings } from '@/domain/types';
+import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Company, Connection, ContractKind, Contact, Invoice, InvoiceReading, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
 export interface EngineContext { at: Date; isDemo: boolean; newId: () => string }
@@ -30,13 +31,13 @@ export interface EngineResult { state: AppState; created: string[] }
 
 function autoAllocate(s: AppState, at: Date, isDemo: boolean): AppState {
   let st = s;
-  // Kontext einmal bauen; nur nach einer neuen Zuordnung neu (der Rückstand ändert sich).
-  let mctx: MatchContext | null = null;
+  // Kontext je Firma einmal bauen; nur nach einer neuen Zuordnung dieser Firma neu (der Rückstand ändert sich).
+  const contexts = new Map<Company, MatchContext>();
   for (const p of s.payments) {
-    if (p.source !== 'bank' || p.kind !== 'incoming' || p.company !== 'nexus' || p.ignoredAt) continue;
+    if (p.source !== 'bank' || p.kind !== 'incoming' || p.ignoredAt) continue;
     if (st.allocations.some((a) => a.paymentId === p.id)) continue;
-    mctx ??= buildMatchContext(st, at);
-    const m = matchBankPayment(p, mctx);
+    if (!contexts.has(p.company)) contexts.set(p.company, buildMatchContext(st, at, p.company));
+    const m = matchBankPayment(p, contexts.get(p.company)!);
     // Nur bei genau einem Ziel; mehrdeutig bleibt für die Bestätigung offen.
     if (m.confidence !== 'high' || !m.target || m.candidates.length !== 1) continue;
     const t = m.target;
@@ -54,7 +55,7 @@ function autoAllocate(s: AppState, at: Date, isDemo: boolean): AppState {
       text = `Automatisch zugeordnet: Rechnung ${invoice.number}`;
     }
     st = { ...st, allocations: [...st.allocations, allocation], audit: [...st.audit, { at: at.toISOString(), actor: 'system', text, isDemo }] };
-    mctx = null;
+    contexts.delete(p.company);
   }
   return st;
 }
@@ -134,11 +135,11 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
   let allocation: Allocation;
   let contactId: string | null;
   let text: string;
-  if (c) {
+  if (c && s.contacts.some((x) => x.id === c.contactId && x.company === p.company)) {
     allocation = { paymentId, contractId: c.id, amountCents: p.amountCents, method: 'confirmed' };
     contactId = c.contactId;
     text = `Zahlung über ${formatEuro(p.amountCents)} ${contactName(s, c.contactId)} zugeordnet`;
-  } else if (inv && inv.connectionId === 'lexware_nexus' && invoiceOpenCents(s, inv) > 0) {
+  } else if (inv && inv.company === p.company && inv.connectionId === LEXWARE_OF[p.company] && invoiceOpenCents(s, inv) > 0) {
     // Überzahlung: höchstens der offene Betrag geht auf die Rechnung.
     allocation = { paymentId, invoiceId: inv.id, amountCents: Math.min(p.amountCents, invoiceOpenCents(s, inv)), method: 'confirmed' };
     contactId = inv.contactId;

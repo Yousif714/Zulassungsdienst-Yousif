@@ -1,5 +1,5 @@
 import type { ImportedPayment } from '@/domain/import/batch';
-import type { Allocation, AppState, Contact, IbanLink, Payment } from '@/domain/types';
+import type { Allocation, AppState, Company, Contact, IbanLink, IsoDate, Payment } from '@/domain/types';
 
 const STRIPE_WORDS = new Set(['stripe', 'payments', 'technologies', 'technology', 'europe', 'ltd', 'limited', 'uk', 'ie', 'inc']);
 
@@ -88,8 +88,8 @@ export function amountFitsContract(a: number, e: ExpectedContract): boolean {
 }
 
 /** contractId = abdeckender Vertrag (coveringContract), sonst null. */
-export interface MatchInvoice { id: string; number: string; contactId: string | null; openCents: number; contractId: string | null }
-export interface MatchContext { contacts: Contact[]; ibanLinks: IbanLink[]; expected: Expected; invoices: MatchInvoice[] }
+export interface MatchInvoice { id: string; number: string; contactId: string | null; openCents: number; contractId: string | null; dueDate: IsoDate; totalCents: number; paidInLexware?: true }
+export interface MatchContext { company: Company; contacts: Contact[]; ibanLinks: IbanLink[]; expected: Expected; invoices: MatchInvoice[] }
 export type MatchTarget = { kind: 'contract'; id: string; contactId: string } | { kind: 'invoice'; id: string; contactId: string | null };
 export type MatchResult = { target: MatchTarget | null; candidates: MatchTarget[]; confidence: 'high' | 'medium' | 'low'; reason: string };
 

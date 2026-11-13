@@ -1,6 +1,6 @@
 import { jobBilling } from '@/domain/billing';
 import { MONEY_SOURCES } from '@/domain/briefing';
-import { contractSources, notConnected } from '@/domain/connections';
+import { LEXWARE_OF, contractSources, notConnected } from '@/domain/connections';
 import { isMembership } from '@/domain/import/membership';
 import { todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
@@ -10,7 +10,7 @@ import { invoiceOpenCents } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
 import { portalViews, type PortalView } from '@/domain/portal';
 import { monthForecast } from '@/domain/ledger/forecast';
-import type { AppState, Invoice, IsoDate, MemberContract, Payment, StoredInsight } from '@/domain/types';
+import type { AppState, Company, Invoice, IsoDate, MemberContract, Payment, StoredInsight } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
 import { contractKindLabel, contractOnHold } from '@/domain/ledger/contracts';
 
@@ -85,19 +85,19 @@ export function nexusForecast(s: AppState, today: IsoDate): { expectedCents: num
   return monthForecast(members, today.slice(0, 7), today);
 }
 
-/** Eingehende NEXUS-Bankzahlungen ohne Zuordnung (Stripe-Auszahlungen gehören keinem Mitglied). */
-export const unallocatedBankPayments = (s: AppState): Payment[] =>
+/** Eingehende Bankzahlungen einer Firma ohne Zuordnung (Stripe-Auszahlungen gehören keinem Mitglied). */
+export const unallocatedBankPayments = (s: AppState, company: Company = 'nexus'): Payment[] =>
   s.payments.filter(
-    (p) => p.source === 'bank' && p.kind === 'incoming' && p.company === 'nexus' && !p.ignoredAt && p.amountCents > 0 && !s.allocations.some((a) => a.paymentId === p.id),
+    (p) => p.source === 'bank' && p.kind === 'incoming' && p.company === company && !p.ignoredAt && p.amountCents > 0 && !s.allocations.some((a) => a.paymentId === p.id),
   );
 
-/** Ziele für die manuelle Zuordnung: alle Verträge und offene NEXUS-Rechnungen, nach Label sortiert. */
-export function matchOptions(s: AppState): { value: string; label: string }[] {
+/** Ziele für die manuelle Zuordnung: NEXUS alle Verträge und offene Rechnungen, Zulassung nur offene Rechnungen, nach Label sortiert. */
+export function matchOptions(s: AppState, company: Company = 'nexus'): { value: string; label: string }[] {
   const name = (id: string | null) => s.contacts.find((c) => c.id === id)?.name ?? 'Unbekannt';
   return [
-    ...s.contracts.map((c) => ({ value: `contract:${c.id}`, label: name(c.contactId) })),
+    ...(company === 'nexus' ? s.contracts.map((c) => ({ value: `contract:${c.id}`, label: name(c.contactId) })) : []),
     ...s.invoices
-      .filter((i) => i.connectionId === 'lexware_nexus' && invoiceOpenCents(s, i) > 0)
+      .filter((i) => i.connectionId === LEXWARE_OF[company] && invoiceOpenCents(s, i) > 0)
       .map((i) => ({ value: `invoice:${i.id}`, label: `Rechnung ${i.number} · ${name(i.contactId)} · ${formatEuro(invoiceOpenCents(s, i))}` })),
   ].sort((a, b) => a.label.localeCompare(b.label, 'de'));
 }
