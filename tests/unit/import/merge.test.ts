@@ -84,3 +84,41 @@ test('Kontaktpersonen werden bei bekanntem Kontakt nachgezogen', () => {
   expect(r.state.contacts[0]).toMatchObject({ id, contactPersons: ['Anna Beispiel'] });
   expect(r.added.contacts).toBe(0);
 });
+
+// --- Fix-Runde 1 ---
+test('Batch ohne contactPersons lässt sie stehen', () => {
+  const firma = lexContactsNexus.find((c) => c.name === 'Fahrschule Beispiel GmbH')!;
+  const a = mergeBatch(empty, { ...emptyBatch(), contacts: [firma] }, seq()).state;
+  const { contactPersons: _ignored, ...without } = firma;
+  void _ignored;
+  const r = mergeBatch(a, { ...emptyBatch(), contacts: [without] }, seq()).state;
+  expect(r.contacts[0].contactPersons).toEqual(['Anna Beispiel']);
+});
+const bankPay = (externalId: string, amountCents: number, bookedOn: string, iban = 'DE44500105175407324931') =>
+  ({ ...qb.payments[0], externalId, amountCents, bookedOn, iban, kind: 'incoming' as const, refundOf: undefined });
+const refundOfIn = (s: { payments: { externalId: string; refundOf?: string }[] }, id: string) => s.payments.find((p) => p.externalId === id)?.refundOf;
+test('Rückbuchungen: mehrere Kandidaten, jedes Original höchstens einmal, jüngstes vor der Rückbuchung', () => {
+  const batch = { ...emptyBatch(), payments: [
+    bankPay('o1', 1000, '2026-09-01'), bankPay('o2', 1000, '2026-09-10'), bankPay('o3', 1000, '2026-10-20'),
+    bankPay('r1', -1000, '2026-10-01'), bankPay('r2', -1000, '2026-10-02'), bankPay('r3', -1000, '2026-10-03'),
+  ] };
+  const s = mergeBatch(empty, batch, seq()).state;
+  expect(refundOfIn(s, 'r1')).toBe('o2');
+  expect(refundOfIn(s, 'r2')).toBe('o1');
+  expect(s.payments.find((p) => p.externalId === 'r3')).toBeUndefined(); // o3 liegt nach der Rückbuchung
+  expect(new Set(s.payments.map((p) => p.refundOf).filter(Boolean)).size).toBe(2);
+});
+test('Rückbuchung vor allen Originalen → nicht verknüpft; Gleichtag deterministisch nach externalId', () => {
+  const early = mergeBatch(empty, { ...emptyBatch(), payments: [bankPay('o1', 1000, '2026-10-05'), bankPay('r1', -1000, '2026-10-01')] }, seq()).state;
+  expect(early.payments.map((p) => p.externalId)).toEqual(['o1']);
+  for (const order of [['oa', 'ob'], ['ob', 'oa']]) {
+    const s = mergeBatch(empty, { ...emptyBatch(), payments: [...order.map((o) => bankPay(o, 1000, '2026-10-05')), bankPay('r1', -1000, '2026-10-06')] }, seq()).state;
+    expect(refundOfIn(s, 'r1')).toBe('ob');
+  }
+});
+test('ignorierte oder Stripe-Auszahlungs-Zahlungen sind kein Original', () => {
+  const s0 = mergeBatch(empty, { ...emptyBatch(), payments: [bankPay('o1', 1000, '2026-10-01')] }, seq()).state;
+  const hidden = { ...s0, payments: s0.payments.map((p) => ({ ...p, ignoredAt: 'x' })) };
+  const s = mergeBatch(hidden, { ...emptyBatch(), payments: [bankPay('r1', -1000, '2026-10-02')] }, seq()).state;
+  expect(s.payments.map((p) => p.externalId)).toEqual(['o1']);
+});

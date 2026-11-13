@@ -30,7 +30,7 @@ export function mapQonto(transactions: unknown[]): ImportBatch {
     const cents = pick(t, QF.amountCents);
     const id = str(pick(t, QF.id));
     const at = str(pick(t, QF.settledAt)) ?? str(pick(t, QF.emittedAt));
-    if (!id || !at || typeof cents !== 'number') continue;
+    if (!id || !at || typeof cents !== 'number' || !Number.isInteger(cents) || cents <= 0) continue;
     const bookedOn = todayBerlin(new Date(at));
     if (bookedOn < IMPORT_SINCE) continue;
     const isReturn = side === 'debit' && QONTO_RETURN_TYPES.includes(String(pick(t, QF.operationType)));

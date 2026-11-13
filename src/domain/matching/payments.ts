@@ -159,8 +159,9 @@ export function linkBankReturns(payments: Payment[], incoming: ImportedPayment[]
     const iban = p.iban ? normalizeIban(p.iban) : undefined;
     const original = pool
       .filter((o) => o.connectionId === p.connectionId && o.amountCents === -p.amountCents && o.bookedOn <= p.bookedOn
-        && !!iban && !!o.iban && normalizeIban(o.iban) === iban && !used.has(`${o.connectionId}:${o.externalId}`))
-      .sort((a, b) => (a.bookedOn < b.bookedOn ? 1 : a.bookedOn > b.bookedOn ? -1 : 0))[0];
+        && o.kind === 'incoming' && !o.ignoredAt && !!iban && !!o.iban && normalizeIban(o.iban) === iban && !used.has(`${o.connectionId}:${o.externalId}`))
+      // jüngstes zuerst; bei gleichem Tag deterministisch nach externalId (größere zuerst)
+      .sort((a, b) => (a.bookedOn !== b.bookedOn ? (a.bookedOn < b.bookedOn ? 1 : -1) : a.externalId < b.externalId ? 1 : a.externalId > b.externalId ? -1 : 0))[0];
     if (!original) continue;
     used.add(`${original.connectionId}:${original.externalId}`);
     out.push({ ...p, refundOf: original.externalId });

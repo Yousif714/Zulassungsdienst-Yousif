@@ -18,3 +18,16 @@ test('Rückbuchung als negative Zahlung', () => {
 test('Fremdwährung übersprungen', () => expect(ext('t-usd')).toBeUndefined());
 test('vor dem 01.08. (Berlin) übersprungen', () => expect(ext('t-july')).toBeUndefined());
 test('nur Zahlungen im Batch', () => expect([b.contacts, b.invoices, b.subscriptions, b.disputes].every((x) => x.length === 0)).toBe(true));
+test('nicht ganzzahliger oder nicht positiver Betrag → übersprungen', () => {
+  const base = qontoTransactions.transactions[0];
+  const m = (id: string, amount_cents: number, side = 'credit') => mapQonto([{ ...base, transaction_id: id, amount_cents, side }]).payments;
+  expect(m('x1', 100.5)).toHaveLength(0);
+  expect(m('x2', 0)).toHaveLength(0);
+  expect(m('x3', -500)).toHaveLength(0);
+  expect(m('x4', 100)).toHaveLength(1);
+});
+test('Lastschrift-Typ als Eingang bleibt normaler Eingang, nur als Ausgang Rückbuchung', () => {
+  const base = qontoTransactions.transactions[0];
+  const credit = mapQonto([{ ...base, transaction_id: 'dd1', operation_type: 'direct_debit_collection' }]).payments;
+  expect(credit[0]).toMatchObject({ amountCents: 30000, kind: 'incoming' });
+});

@@ -20,10 +20,9 @@ export function mergeBatch(s: AppState, b: ImportBatch, newId: () => string): { 
     const knownRef = c.externalRefs.find((r) => known.has(refKey(r)));
     if (knownRef) {
       const at = contacts.findIndex((x) => (x.externalRefs ?? []).some((r) => refKey(r) === refKey(knownRef)));
-      if (at >= 0 && JSON.stringify(contacts[at].contactPersons ?? null) !== JSON.stringify(c.contactPersons ?? null)) {
-        const next = { ...contacts[at] };
-        if (c.contactPersons) next.contactPersons = c.contactPersons; else delete next.contactPersons;
-        contacts[at] = next;
+      // fehlt das Feld im Batch, bleiben vorhandene Kontaktpersonen unverändert
+      if (at >= 0 && c.contactPersons && JSON.stringify(contacts[at].contactPersons) !== JSON.stringify(c.contactPersons)) {
+        contacts[at] = { ...contacts[at], contactPersons: c.contactPersons };
       }
       continue;
     }
