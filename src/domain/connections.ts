@@ -13,6 +13,7 @@ export const CONNECTION_CATALOG: readonly { id: ConnectionId; company: Company |
   { id: 'whatsapp_kunden', company: 'zulassung', label: 'WhatsApp Kunden' },
   { id: 'whatsapp_assistent', company: null, label: 'WhatsApp Assistent' },
   { id: 'portal_nexus', company: 'nexus', label: 'NEXUS-Portal' },
+  { id: 'claude_invoices', company: 'nexus', label: 'Claude (Rechnungen lesen)' },
 ];
 
 /** Kurzanleitung für die echte Anbindung in Phase 2. */
@@ -29,6 +30,7 @@ export const HOW_TO: Record<ConnectionId, string> = {
   whatsapp_kunden: 'Coexistence über einen Anbieter: Die WhatsApp-Business-App bleibt nutzbar.',
   whatsapp_assistent: 'Zweite Nummer einrichten und Meta-Vorlagen für Briefings freigeben lassen.',
   portal_nexus: 'Mitgliederliste auf portal.nexusnetzwerk.de/mitglieder kopieren (oder als CSV speichern) und unter NEXUS → Portal-Mitglieder → „Mitgliederliste einfügen“ übernehmen.',
+  claude_invoices: 'Schlüssel als Vercel-Variable ANTHROPIC_API_KEY hinterlegen. Claude liest dann offene NEXUS-Rechnungen auf Ratenvereinbarungen (Monatslimit 100 €).',
 };
 
 /** True, wenn alle genannten Quellen noch nicht verbunden sind (Status 'missing'). */

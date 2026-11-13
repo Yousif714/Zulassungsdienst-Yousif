@@ -39,11 +39,11 @@ test('Einrichtung: Passkey anlegen, 10 Codes, danach leerer Echtmodus', async ()
   await expect(page.getByTestId('reply-row')).toHaveCount(0);
 });
 
-test('Verbindungen: Einrichtungs-Liste mit 12 offenen Einträgen', async () => {
+test('Verbindungen: Einrichtungs-Liste mit 13 offenen Einträgen', async () => {
   await page.goto('/verbindungen');
   const list = page.getByTestId('setup-checklist');
   await expect(list.getByRole('heading', { name: 'Einrichtung' })).toBeVisible();
-  await expect(list.locator('li')).toHaveCount(12);
+  await expect(list.locator('li')).toHaveCount(13);
   await expect(list.getByTestId('setup-check')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /simulieren|Wieder verbinden/ })).toHaveCount(0);
 });
