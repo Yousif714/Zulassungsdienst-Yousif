@@ -58,7 +58,7 @@ describe('pullQonto', () => {
     const r = await pullQonto(null, ctx());
     const max = Math.max(...qontoTransactions.transactions.map((t) => Date.parse(t.settled_at)));
     expect(r.complete).toBe(true);
-    expect(JSON.parse(r.cursor!)).toEqual({ settledFrom: new Date(max - QONTO_OVERLAP_MS).toISOString(), account: 0, page: 1, maxSettled: null });
+    expect(JSON.parse(r.cursor!)).toEqual({ settledFrom: new Date(max - QONTO_OVERLAP_MS).toISOString(), accountId: null, page: 1, maxSettled: null });
     expect(JSON.parse(r.cursor!).settledFrom).toBe('2026-10-30T09:00:00.000Z');
   });
 
@@ -83,7 +83,7 @@ describe('pullQonto', () => {
     const first = await pullQonto(null, ctx(lim.o));
     expect(first.complete).toBe(false);
     expect(ids(first).sort()).toEqual(['t-demir-1', 't-demir-2', 't-krueger-ws', 't-return']);
-    expect(JSON.parse(first.cursor!)).toMatchObject({ settledFrom: QONTO_SINCE, account: 1, page: 2 });
+    expect(JSON.parse(first.cursor!)).toMatchObject({ settledFrom: QONTO_SINCE, accountId: 'acc-main', page: 2 });
     const calls: string[] = [];
     const second = await pullQonto(first.cursor, ctx({ fetch: fixtureFetch(qontoRoutesPaged, { calls }) }));
     expect(second.complete).toBe(true);
@@ -94,11 +94,44 @@ describe('pullQonto', () => {
     expect(JSON.parse(second.cursor!).settledFrom).toBe('2026-10-30T09:00:00.000Z');
   });
 
+  test('Kontenliste ändert sich zwischen Teilläufen → keine Lücke', async () => {
+    const org = (ids: string[]) => ({ organization: { bank_accounts: ids.map((id) => ({ id, currency: 'EUR', status: 'active' })) } });
+    const tx = (acc: string, page: number) => `/v2/transactions?${qontoTransactionsQuery(acc, QONTO_SINCE, page)}`;
+    const t = (id: string) => ({ transaction_id: id, amount_cents: 100, side: 'credit', currency: 'EUR', label: 'X', settled_at: '2026-10-02T09:00:00.000Z', operation_type: 'income' });
+    const page = (id: string, next: number | null) => ({ transactions: [t(id)], meta: { next_page: next } });
+    const routes1 = { '/v2/organization': org(['a', 'c']), [tx('a', 1)]: page('a1', null), [tx('c', 1)]: page('c1', 2), [tx('c', 2)]: page('c2', null) };
+    const first = await pullQonto(null, ctx(limitFetches(routes1, 3).o)); // Organisation, a, c Seite 1
+    expect(first.complete).toBe(false);
+    expect(ids(first)).toEqual(['a1', 'c1']);
+    expect(JSON.parse(first.cursor!)).toMatchObject({ accountId: 'c', page: 2 });
+    // Neues Konto b dazwischen: Index 1 wäre jetzt b; über die ID geht es bei c Seite 2 weiter.
+    const calls: string[] = [];
+    const routes2 = { ...routes1, '/v2/organization': org(['a', 'b', 'c']), [tx('b', 1)]: page('b1', null) };
+    const second = await pullQonto(first.cursor, ctx({ fetch: fixtureFetch(routes2, { calls }) }));
+    expect(second.complete).toBe(true);
+    expect(ids(second)).toEqual(['c2']);
+    expect(calls).toEqual(['/v2/organization', tx('c', 2)]);
+    // Konto c verschwindet: weiter mit dem nächsten Konto (hier keins) statt Index außerhalb
+    const third = await pullQonto(first.cursor, ctx({ fetch: fixtureFetch({ ...routes1, '/v2/organization': org(['a', 'b', 'd']), [tx('d', 1)]: page('d1', null), [tx('b', 1)]: page('b1', null) }) }));
+    expect(third.complete).toBe(true);
+    expect(ids(third)).toEqual(['d1']);
+  });
+
+  test('next_page nicht größer als die aktuelle Seite oder nicht endlich → Liste fertig', async () => {
+    const base = qontoRoutes['/v2/transactions'] as { transactions: unknown[] };
+    for (const next of [1, 0, 'x', Infinity, 1.5]) {
+      const calls: string[] = [];
+      const r = await pullQonto(null, ctx({ fetch: fixtureFetch({ ...qontoRoutes, '/v2/transactions': { ...base, meta: { next_page: next } } }, { calls }) }));
+      expect(calls).toHaveLength(2);
+      expect(r.complete).toBe(true);
+    }
+  });
+
   test('429 dreimal (Retries erschöpft) → Teilergebnis mit Cursor statt Fehler', async () => {
     const r = await pullQonto(null, ctx({ fetch: fixtureFetch(qontoRoutes, { status: { '/v2/transactions': 429 } }) }));
     expect(r.complete).toBe(false);
     expect(r.batch.payments).toEqual([]);
-    expect(JSON.parse(r.cursor!)).toMatchObject({ settledFrom: QONTO_SINCE, account: 0, page: 1 });
+    expect(JSON.parse(r.cursor!)).toMatchObject({ settledFrom: QONTO_SINCE, accountId: 'acc-main', page: 1 });
   });
 
   test('401 → ConnectorError ohne Schlüssel', async () => {
