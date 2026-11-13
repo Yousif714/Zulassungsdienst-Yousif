@@ -19,7 +19,7 @@ export function runDetectors(s: AppState, now: Date): Insight[] {
     ...detectReplies(s, now),
     ...detectMemberOverdue(s, now),
     ...detectUnmatchedPayments(s, now),
-    ...detectSubscriptionChanges(s),
+    ...detectSubscriptionChanges(s, now),
     ...detectStripePaidLexwareOpen(s),
     ...detectDoubleInvoices(s),
     ...detectJobsNotInvoiced(s),

@@ -14,16 +14,27 @@ describe('detectSubscriptionChanges', () => {
     ['Chargeback', { disputes: ['dp_1'] }, 'sub:sub_A:dispute'],
   ])('%s → Hinweis, Vertrag unverändert', (_, patch, key) => {
     const s = patchSub(confirmedSub(stripeState, 'sub_A', 'k-ayse'), 'sub_A', patch);
-    const i = detectSubscriptionChanges(s).find((x) => x.dedupeKey === key)!;
+    const i = detectSubscriptionChanges(s, NOW).find((x) => x.dedupeKey === key)!;
     expect(i).toMatchObject({ type: 'subscription_changed', company: 'nexus', priority: 'today', nextStep: 'Vertrag prüfen', needsSources: ['stripe_nexus'], refs: [expect.objectContaining({ kind: 'member', id: 'k-ayse' })] });
     expect(refresh(s, NOW, false).contracts).toEqual(s.contracts);
   });
-  test('Erstattung → Hinweis', () => expect(detectSubscriptionChanges(confirmedSub(stripeState, 'sub_B', 'k-weber')).some((i) => i.dedupeKey === 'sub:sub_B:refund:re_B1')).toBe(true));
+  describe('reguläres Abo-Ende (bestätigtes Enddatum erreicht)', () => {
+    const ended = (end: string, confirmedEnd: string | null = end) =>
+      patchSub(confirmedSub(stripeState, 'sub_A', 'k-ayse'), 'sub_A', { status: 'canceled', cancelAt: end, endDate: end, confirmedEndDate: confirmedEnd });
+    const keys = (s: ReturnType<typeof ended>) => detectSubscriptionChanges(s, NOW).map((i) => i.dedupeKey);
+    test('Enddatum erreicht → kein Kündigungs-Hinweis', () => expect(keys(ended('2026-11-01'))).not.toContain('sub:sub_A:canceled'));
+    test('am Endtag selbst → kein Kündigungs-Hinweis', () => expect(keys(ended('2026-11-12'))).not.toContain('sub:sub_A:canceled'));
+    test('vor dem Enddatum gekündigt → Hinweis', () => expect(keys(ended('2027-03-01'))).toContain('sub:sub_A:canceled'));
+    test('Enddatum weicht vom bestätigten ab → Hinweis', () => expect(keys(ended('2026-11-01', '2027-03-01'))).toContain('sub:sub_A:canceled'));
+    test('ohne Enddatum → Hinweis', () =>
+      expect(detectSubscriptionChanges(patchSub(confirmedSub(stripeState, 'sub_A', 'k-ayse'), 'sub_A', { status: 'canceled', cancelAt: null, endDate: null, confirmedEndDate: null }), NOW).map((i) => i.dedupeKey)).toContain('sub:sub_A:canceled'));
+  });
+  test('Erstattung → Hinweis', () => expect(detectSubscriptionChanges(confirmedSub(stripeState, 'sub_B', 'k-weber'), NOW).some((i) => i.dedupeKey === 'sub:sub_B:refund:re_B1')).toBe(true));
   test('Erstattung ohne Abo-Referenz findet das Abo über die erstattete Zahlung', () => {
     const s = confirmedSub(stripeState, 'sub_B', 'k-weber');
     const noRef = { ...s, payments: s.payments.map((p) => (p.externalId === 're_B1' ? { ...p, subscriptionExternalId: undefined } : p)) };
-    expect(detectSubscriptionChanges(noRef).some((i) => i.dedupeKey === 'sub:sub_B:refund:re_B1')).toBe(true);
+    expect(detectSubscriptionChanges(noRef, NOW).some((i) => i.dedupeKey === 'sub:sub_B:refund:re_B1')).toBe(true);
   });
-  test('unbestätigtes Abo → keine Hinweise', () => expect(detectSubscriptionChanges(patchSub(stripeState, 'sub_A', { status: 'canceled' }))).toEqual([]));
-  test('unverändertes bestätigtes Abo → keine Hinweise', () => expect(detectSubscriptionChanges(confirmedSub(stripeState, 'sub_F', 'k-f'))).toEqual([]));
+  test('unbestätigtes Abo → keine Hinweise', () => expect(detectSubscriptionChanges(patchSub(stripeState, 'sub_A', { status: 'canceled' }), NOW)).toEqual([]));
+  test('unverändertes bestätigtes Abo → keine Hinweise', () => expect(detectSubscriptionChanges(confirmedSub(stripeState, 'sub_F', 'k-f'), NOW)).toEqual([]));
 });
