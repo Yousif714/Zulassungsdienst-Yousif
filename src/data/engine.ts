@@ -5,7 +5,7 @@ import { berlinParts, todayBerlin } from '@/domain/clock';
 import { runCoach } from '@/domain/coach';
 import { detectCommitment } from '@/domain/commitments';
 import { reconcileInsights, runDetectors } from '@/domain/detectors';
-import { expectedAmounts } from '@/domain/detectors/payments';
+import { buildMatchContext } from '@/domain/detectors/payments';
 import type { StoreEvent } from '@/domain/events';
 import { areaStale } from '@/domain/freshness';
 import { normalizePhone, validPhone } from '@/domain/matching/messages';
@@ -28,11 +28,12 @@ function autoAllocate(s: AppState, at: Date, isDemo: boolean): AppState {
   for (const p of s.payments) {
     if (p.source !== 'bank' || p.kind !== 'incoming' || p.company !== 'nexus') continue;
     if (st.allocations.some((a) => a.paymentId === p.id)) continue;
-    const m = matchBankPayment(p, { contacts: st.contacts, ibanLinks: st.ibanLinks, expected: expectedAmounts(st, at) });
-    if (m.confidence !== 'high' || !m.contactId) continue;
-    const contract = st.contracts.find((c) => c.contactId === m.contactId);
+    const m = matchBankPayment(p, buildMatchContext(st, at));
+    // Rechnungsziele ordnet erst Task 4 automatisch zu.
+    if (m.confidence !== 'high' || m.target?.kind !== 'contract') continue;
+    const contract = st.contracts.find((c) => c.id === m.target!.id);
     if (!contract) continue;
-    const name = st.contacts.find((c) => c.id === m.contactId)?.name ?? m.contactId;
+    const name = st.contacts.find((c) => c.id === contract.contactId)?.name ?? contract.contactId;
     st = {
       ...st,
       allocations: [...st.allocations, { paymentId: p.id, contractId: contract.id, amountCents: p.amountCents, method: 'auto' }],

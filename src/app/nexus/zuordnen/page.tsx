@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { stripeLexCases, unallocatedBankPayments } from '@/data/selectors';
 import { useAppStore } from '@/data/store';
 import { formatIsoDe, now } from '@/domain/clock';
-import { expectedAmounts } from '@/domain/detectors/payments';
+import { buildMatchContext } from '@/domain/detectors/payments';
 import { matchBankPayment, type MatchResult } from '@/domain/matching/payments';
 import { formatEuro, parseEuroInput } from '@/domain/money';
 import type { AppState, Payment } from '@/domain/types';
@@ -21,7 +21,7 @@ function PaymentCard({ payment, match }: { payment: Payment; match: MatchResult 
   const { state, dispatch } = useAppStore();
   const selectId = useId();
   const [chosen, setChosen] = useState('');
-  const suggested = match.contactId ? state.contracts.find((c) => c.contactId === match.contactId) : undefined;
+  const suggested = match.target?.kind === 'contract' ? state.contracts.find((c) => c.id === match.target!.id) : undefined;
   const members = state.contracts
     .map((c) => ({ id: c.id, name: nameOf(state, c.contactId) }))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'));
@@ -123,7 +123,7 @@ function SimulateTransfer() {
 export default function MatchPage() {
   const { state, dispatch, mode } = useAppStore();
   const at = now();
-  const expected = expectedAmounts(state, at);
+  const mctx = buildMatchContext(state, at);
   const payments = unallocatedBankPayments(state).sort((a, b) => b.bookedOn.localeCompare(a.bookedOn));
   const cases = stripeLexCases(state);
 
@@ -138,7 +138,7 @@ export default function MatchPage() {
           : (
             <div className="cards">
               {payments.map((p) => (
-                <PaymentCard key={p.id} payment={p} match={matchBankPayment(p, { contacts: state.contacts, ibanLinks: state.ibanLinks, expected })} />
+                <PaymentCard key={p.id} payment={p} match={matchBankPayment(p, mctx)} />
               ))}
             </div>
           )}

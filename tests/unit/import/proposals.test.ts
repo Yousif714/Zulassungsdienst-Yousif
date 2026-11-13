@@ -125,6 +125,9 @@ test('normalizeName: türkische Buchstaben, NFD, Titel', () => {
   expect(normalizeName('Çelik, Dr. Hakan')).toBe('celik hakan');
   expect(normalizeName('Müller')).toBe('mueller');
   expect(nameMatches('Hakan Çelik', 'H. Celik')).toBe(true);
+  expect(normalizeName('Kaya Bau GmbH')).toBe('kaya bau');
+  expect(normalizeName('Öztürk & Söhne e.K.')).toBe('oeztuerk soehne');
+  expect(normalizeName('Celik und Partner GbR')).toBe('celik partner');
 });
 
 test('leere Namen werden nie zusammengeführt', () => {

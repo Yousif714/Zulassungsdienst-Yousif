@@ -4,6 +4,7 @@ export const base: MemberContract = { id:'c1', contactId:'m1', totalCents:120000
 
 import { applyEvent } from '@/data/engine';
 import { executeApproved } from '@/data/executor';
+import type { ExpectedContract, MatchContext } from '@/domain/matching/payments';
 import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { AppState, Connection, Contact, IbanLink, Insight, Invoice, Job, Message, Payment, Vehicle } from '@/domain/types';
 
@@ -17,11 +18,11 @@ export const contacts: Contact[] = [
   { id: 'd-mueller', company: 'zulassung', kind: 'dealer', name: 'Autohaus Müller', phones: [], emails: [] },
 ];
 export const ibanLinks: IbanLink[] = [{ iban: IBAN_KAYA, contactId: 'm-kaya', confirmedAt: '2026-10-01T10:00:00Z' }];
-export const expected = new Map<string, { nextRateCents: number; arrearsCents: number }>([
-  ['m-kaya', { nextRateCents: 30000, arrearsCents: 15000 }],
-  ['m-yilmaz', { nextRateCents: 30000, arrearsCents: 0 }],
+export const expected = new Map<string, ExpectedContract>([
+  ['k-kaya', { contactId: 'm-kaya', rateCents: 30000, nextRateCents: 30000, arrearsCents: 15000, openCents: 90000 }],
+  ['k-yilmaz', { contactId: 'm-yilmaz', rateCents: 30000, nextRateCents: 30000, arrearsCents: 0, openCents: 120000 }],
 ]);
-export const ctx = { contacts, ibanLinks, expected };
+export const ctx: MatchContext = { contacts, ibanLinks, expected, invoices: [] };
 
 export const vehicles: Vehicle[] = [
   { id: 'v-bot', contactId: 'd-mueller', vin: 'WVWZZZ1KZAW123456', plate: 'BOT-MK 456', model: 'Golf' },

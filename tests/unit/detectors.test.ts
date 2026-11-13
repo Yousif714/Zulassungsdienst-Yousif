@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { reconcileInsights, runDetectors, selectTop } from '@/domain/detectors';
+import { buildMatchContext } from '@/domain/detectors/payments';
 import { detectMemberOverdue, memberView } from '@/domain/detectors/members';
 import type { Connection } from '@/domain/types';
 import { detectStaleSources } from '@/domain/detectors/sources';
 import type { StoredInsight } from '@/domain/types';
-import { NOW_0930, base, conn, find, inv, ins, muellerDone, schmidtIn, stateWith, tx, types } from './helpers';
+import { NOW_0930, base, conn, find, inv, ins, member, muellerDone, schmidtIn, stateWith, tx, types, workshop } from './helpers';
 
 const run = (p: Parameters<typeof stateWith>[0]) => runDetectors(stateWith(p), NOW_0930);
 
@@ -189,4 +190,20 @@ test('Fehler-Hinweis erst ab 3 Fehlversuchen, Demo-Störung (ohne sync) sofort',
   expect(n(2)).toBe(0);
   expect(n(3)).toBe(1);
   expect(n()).toBe(1);
+});
+
+describe('buildMatchContext', () => {
+  test('Schlüssel Vertrags-ID, abgedeckte Rechnungen mit contractId', () => {
+    const covered = member('RE-1043');
+    const s = stateWith({
+      contracts: [{ ...base, id: 'k77', contactId: 'm-kaya', origin: [{ connectionId: 'lexware_nexus', externalId: 'c-77' }] }],
+      invoices: [covered, workshop, { ...member('RE-1044'), status: 'paid' }],
+    });
+    const c = buildMatchContext(s, NOW_0930);
+    expect([...c.expected.keys()]).toEqual(['k77']);
+    expect(c.expected.get('k77')).toMatchObject({ contactId: 'm-kaya', rateCents: 30000 });
+    expect(c.invoices.map((i) => i.id)).toEqual(['RE-1043', 'i-ws']);
+    expect(c.invoices[0]).toMatchObject({ contractId: 'k77', openCents: 0 });
+    expect(c.invoices[1]).toMatchObject({ contractId: null, openCents: 14900 });
+  });
 });
