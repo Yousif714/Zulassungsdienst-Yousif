@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { IMPORT_SINCE } from '@/domain/import/batch';
+import { cursorOutdated, IMPORT_SINCE } from '@/domain/import/batch';
 import { mapStripe, STRIPE_API_VERSION, type StripeRaw } from '@/domain/import/stripe';
 
 import { createApiClient } from './http';
@@ -9,7 +9,7 @@ import { BudgetExceeded, type PullContext, type PullResult } from './types';
 export { STRIPE_API_VERSION };
 
 type Phase = 'invoices' | 'refunds' | 'disputes';
-interface Cursor { createdGte: number; phase: Phase; startingAfter: string | null }
+interface Cursor { createdGte: number; phase: Phase; startingAfter: string | null; since: string }
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Obj = Record<string, any>;
 
@@ -22,10 +22,10 @@ function parseCursor(raw: string | null): Cursor {
   if (raw) {
     try {
       const c = JSON.parse(raw) as Cursor;
-      if (Number.isFinite(c.createdGte) && PHASES.includes(c.phase)) return { createdGte: c.createdGte, phase: c.phase, startingAfter: c.startingAfter ?? null };
+      if (!cursorOutdated(c.since) && Number.isFinite(c.createdGte) && PHASES.includes(c.phase)) return { createdGte: c.createdGte, phase: c.phase, startingAfter: c.startingAfter ?? null, since: IMPORT_SINCE };
     } catch { /* ungültiger Cursor → Neustart */ }
   }
-  return { createdGte: sinceSec(), phase: 'invoices', startingAfter: null };
+  return { createdGte: sinceSec(), phase: 'invoices', startingAfter: null, since: IMPORT_SINCE };
 }
 
 const query = (params: [string, string][], startingAfter: string | null): string =>
@@ -115,7 +115,7 @@ export async function pullStripe(cursor: string | null, ctx: PullContext): Promi
   const batch = mapStripe(raw as unknown as StripeRaw);
   if (complete) {
     // Wasserzeichen steigt erst jetzt; 35 Tage Überlappung fangen Nachzügler, Schlüssel machen sie unschädlich.
-    const next: Cursor = { createdGte: Math.max(cur.createdGte, Math.floor(ctx.now() / 1000) - OVERLAP_SEC), phase: 'invoices', startingAfter: null };
+    const next: Cursor = { createdGte: Math.max(cur.createdGte, Math.floor(ctx.now() / 1000) - OVERLAP_SEC), phase: 'invoices', startingAfter: null, since: IMPORT_SINCE };
     return { batch, cursor: JSON.stringify(next), complete: true };
   }
   return { batch, cursor: JSON.stringify(state), complete: false };

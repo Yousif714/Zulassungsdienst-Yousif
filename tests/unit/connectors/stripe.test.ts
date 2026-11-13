@@ -39,9 +39,24 @@ describe('pullStripe', () => {
     const calls: string[] = [];
     const first = await pullStripe(null, ctx());
     const cur = JSON.parse(first.cursor!);
-    expect(cur).toEqual({ createdGte: NOW / 1000 - 35 * 86400, phase: 'invoices', startingAfter: null });
+    expect(cur).toEqual({ createdGte: NOW / 1000 - 35 * 86400, phase: 'invoices', startingAfter: null, since: IMPORT_SINCE });
     await pullStripe(first.cursor, ctx({ fetch: fixtureFetch(stripeRoutes, { calls }) }));
     expect(calls.find((c) => c.startsWith('/v1/invoices?'))).toContain(`created%5Bgte%5D=${cur.createdGte}`);
+  });
+
+  test('Cursor mit späterem oder ohne since → einmal Neustart ab IMPORT_SINCE (mit Abos)', async () => {
+    const later = Date.parse('2026-10-01T00:00:00Z') / 1000;
+    for (const since of ['2026-08-01', undefined]) {
+      const calls: string[] = [];
+      const old = JSON.stringify({ createdGte: later, phase: 'refunds', startingAfter: 're_X', ...(since ? { since } : {}) });
+      const r = await pullStripe(old, ctx({ fetch: fixtureFetch(stripeRoutes, { calls }) }));
+      expect(calls[0]).toContain('/v1/subscriptions');
+      expect(calls.find((c) => c.startsWith('/v1/invoices?'))).toContain(`created%5Bgte%5D=${sinceSec}`);
+      expect(JSON.parse(r.cursor!).since).toBe(IMPORT_SINCE);
+    }
+    const calls: string[] = [];
+    await pullStripe(JSON.stringify({ createdGte: later, phase: 'invoices', startingAfter: null, since: IMPORT_SINCE }), ctx({ fetch: fixtureFetch(stripeRoutes, { calls }) }));
+    expect(calls.find((c) => c.startsWith('/v1/invoices?'))).toContain(`created%5Bgte%5D=${later}`);
   });
 
   test('Abbruch mitten in der Rechnungsliste → Cursor mit starting_after; Folgelauf liefert genau den Rest', async () => {
@@ -49,7 +64,7 @@ describe('pullStripe', () => {
     const first = await pullStripe(null, ctx(lim.o));
     expect(first.complete).toBe(false);
     expect(ids(first).sort()).toEqual(['in_A1', 'in_A2']);
-    expect(JSON.parse(first.cursor!)).toEqual({ createdGte: sinceSec, phase: 'invoices', startingAfter: 'in_A2' });
+    expect(JSON.parse(first.cursor!)).toEqual({ createdGte: sinceSec, phase: 'invoices', startingAfter: 'in_A2', since: IMPORT_SINCE });
     const calls: string[] = [];
     const second = await pullStripe(first.cursor, ctx({ fetch: fixtureFetch(stripeRoutesPaged, { calls }) }));
     expect(second.complete).toBe(true);

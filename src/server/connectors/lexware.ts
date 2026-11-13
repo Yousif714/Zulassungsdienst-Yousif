@@ -1,13 +1,13 @@
 import 'server-only';
 
-import { emptyBatch, IMPORT_SINCE, type ImportBatch } from '@/domain/import/batch';
+import { cursorOutdated, emptyBatch, IMPORT_SINCE, type ImportBatch } from '@/domain/import/batch';
 import { mapLexwareContacts, mapLexwareInvoice, type LexwareConnection } from '@/domain/import/lexware';
 
 import { createApiClient } from './http';
 import { BudgetExceeded, type PullContext, type PullResult } from './types';
 
 type Phase = 'contacts' | 'invoices';
-interface Cursor { phase: Phase; page: number }
+interface Cursor { phase: Phase; page: number; since: string }
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Obj = Record<string, any>;
 
@@ -24,10 +24,10 @@ function parseCursor(raw: string | null): Cursor {
   if (raw) {
     try {
       const c = JSON.parse(raw) as Cursor;
-      if ((c.phase === 'contacts' || c.phase === 'invoices') && Number.isInteger(c.page) && c.page >= 0) return { phase: c.phase, page: c.page };
+      if (!cursorOutdated(c.since) && (c.phase === 'contacts' || c.phase === 'invoices') && Number.isInteger(c.page) && c.page >= 0) return { phase: c.phase, page: c.page, since: IMPORT_SINCE };
     } catch { /* ungültiger Cursor → Neustart */ }
   }
-  return { phase: 'contacts', page: 0 };
+  return { phase: 'contacts', page: 0, since: IMPORT_SINCE };
 }
 
 const isLast = (page: Obj, n: number): boolean => page.last === true || !(page.content?.length > 0) || (Number.isInteger(page.totalPages) && n + 1 >= page.totalPages);

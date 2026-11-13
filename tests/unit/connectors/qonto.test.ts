@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
+import { IMPORT_SINCE } from '@/domain/import/batch';
 import { fixtureFetch } from '@/server/connectors/fixture-fetch';
 import { pullQonto, QONTO_OVERLAP_MS, QONTO_SINCE, qontoTransactionsQuery } from '@/server/connectors/qonto';
 import { ConnectorError, type PullContext } from '@/server/connectors/types';
@@ -17,12 +18,12 @@ const limitFetches = (routes: Record<string, unknown>, n: number) => {
   return { o: { fetch: f, now: () => (count >= n ? NOW + 1_000_000 : NOW), deadline: NOW + 60_000 } };
 };
 const ids = (r: { batch: { payments: { externalId: string }[] } }) => r.batch.payments.map((p) => p.externalId);
-// t-demir-1, t-demir-2, t-krueger-ws, t-stripe, t-kaya-ref, t-return (t-out/Ausgang, t-usd, t-july entfallen im Mapper)
+// t-demir-1, t-demir-2, t-krueger-ws, t-stripe, t-kaya-ref, t-return (t-out/Ausgang, t-usd, t-may entfallen im Mapper)
 const ALL = ['t-demir-1', 't-demir-2', 't-kaya-ref', 't-krueger-ws', 't-return', 't-stripe'];
 
 test('Query hat feste Parameterreihenfolge', () => {
   expect(qontoTransactionsQuery('acc-main', QONTO_SINCE, 2)).toBe(
-    'bank_account_id=acc-main&status%5B%5D=completed&settled_at_from=2026-07-31T22%3A00%3A00.000Z&sort_by=settled_at%3Aasc&per_page=100&current_page=2',
+    'bank_account_id=acc-main&status%5B%5D=completed&settled_at_from=2026-05-31T22%3A00%3A00.000Z&sort_by=settled_at%3Aasc&per_page=100&current_page=2',
   );
 });
 
@@ -58,7 +59,7 @@ describe('pullQonto', () => {
     const r = await pullQonto(null, ctx());
     const max = Math.max(...qontoTransactions.transactions.map((t) => Date.parse(t.settled_at)));
     expect(r.complete).toBe(true);
-    expect(JSON.parse(r.cursor!)).toEqual({ settledFrom: new Date(max - QONTO_OVERLAP_MS).toISOString(), accountId: null, page: 1, maxSettled: null });
+    expect(JSON.parse(r.cursor!)).toEqual({ settledFrom: new Date(max - QONTO_OVERLAP_MS).toISOString(), accountId: null, page: 1, maxSettled: null, since: IMPORT_SINCE });
     expect(JSON.parse(r.cursor!).settledFrom).toBe('2026-10-30T09:00:00.000Z');
   });
 
@@ -69,6 +70,25 @@ describe('pullQonto', () => {
     expect(calls[1]).toBe(`/v2/transactions?${qontoTransactionsQuery('acc-main', '2026-10-30T09:00:00.000Z', 1)}`);
     const empty = await pullQonto(null, ctx({ fetch: fixtureFetch({ ...qontoRoutes, '/v2/transactions': { transactions: [], meta: { next_page: null } } }) }));
     expect(JSON.parse(empty.cursor!).settledFrom).toBe(QONTO_SINCE);
+  });
+
+  test('IMPORT_SINCE 01.06.: QONTO_SINCE ist Berliner Mitternacht in UTC', () => {
+    expect(IMPORT_SINCE).toBe('2026-06-01');
+    expect(QONTO_SINCE).toBe('2026-05-31T22:00:00.000Z');
+  });
+
+  test('Cursor mit späterem oder ohne since → einmal Neustart ab QONTO_SINCE', async () => {
+    for (const since of ['2026-08-01', undefined]) {
+      const old = JSON.stringify({ settledFrom: '2026-10-30T09:00:00.000Z', accountId: null, page: 1, maxSettled: null, ...(since ? { since } : {}) });
+      const calls: string[] = [];
+      const r = await pullQonto(old, ctx({ fetch: fixtureFetch(qontoRoutes, { calls }) }));
+      expect(calls[1]).toBe(`/v2/transactions?${qontoTransactionsQuery('acc-main', QONTO_SINCE, 1)}`);
+      expect(JSON.parse(r.cursor!).since).toBe(IMPORT_SINCE);
+    }
+    const calls: string[] = [];
+    const cur = JSON.stringify({ settledFrom: '2026-10-30T09:00:00.000Z', accountId: null, page: 1, maxSettled: null, since: IMPORT_SINCE });
+    await pullQonto(cur, ctx({ fetch: fixtureFetch(qontoRoutes, { calls }) }));
+    expect(calls[1]).toBe(`/v2/transactions?${qontoTransactionsQuery('acc-main', '2026-10-30T09:00:00.000Z', 1)}`);
   });
 
   test('ungültiger Cursor → Neustart ab QONTO_SINCE', async () => {

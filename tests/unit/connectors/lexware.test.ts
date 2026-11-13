@@ -24,7 +24,7 @@ test('Belegliste fragt voucherStatus=any (gültig für jeden Belegtyp), Entwürf
   const q = new URLSearchParams(lexwareVoucherlistQuery(0));
   expect(q.get('voucherType')).toBe('invoice');
   expect(q.get('voucherStatus')).toBe('any');
-  expect(q.get('voucherDateFrom')).toBe('2026-08-01');
+  expect(q.get('voucherDateFrom')).toBe('2026-06-01');
 });
 
 test('anhaltendes 429 mitten in den Details → Teilergebnis mit Cursor statt Fehler; Folgelauf liefert den Rest', async () => {
@@ -61,7 +61,7 @@ describe('pullLexware', () => {
     await pullLexware('lexware_nexus', null, ctx({ fetch: fixtureFetch(lexwareRoutes, { calls }) }));
     const vl = calls.find((c) => c.startsWith('/v1/voucherlist'))!;
     expect(vl).toContain('voucherType=invoice');
-    expect(vl).toContain('voucherDateFrom=2026-08-01');
+    expect(vl).toContain('voucherDateFrom=2026-06-01');
     expect(vl).not.toContain('draft');
     expect(calls.join()).not.toContain('SECRET');
   });
@@ -104,7 +104,7 @@ describe('pullLexware', () => {
     const first = await pullLexware('lexware_nexus', null, ctx(lim.o));
     expect(first.complete).toBe(false);
     expect(first.batch.invoices).toHaveLength(3);
-    expect(JSON.parse(first.cursor!)).toEqual({ phase: 'invoices', page: 0 });
+    expect(JSON.parse(first.cursor!)).toEqual({ phase: 'invoices', page: 0, since: '2026-06-01' });
     const known = new Map(first.batch.invoices.map((i) => [i.externalId, i.sourceUpdatedAt]));
     expect(known.size).toBe(3);
     const calls: string[] = [];
@@ -116,6 +116,20 @@ describe('pullLexware', () => {
     expect(calls.filter((c) => c.startsWith('/v1/invoices/'))).toHaveLength(ALL.length - 3);
     expect(numbers(first).filter((n) => numbers(second).includes(n))).toEqual([]);
     expect([...numbers(first), ...numbers(second)].sort()).toEqual(ALL.slice().sort());
+  });
+
+  test('Cursor mit späterem oder ohne since → einmal Neustart bei den Kontakten', async () => {
+    for (const since of ['2026-08-01', undefined]) {
+      const calls: string[] = [];
+      const old = JSON.stringify({ phase: 'invoices', page: 1, ...(since ? { since } : {}) });
+      const r = await pullLexware('lexware_nexus', old, ctx({ fetch: fixtureFetch(lexwareRoutesPaged, { calls }) }));
+      expect(calls[0]).toMatch(/^\/v1\/contacts/);
+      expect(r.complete).toBe(true);
+    }
+    const calls: string[] = [];
+    await pullLexware('lexware_nexus', JSON.stringify({ phase: 'invoices', page: 1, since: '2026-06-01' }), ctx({ fetch: fixtureFetch(lexwareRoutesPaged, { calls }) }));
+    expect(calls[0]).toContain('page=1');
+    expect(calls.some((c) => c.startsWith('/v1/contacts'))).toBe(false);
   });
 
   test('Eintrag ohne updatedDate wird nie übersprungen', async () => {

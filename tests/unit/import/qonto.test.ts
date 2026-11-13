@@ -16,7 +16,7 @@ test('Rückbuchung als negative Zahlung', () => {
   expect(ext('t-return')?.refundOf).toBeUndefined();
 });
 test('Fremdwährung übersprungen', () => expect(ext('t-usd')).toBeUndefined());
-test('vor dem 01.08. (Berlin) übersprungen', () => expect(ext('t-july')).toBeUndefined());
+test('vor dem 01.06. (Berlin) übersprungen', () => expect(ext('t-may')).toBeUndefined());
 test('nur Zahlungen im Batch', () => expect([b.contacts, b.invoices, b.subscriptions, b.disputes].every((x) => x.length === 0)).toBe(true));
 test('nicht ganzzahliger oder nicht positiver Betrag → übersprungen', () => {
   const base = qontoTransactions.transactions[0];

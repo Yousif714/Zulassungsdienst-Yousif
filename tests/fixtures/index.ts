@@ -74,7 +74,7 @@ export const lexwareRoutesZulassung: Record<string, unknown> = {
 /** Query-String der Stripe-Anfragen (muss zur Anfrage des Connectors passen; Reihenfolge fest). */
 const stripeQuery = (extra: Record<string, string>, startingAfter?: string): string =>
   `?${new URLSearchParams({ ...extra, limit: '100', ...(startingAfter ? { starting_after: startingAfter } : {}) }).toString()}`;
-const stripeSince = Date.parse('2026-08-01T00:00:00Z') / 1000 - 7200;
+const stripeSince = Date.parse('2026-06-01T00:00:00Z') / 1000 - 7200;
 const invoiceQuery = (after?: string) => `/v1/invoices${stripeQuery({ status: 'paid', 'created[gte]': String(stripeSince) }, after)}`;
 
 /** Stripe mit Mehrseiten-Rechnungen (Seite 1: A1, A2 mit has_more; Seite 2: A3, B1, D1). Exakte Query pro Seite. */
@@ -85,7 +85,7 @@ export const stripeRoutesPaged: Record<string, unknown> = {
 };
 
 const vl = (page: number) =>
-  `/v1/voucherlist?${new URLSearchParams({ voucherType: 'invoice', voucherStatus: 'any', voucherDateFrom: '2026-08-01', sort: 'voucherDate,ASC', size: '100', page: String(page) }).toString()}`;
+  `/v1/voucherlist?${new URLSearchParams({ voucherType: 'invoice', voucherStatus: 'any', voucherDateFrom: '2026-06-01', sort: 'voucherDate,ASC', size: '100', page: String(page) }).toString()}`;
 /** Lexware (NEXUS) mit zwei Voucherlist-Seiten: Seite 0 = RE-1043…RE-1100, Seite 1 = RE-1101…RE-1110. */
 export const lexwareRoutesPaged: Record<string, unknown> = {
   ...Object.fromEntries(Object.entries(lexwareRoutes).filter(([k]) => k !== '/v1/voucherlist')),
@@ -108,7 +108,7 @@ export const qontoRoutes: Record<string, unknown> = {
 const qTx = (ids: string[]) => qontoTransactionsJson.transactions.filter((t) => ids.includes(t.transaction_id));
 const qPage = (ids: string[], page: number, next: number | null) => ({ transactions: qTx(ids), meta: { current_page: page, next_page: next, per_page: 100, total_pages: 2 } });
 const qtq = (account: string, page: number) =>
-  `/v2/transactions?${new URLSearchParams([['bank_account_id', account], ['status[]', 'completed'], ['settled_at_from', '2026-07-31T22:00:00.000Z'], ['sort_by', 'settled_at:asc'], ['per_page', '100'], ['current_page', String(page)]]).toString()}`;
+  `/v2/transactions?${new URLSearchParams([['bank_account_id', account], ['status[]', 'completed'], ['settled_at_from', '2026-05-31T22:00:00.000Z'], ['sort_by', 'settled_at:asc'], ['per_page', '100'], ['current_page', String(page)]]).toString()}`;
 /** Qonto mit zwei EUR-Konten (acc-2, acc-main), einem USD- und einem geschlossenen Konto (ohne Route: Abruf wäre 404); acc-main hat zwei Seiten. */
 export const qontoRoutesPaged: Record<string, unknown> = {
   '/v2/organization': {
@@ -122,7 +122,7 @@ export const qontoRoutesPaged: Record<string, unknown> = {
       ],
     },
   },
-  [qtq('acc-2', 1)]: qPage(['t-return', 't-usd', 't-july'], 1, null),
+  [qtq('acc-2', 1)]: qPage(['t-return', 't-usd', 't-may'], 1, null),
   [qtq('acc-main', 1)]: qPage(['t-demir-1', 't-demir-2', 't-krueger-ws'], 1, 2),
   [qtq('acc-main', 2)]: qPage(['t-stripe', 't-kaya-ref', 't-out'], 2, null),
 };

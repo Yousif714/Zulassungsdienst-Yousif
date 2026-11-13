@@ -1,14 +1,14 @@
 import 'server-only';
 
-import { emptyBatch, type ImportBatch } from '@/domain/import/batch';
+import { cursorOutdated, emptyBatch, IMPORT_SINCE, type ImportBatch } from '@/domain/import/batch';
 import { mapQonto, QF } from '@/domain/import/qonto';
 
 import { createApiClient } from './http';
 import { BudgetExceeded, type PullContext, type PullResult } from './types';
 
 export const QONTO_BASE = 'https://thirdparty.qonto.com/v2';
-/** IMPORT_SINCE (2026-08-01) als Berliner Mitternacht in UTC. */
-export const QONTO_SINCE = '2026-07-31T22:00:00.000Z';
+/** IMPORT_SINCE als Berliner Mitternacht (Sommerzeit, UTC+2) in UTC. */
+export const QONTO_SINCE = new Date(Date.parse(`${IMPORT_SINCE}T00:00:00Z`) - 2 * 3_600_000).toISOString();
 export const QONTO_OVERLAP_MS = 3 * 86_400_000;
 const MIN_INTERVAL_MS = 500;
 const PER_PAGE = 100;
@@ -25,7 +25,7 @@ const QO = {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Obj = Record<string, any>;
 /** Nur der Connector kennt diese Form. `accountId` null = Zyklusanfang; Konten werden über die ID wiedergefunden, nicht über einen Index. */
-interface Cursor { settledFrom: string; accountId: string | null; page: number; maxSettled: string | null }
+interface Cursor { settledFrom: string; accountId: string | null; page: number; maxSettled: string | null; since: string }
 
 /** Feste Parameterreihenfolge (Tests und Routen-Fixtures verlassen sich darauf). */
 export const qontoTransactionsQuery = (accountId: string, settledFrom: string, page: number): string =>
@@ -34,15 +34,15 @@ export const qontoTransactionsQuery = (accountId: string, settledFrom: string, p
     [QO.qSort, QO.qSortValue], [QO.qPerPage, String(PER_PAGE)], [QO.qPage, String(page)],
   ]).toString();
 
-const fresh = (): Cursor => ({ settledFrom: QONTO_SINCE, accountId: null, page: 1, maxSettled: null });
+const fresh = (): Cursor => ({ settledFrom: QONTO_SINCE, accountId: null, page: 1, maxSettled: null, since: IMPORT_SINCE });
 const validTime = (v: unknown): v is string => typeof v === 'string' && Number.isFinite(Date.parse(v));
 
 function parseCursor(raw: string | null): Cursor {
   if (raw) {
     try {
       const c = JSON.parse(raw) as Cursor;
-      if (validTime(c.settledFrom) && (c.accountId === null || typeof c.accountId === 'string') && Number.isInteger(c.page) && c.page >= 1 && (c.maxSettled === null || validTime(c.maxSettled))) {
-        return { settledFrom: c.settledFrom, accountId: c.accountId, page: c.page, maxSettled: c.maxSettled };
+      if (!cursorOutdated(c.since) && validTime(c.settledFrom) && (c.accountId === null || typeof c.accountId === 'string') && Number.isInteger(c.page) && c.page >= 1 && (c.maxSettled === null || validTime(c.maxSettled))) {
+        return { settledFrom: c.settledFrom, accountId: c.accountId, page: c.page, maxSettled: c.maxSettled, since: IMPORT_SINCE };
       }
     } catch { /* ungültiger Cursor → Neustart */ }
   }
@@ -96,5 +96,5 @@ export async function pullQonto(cursor: string | null, ctx: PullContext): Promis
   }
   if (!complete) return { batch, cursor: JSON.stringify(state), complete: false };
   const from = state.maxSettled === null ? QONTO_SINCE : new Date(Math.max(Date.parse(QONTO_SINCE), Date.parse(state.maxSettled) - QONTO_OVERLAP_MS)).toISOString();
-  return { batch, cursor: JSON.stringify({ settledFrom: from, accountId: null, page: 1, maxSettled: null } satisfies Cursor), complete: true };
+  return { batch, cursor: JSON.stringify({ settledFrom: from, accountId: null, page: 1, maxSettled: null, since: IMPORT_SINCE } satisfies Cursor), complete: true };
 }
