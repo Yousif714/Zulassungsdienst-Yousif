@@ -6,7 +6,7 @@ import { todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
 import { areaStale } from '@/domain/freshness';
 import { plateInText } from '@/domain/matching/messages';
-import { invoiceOpenCents } from '@/domain/ledger/receivables';
+import { customerOpenInvoices, invoiceOpenCents, invoicePaidCents, paymentRestCents } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
 import { portalViews, type PortalView } from '@/domain/portal';
 import { monthForecast } from '@/domain/ledger/forecast';
@@ -147,4 +147,35 @@ export function invoiceCandidates(s: AppState, jobId: string): Invoice[] {
   return s.invoices
     .filter((i) => i.contactId === job.contactId && i.company === 'zulassung' && i.status !== 'void' && !linked.has(i.id) && i.totalCents <= rest)
     .sort((a, b) => hasPlate(b) - hasPlate(a) || b.issuedOn.localeCompare(a.issuedOn));
+}
+
+/** Offene Rechnungen eines Zulassung-Kunden mit Rest und bereits bezahltem Betrag, nach Fälligkeit. */
+export function customerInvoiceRows(s: AppState, contactId: string): { invoice: Invoice; openCents: number; paidCents: number }[] {
+  return customerOpenInvoices(s, contactId).invoiceIds.flatMap((id) => {
+    const invoice = s.invoices.find((i) => i.id === id);
+    return invoice ? [{ invoice, openCents: invoiceOpenCents(s, invoice), paidCents: invoicePaidCents(s, invoice) }] : [];
+  });
+}
+
+/** Zahlungen auf Zulassung-Rechnungen eines Kunden (je Zuordnung eine Zeile), neueste zuerst. */
+export function customerPayments(s: AppState, contactId: string): { key: string; bookedOn: IsoDate; amountCents: number; invoiceNumber: string; paidInLexware: boolean; isReturn: boolean }[] {
+  return s.allocations
+    .flatMap((a) => {
+      const invoice = a.invoiceId ? s.invoices.find((i) => i.id === a.invoiceId) : undefined;
+      const payment = s.payments.find((p) => p.id === a.paymentId);
+      if (!invoice || !payment || invoice.company !== 'zulassung' || invoice.contactId !== contactId) return [];
+      return [{
+        key: `${a.paymentId}:${invoice.id}`, bookedOn: payment.bookedOn, amountCents: a.amountCents, invoiceNumber: invoice.number,
+        paidInLexware: invoice.status === 'paid' && a.amountCents > 0, isReturn: a.amountCents < 0,
+      }];
+    })
+    .sort((a, b) => b.bookedOn.localeCompare(a.bookedOn) || a.key.localeCompare(b.key));
+}
+
+/** Zugeordnete, nicht ausgeblendete Zahlungen einer Firma mit nicht zugeordnetem Rest (z. B. Überzahlung). */
+export function partlyAllocatedPayments(s: AppState, company: Company): { payment: Payment; restCents: number }[] {
+  return s.payments
+    .filter((p) => p.company === company && !p.ignoredAt && s.allocations.some((a) => a.paymentId === p.id))
+    .map((payment) => ({ payment, restCents: paymentRestCents(s, payment) }))
+    .filter((x) => x.restCents > 0);
 }

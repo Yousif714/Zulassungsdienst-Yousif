@@ -29,6 +29,23 @@ export function invoiceOpenCents(s: AppState, inv: Invoice): number {
   return Math.max(0, Math.min(inv.openCents, inv.totalCents - allocatedCents(s, inv)));
 }
 
+/** Bereits bezahlter Betrag einer Rechnung (Cent): offen/überfällig Gesamtbetrag minus Rest, bezahlt alles, storniert nichts. */
+export function invoicePaidCents(s: AppState, inv: Invoice): number {
+  if (inv.status === 'void') return 0;
+  if (inv.status === 'paid') return inv.totalCents;
+  return Math.max(0, inv.totalCents - invoiceOpenCents(s, inv));
+}
+
+/** Offene Zulassung-Rechnungen eines Kontakts (Rest > 0), älteste Fälligkeit zuerst, mit Gesamtrest. */
+export function customerOpenInvoices(s: AppState, contactId: string): { invoiceIds: string[]; openCents: number } {
+  const open = s.invoices
+    .filter((i) => i.company === 'zulassung' && i.contactId === contactId)
+    .map((i) => ({ i, openCents: invoiceOpenCents(s, i) }))
+    .filter((x) => x.openCents > 0)
+    .sort((a, b) => a.i.dueDate.localeCompare(b.i.dueDate) || a.i.number.localeCompare(b.i.number));
+  return { invoiceIds: open.map((x) => x.i.id), openCents: open.reduce((n, x) => n + x.openCents, 0) };
+}
+
 /** Was einer Zahlung noch zugeordnet werden kann: offen → offener Betrag; Zulassung, in Lexware bezahlt → Gesamtbetrag minus Zuordnungen; sonst 0. */
 export function invoiceAllocatableCents(s: AppState, inv: Invoice): number {
   if (inv.status === 'paid') return inv.company === 'zulassung' ? Math.max(0, inv.totalCents - allocatedCents(s, inv)) : 0;

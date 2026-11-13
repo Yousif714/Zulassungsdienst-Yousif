@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { coveringContract, invoiceOpenCents, nexusReceivables } from '@/domain/ledger/receivables';
+import { coveringContract, customerOpenInvoices, invoiceOpenCents, invoicePaidCents, nexusReceivables } from '@/domain/ledger/receivables';
 import { memberView } from '@/domain/detectors/members';
 import { invoiceRef } from '@/domain/ledger/contracts';
-import { base, conn, member, stateWith, tx, workshop } from '../helpers';
+import { base, conn, inv, member, sptx, stateWith, tx, workshop } from '../helpers';
 import { readInv } from '../import/reading-fixtures';
 import { legacyNoBank } from '../import/helpers';
 
@@ -75,5 +75,25 @@ describe('Ratenverträge aus Lesungen', () => {
     const i = readInv({ status: 'void' });
     const k = { ...base, id: 'k1', contactId: 'm-x', kind: 'ticket' as const, origin: [invoiceRef(i)] };
     expect(nexusReceivables(stateWith({ invoices: [i], contracts: [k], connections: qonto }), TODAY).items).toEqual([]);
+  });
+});
+
+describe('Zulassung: bezahlt und offen je Kunde', () => {
+  const z600 = inv('i-z6', 60000, { dueDate: '2026-10-01', status: 'overdue' });
+  const alloc = (amountCents: number) => ({ paymentId: 'sp1', invoiceId: 'i-z6', amountCents, method: 'confirmed' as const });
+  test('invoicePaidCents: offen mit Teilzahlung, bezahlt, storniert', () => {
+    const part = stateWith({ invoices: [z600], payments: [sptx({ amountCents: 42000 })], allocations: [alloc(42000)] });
+    expect(invoicePaidCents(part, z600)).toBe(42000);
+    const lexPaid = { ...z600, status: 'paid' as const, openCents: 0 };
+    expect(invoicePaidCents(stateWith({ invoices: [lexPaid] }), lexPaid)).toBe(60000);
+    const voided = { ...z600, status: 'void' as const };
+    expect(invoicePaidCents(stateWith({ invoices: [voided] }), voided)).toBe(0);
+  });
+  test('customerOpenInvoices: nur Zulassung des Kontakts mit Rest, älteste Fälligkeit zuerst', () => {
+    const later = inv('i-z2', 20000, { dueDate: '2026-12-01' });
+    const paid = inv('i-z3', 5000, { status: 'paid', openCents: 0 });
+    const other = inv('i-z4', 7000, { contactId: 'd-schmidt' });
+    const s = stateWith({ invoices: [later, z600, paid, other], payments: [sptx({ amountCents: 42000 })], allocations: [alloc(42000)] });
+    expect(customerOpenInvoices(s, 'd-mueller')).toEqual({ invoiceIds: ['i-z6', 'i-z2'], openCents: 38000 });
   });
 });

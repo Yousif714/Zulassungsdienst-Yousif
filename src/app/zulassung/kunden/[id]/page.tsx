@@ -7,6 +7,7 @@ import { ListGroup } from '@/components/ListGroup';
 import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
 import { CONTACT_KIND_LABEL, INVOICE_STATUS_LABEL, JOB_STATUS_LABEL } from '@/components/zulassung-labels';
+import { customerInvoiceRows, customerPayments } from '@/data/selectors';
 import { useAppStore } from '@/data/store';
 import { formatBerlin, formatIsoDe } from '@/domain/clock';
 import { formatEuro } from '@/domain/money';
@@ -29,9 +30,8 @@ export default function CustomerPage() {
 
   const vehicles = state.vehicles.filter((v) => v.contactId === id);
   const jobs = state.jobs.filter((j) => j.contactId === id);
-  const invoices = state.invoices
-    .filter((i) => i.contactId === id && i.company === 'zulassung' && (i.status === 'open' || i.status === 'overdue'))
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const invoices = customerInvoiceRows(state, id);
+  const payments = customerPayments(state, id);
   // Je Unterhaltung die jüngste Nachricht, neueste Unterhaltung zuerst.
   const latestByThread = new Map<string, Message>();
   for (const m of state.messages.filter((x) => x.contactId === id)) {
@@ -65,10 +65,20 @@ export default function CustomerPage() {
       <ListGroup title="Offene Rechnungen" testId="customer-invoices">
         {invoices.length === 0
           ? <ListRow key="none" title="Keine offenen Rechnungen." />
-          : invoices.map((i) => (
+          : invoices.map(({ invoice: i, openCents, paidCents }) => (
             <ListRow key={i.id} testId={`invoice-${i.id}`} title={i.number}
-              subtitle={<><span className={i.status === 'overdue' ? 'arrears-value' : undefined}>{INVOICE_STATUS_LABEL[i.status]}</span> · fällig {formatIsoDe(i.dueDate)}</>}
-              value={<span className="amount">{formatEuro(i.openCents)}</span>} />
+              subtitle={<><span className={i.status === 'overdue' ? 'arrears-value' : undefined}>{INVOICE_STATUS_LABEL[i.status]}</span> · fällig {formatIsoDe(i.dueDate)}{paidCents > 0 ? ` · ${formatEuro(paidCents)} von ${formatEuro(i.totalCents)} bezahlt` : ''}</>}
+              value={<span className="amount">{formatEuro(openCents)}</span>} />
+          ))}
+      </ListGroup>
+
+      <ListGroup title="Zahlungen" testId="customer-payments">
+        {payments.length === 0
+          ? <ListRow key="none" title="Keine Zahlungen." />
+          : payments.map((p) => (
+            <ListRow key={p.key} testId={`payment-row-${p.key}`} title={p.invoiceNumber}
+              subtitle={`${formatIsoDe(p.bookedOn)}${p.paidInLexware ? ' · in Lexware schon bezahlt' : ''}${p.isReturn ? ' · Rückbuchung' : ''}`}
+              value={<span className="amount">{formatEuro(p.amountCents)}</span>} />
           ))}
       </ListGroup>
 
