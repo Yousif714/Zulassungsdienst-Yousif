@@ -111,3 +111,14 @@ describe('Migration Auftragsbestätigungen', () => {
     expect(p).not.toMatch(/drop table|truncate|alter table \w+ drop/);
   });
 });
+
+describe('Migration Rechnungen lesen', () => {
+  it('idempotent, RLS, apply_changes kennt invoice_readings', () => {
+    const p = read(`${DIR}/20261117000000_rechnungen_lesen.sql`);
+    expect(p).toContain('create table if not exists invoice_readings (');
+    expect(p).toContain('alter table invoice_readings enable row level security;');
+    expect(p).toMatch(/v_allowed constant text\[\] := array\[[^\]]*'order_confirmations', 'invoice_readings'/);
+    expect(p).toMatch(/v_external constant text\[\] := array\['payments', 'invoices', 'messages', 'events', 'subscriptions', 'portal_members', 'order_confirmations'\]/);
+    expect(p).not.toMatch(/drop table|truncate|alter table \w+ drop/);
+  });
+});
