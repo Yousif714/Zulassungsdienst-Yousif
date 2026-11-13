@@ -40,7 +40,8 @@ Die Bestandsmitglieder haben in Lexware eine **einzige Gesamtrechnung** und übe
    - Einen **eigenen, stabilen Link** erzeugen: `/zahlung/<token>` auf der App-Domain, mit langem Zufallstoken.
    - Den freigegebenen Plan zusammen mit der Aktions-ID und dem Token am Vertrag speichern (Umstellungs-Status, siehe 7).
    - Grund für den eigenen Link: Stripe-Checkout-Sitzungen verfallen nach höchstens 24 Std. Das Mitglied soll den Link auch Tage später öffnen können.
-3. **Link teilen:** Die Aktion zeigt nach der Ausführung den Link und einen fertigen Nachrichtentext mit **„Kopieren“**. Der Inhaber verschickt ihn selbst (WhatsApp folgt mit 2e).
+3. **Link teilen:** Die Aktion zeigt nach der Ausführung den Link und einen fertigen Nachrichtentext mit **„Kopieren“**. Der Inhaber verschickt ihn selbst (WhatsApp folgt mit 2e). Der Text bittet ausdrücklich darum, einen bestehenden **Dauerauftrag zu löschen** (Inhaber, 13.11.).
+   - Domain: vorerst die Vercel-Adresse der App (Inhaber, 13.11.). Der Link wird aus einer Einstellung bzw. Umgebungsvariable für die Basis-URL gebaut, damit eine spätere eigene Domain nur neue Links betrifft. Alte Links bleiben gültig, solange die Vercel-Adresse besteht.
 4. **Mitglied öffnet den Link:** Die öffentliche Seite `/zahlung/<token>` legt bei jedem Aufruf eine frische Checkout-Sitzung im **Setup-Modus** an (Karte und SEPA-Lastschrift, Kunde aus Schritt 2) und leitet dorthin weiter.
    - Davor zeigt die Seite kurz den Plan: Anzahl Raten, Beträge, erste Abbuchung, letzte Abbuchung. Das Mitglied soll wissen, wozu es zustimmt.
    - Ungültiger, erledigter oder zurückgezogener Token → neutrale Seite „Link nicht mehr gültig, bitte melde dich bei NEXUS“, ohne Daten.
@@ -50,9 +51,10 @@ Die Bestandsmitglieder haben in Lexware eine **einzige Gesamtrechnung** und übe
    - **Gleich:** Zahlungsmittel als Standard am Kunden setzen. Abo-Zeitplan anlegen: eine Phase je Rate oder gleich hohe Folgeraten zusammengefasst, Start am Fälligkeitstag der ersten offenen Rate, Ende nach der letzten Rate (danach kündigen), automatischer Einzug. Metadaten `contractId` und Aktions-ID.
    - **Abweichend** (das Mitglied hat inzwischen überwiesen o. Ä.): kein Abo anlegen. Hinweis „Plan hat sich geändert, Umstellung neu freigeben“. Das Zahlungsmittel bleibt am Kunden, eine neue Freigabe nutzt es ohne neuen Link.
    - Dieser Schritt ist ein **ausdrücklich automatisierter Ablauf** der freigegebenen Aktion (Spec 4a): Der Inhaber hat Plan und Beträge freigegeben, das Mitglied hat zugestimmt. Alles kommt ins Protokoll.
-6. **Verknüpfen:** Der nächste Stripe-Import sieht das Abo mit `metadata.contractId`. Es wird **automatisch** mit dem bestehenden Vertrag verknüpft, ohne Vorschlag und ohne neuen Vertrag. Der Vertrag wechselt auf `billing: 'stripe'`. Bestätigt gelten Raten und Enddatum des freigegebenen Plans.
+6. **Verknüpfen:** Schon beim Anlegen des Zeitplans (Schritt 5) speichert der Server die Zeitplan-ID am Vertrag. Der Vertrag wechselt sofort auf `billing: 'stripe'`, Status `eingerichtet`. Grund: Ein Zeitplan mit Start in der Zukunft hat bis zum Starttag kein Abo-Objekt. Der Import sähe wochenlang nichts, und das Mitglied bekäme sonst Erinnerungen für Raten, die Stripe abbucht *(Call)*. Sobald der Import das Abo mit `metadata.contractId` sieht, wird es **automatisch** mit dem bestehenden Vertrag verknüpft, ohne Vorschlag und ohne neuen Vertrag. Bestätigt gelten Raten und Enddatum des freigegebenen Plans.
+   - Stripe-Produkt: ein eigenes Produkt **„NEXUS-Mitgliedschaft (Ratenplan)“** für alle Umstellungs-Preise (`price_data`). Abos mit `metadata.contractId` erzeugen nie einen Vertragsvorschlag (`proposals.ts`) *(Call)*.
 7. **Umstellungs-Status je Vertrag** (sichtbar auf Übernahme-Seite und Mitgliedsseite):
-   `vorbereitet` (Aktion offen) → `Link verschickt` (ausgeführt) → `Zahlungsmittel hinterlegt` → `aktiv` (Abo verknüpft) · Nebenzweige `Plan geändert` und `zurückgezogen`.
+   `vorbereitet` (Aktion offen) → `Link verschickt` (ausgeführt) → `eingerichtet` (Zahlungsmittel hinterlegt, Zeitplan angelegt, `billing: 'stripe'`) → `aktiv` (Abo verknüpft) · Nebenzweige `Plan geändert`, `zurückgezogen` und `abgebrochen` (siehe 7a).
    „Zurückziehen“ macht den Token ungültig, solange noch kein Abo existiert.
 8. **Fälligkeiten in der Vergangenheit:** Wird der Link erst nach dem Fälligkeitstag der ersten Plan-Rate genutzt, ist diese Rate zum Rückstand geworden. Der Restplan wird beim Abschluss neu gerechnet. Ändern sich dabei nur die Daten, nicht Summe und Ratenzahl, beginnt das Abo mit der nächsten Fälligkeit, und die überfällige Rate wird sofort beim Start eingezogen. Ändert sich mehr → „Plan geändert“ (Punkt 5). *(Call des Bauenden: so wenig Neu-Freigaben wie möglich, ohne Beträge zu ändern.)*
 
@@ -62,8 +64,13 @@ Die Bestandsmitglieder haben in Lexware eine **einzige Gesamtrechnung** und übe
   - Freigabe einzeln oder gesammelt. Versand bis 2e als Demo bzw. „Kopieren“.
 - Überfällige Raten: bestehender Hinweis „Mitglied im Rückstand“ (`detectMemberOverdue`), keine zweite Logik.
 - **Link 7 Tage nicht genutzt** (Status `Link verschickt`): Hinweis an den Inhaber mit Entwurf „Erinnerung an den Link“.
-- Sobald das Abo aktiv ist, gibt es keine Erinnerungen mehr (Anti-Ziel Doppelzahlung).
+- Ab Status `eingerichtet` gibt es keine Erinnerungen mehr (Anti-Ziel Doppelzahlung).
 - Die Werte 3 und 7 Tage sind Vorschläge des Bauenden und stehen als Einstellung bereit.
+
+## 7a. Doppelzahlung und Störungen
+- **Überweisung trotz Stripe** (z. B. alter Dauerauftrag): Geht nach `eingerichtet` eine Banküberweisung des Mitglieds ein, meldet die App **„Doppelzahlung“** mit Betrag und Mitglied. Der Inhaber erstattet von Hand. Die App ändert das Abo deswegen nicht (Inhaber, 13.11.). Die Überweisung wird wie bisher dem Vertrag zugeordnet. Eine Überzahlung zeigt das Ledger als Guthaben.
+- **Abbuchung fehlgeschlagen** (Rücklastschrift, Karte abgelehnt): Es kommt der bestehende Hinweis „Stripe-Zahlung fehlgeschlagen“ (`past_due`/`unpaid`). Der Vertrag bleibt auf Stripe *(Call)*. Die App hängt nicht von der Stripe-Kontoeinstellung für Wiederholungen ab.
+- **Abo endet vor der letzten Rate** (gekündigt, von Stripe beendet): Der Hinweis „Abo gekündigt“ bleibt. Der Vertrag fällt zurück auf `billing: 'legacy'`, Status `abgebrochen`, und die Erinnerungen laufen wieder *(Call)*. Eine neue Umstellung ist möglich.
 
 ## 8. Folgen in bestehender Logik (müssen angepasst werden)
 - **Plan im Vertrag:** Die künftigen Raten des Vertrags müssen nach der Umstellung dem freigegebenen Plan entsprechen. Sonst stimmen Rückstand und Zuordnung der Stripe-Zahlungen nicht. Der Weg dahin (Ausnahmen, `catchUpMode`, eigene Plan-Raten) ist Sache des Bauenden, aber `buildSchedule` muss den Plan liefern.
@@ -73,7 +80,10 @@ Die Bestandsmitglieder haben in Lexware eine **einzige Gesamtrechnung** und übe
 
 ## 9. Zugang
 - Neuer **Schreib-Schlüssel** `STRIPE_WRITE_KEY` (Vercel-Umgebungsvariable). Eingeschränkter Schlüssel mit Schreibrecht nur für: Kunden, Checkout-Sitzungen, Setup-Intents (lesen), Zahlungsmethoden (anhängen), Abo-Zeitpläne, Abos, Produkte, Preise. Er bleibt getrennt vom Lese-Schlüssel `STRIPE_RESTRICTED_KEY`.
-- Den Schlüssel legt der **Inhaber** in Stripe an und trägt ihn in Vercel ein. Erst im **Testmodus** (Testschlüssel und Testkarte bzw. Test-IBAN), dann live.
+- Den Schlüssel legt der **Inhaber** in Stripe an und trägt ihn in Vercel ein. Erst im **Testmodus**, dann live.
+- **Testlauf (Inhaber, 13.11.):** Nur die Vercel-Umgebung **Preview** bekommt einen kompletten Stripe-Testsatz: `STRIPE_RESTRICTED_KEY` (Test), `STRIPE_WRITE_KEY` (Test) und `STRIPE_WEBHOOK_SECRET` (Test-Webhook auf die Preview-Adresse). Production bleibt live und unberührt. Getestet wird von Anfang bis Ende mit Testkarte bzw. Test-IBAN auf einer Preview mit eigener Datenbasis.
+  - Der Plan liefert dem Inhaber eine Klick-Anleitung (`docs/setup-phase2b3.md`).
+  - Ob die Preview eine eigene Supabase-Datenbasis braucht, klärt der Bauende vorher, damit Testdaten nicht in den Live-Stand laufen.
 - Ohne Schreib-Schlüssel bleibt alles im Demo-Modus: Die Aktion wird simuliert, der Link ist ein Demo-Link, die Seite zeigt „Demo“.
 - `createApiClient` bekommt POST (form-encoded, Idempotenz-Header aus `idempotencyKey` der Aktion).
 
