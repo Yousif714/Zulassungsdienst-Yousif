@@ -1,7 +1,7 @@
 import type { ImportBatch, ImportedPayment } from './import/batch';
 import type { ContractDraft } from './import/contract-draft';
 import type { PortalListEntry } from './import/portal-list';
-import type { Action, AssistantMessage, Call, Connection, ConnectionId, InvoiceReading, Job, Settings } from './types';
+import type { Action, AssistantMessage, Call, Connection, ConnectionId, InvoiceReading, IsoDate, Job, Settings } from './types';
 
 /** Neue Lesung vom Server; `error` gesetzt = Fehlversuch. Ergebnis und Vertrag bestimmt der Reducer. */
 export type NewInvoiceReading = Omit<InvoiceReading, 'outcome' | 'contractId'>;
@@ -48,8 +48,8 @@ export type StoreEvent =
   | { type: 'deleteReadContract'; contractId: string }
   /** Mitgliederliste aus dem Portal: zusammenführen, nie löschen. */
   | { type: 'importPortalList'; entries: PortalListEntry[] }
-  /** Sparkasse-Auszug (vom Client geparst); die Engine baut die Zahlungen aus den Feldern neu. */
-  | { type: 'importBankStatement'; connectionId: 'bank_sparkasse'; payments: ImportedPayment[] }
+  /** Sparkasse-Auszug (vom Client geparst); die Engine baut die Zahlungen aus den Feldern neu. `statementTo`: letzter Buchungstag der Datei (auch ohne neue Zahlungen Cursor und Frische). */
+  | { type: 'importBankStatement'; connectionId: 'bank_sparkasse'; payments: ImportedPayment[]; statementTo: IsoDate }
   /** Vertrag für ein Portal-Mitglied ohne Vertrag; `created[0]` ist die Vertrags-ID. `contactId`: bestätigter Namenstreffer, sonst null. */
   | { type: 'createPortalContract'; externalId: string; draft: ContractDraft; contactId: string | null }
   /** „Kein zahlendes Mitglied“: Mitglied aus der Arbeitsliste ausblenden (idempotent). */

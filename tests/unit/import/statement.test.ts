@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { maskIban, previewStatement, previewText, shortDateDe, summaryText } from '@/domain/import/statement';
-import { parseSparkasseCsv, type SparkasseResult } from '@/domain/import/sparkasse';
+import { parseCamt053, parseSparkasseCsv, type SparkasseResult } from '@/domain/import/sparkasse';
 import type { Payment } from '@/domain/types';
 
 const csv = readFileSync('tests/fixtures/sparkasse/umsaetze-beispiel.csv', 'utf8');
@@ -30,3 +30,30 @@ test('Vorschau beschriftet alle Überspringgründe, Einzahl und Mehrzahl', () =>
     'übersprungen: 2 Ausgaben, 1 vorgemerkte Buchung, 1 Fremdwährung, 3 Buchungen vor Importbeginn, 2 unlesbare Zeilen, 1 Buchung ohne Betrag');
 });
 test('Zusammenfassungstext', () => expect(summaryText({ fresh: 31, auto: 24, toConfirm: 5, noMatch: 2 })).toBe('31 neu · 24 automatisch zugeordnet · 5 zum Bestätigen · 2 ohne Treffer'));
+
+const BATCH_HINT = 'Enthält Sammelbuchungen – für denselben Zeitraum immer dasselbe Format (CSV oder CAMT) hochladen.';
+const csvHeadLine = csv.split('\n')[0] + '\n';
+const batchCsvRow = '"DE00360501050000009999";"03.11.26";"03.11.26";"SAMMEL-GUTSCHRIFT";"Sammel";"";"";"";"SAMMLER-1";"";"";"Stadt Musterstadt";"DE00100000000000000005";"XXXXDEXXXXX";"120,00";"EUR";"Umsatz gebucht"\n';
+const camtBatch = (tx: number) => `<Document><BkToCstmrStmt><Stmt><Acct><Id><IBAN>DE00360501050000009999</IBAN></Id></Acct><Ntry><Amt Ccy="EUR">20.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><Sts><Cd>BOOK</Cd></Sts><BookgDt><Dt>2026-11-03</Dt></BookgDt><NtryDtls>${
+  Array.from({ length: tx }, (_, i) => `<TxDtls><Amt Ccy="EUR">10.00</Amt><RltdPties><Dbtr><Nm>Max Mustermann</Nm></Dbtr><DbtrAcct><Id><IBAN>DE0010000000000000001${i}</IBAN></Id></DbtrAcct></RltdPties><RmtInf><Ustrd>Teil ${i}</Ustrd></RmtInf></TxDtls>`).join('')
+}</NtryDtls></Ntry></Stmt></BkToCstmrStmt></Document>`;
+
+test('Sammelbuchung: CSV mit Sammlerreferenz und CAMT mit mehreren TxDtls zählen als batchBookings, Vorschau warnt', () => {
+  const c = parseSparkasseCsv(csvHeadLine + batchCsvRow)!;
+  expect(c.batchBookings).toBe(1);
+  expect(previewText(previewStatement(c, [])).at(-1)).toBe(BATCH_HINT);
+  const x = parseCamt053(camtBatch(2))!;
+  expect(x.batchBookings).toBe(1);
+  expect(previewText(previewStatement(x, [])).at(-1)).toBe(BATCH_HINT);
+});
+test('ohne Sammelbuchung: kein Hinweis, batchBookings 0', () => {
+  expect(parseSparkasseCsv(csv)!.batchBookings).toBe(0);
+  expect(parseCamt053(camtBatch(1))!.batchBookings).toBe(0);
+  expect(previewText(previewStatement(parseSparkasseCsv(csv)!, [])).join('|')).not.toContain('Sammelbuchungen');
+});
+test('takeable: lesbare Datei mit Zeitraum auch ohne neue Zahlungen, ohne Zeitraum nicht', () => {
+  const r = parseSparkasseCsv(csv)!;
+  expect(previewStatement(r, stored(r))).toMatchObject({ fresh: 0, takeable: true });
+  expect(previewStatement({ ...r, to: null }, [])).toMatchObject({ takeable: false });
+  expect(previewStatement({ ...r, payments: [], to: '2026-11-11' }, [])).toMatchObject({ bookings: 0, takeable: true });
+});

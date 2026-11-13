@@ -117,7 +117,9 @@ test('Sparkasse: gleicher Auszug als CAMT → nichts neu; falsche Datei → Fehl
   await expect(page.getByTestId('statement-summary')).toContainText('4 neu');
   await input.setInputFiles('tests/fixtures/sparkasse/auszug-beispiel.xml');
   await expect(page.getByTestId('statement-preview')).toContainText('4 Buchungen · 0 neu · 4 schon vorhanden');
-  await expect(page.getByRole('button', { name: 'Übernehmen' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Übernehmen', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Stand übernehmen' }).click();
+  await expect(page.getByTestId('statement-summary')).toContainText('0 neu');
   await input.setInputFiles({ name: 'x.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') });
   await expect(page.getByTestId('statement-upload').getByRole('alert')).toHaveText('Das ist kein Sparkassen-Auszug (CAMT oder CSV).');
   await expect(page.getByTestId('statement-preview')).toHaveCount(0);

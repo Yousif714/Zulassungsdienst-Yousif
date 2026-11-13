@@ -12,6 +12,8 @@ export interface SparkasseResult {
   from: IsoDate | null;
   to: IsoDate | null;
   account: string | null;
+  /** Anzahl Sammelbuchungen in der Datei (CSV: Sammlerreferenz gefüllt; CAMT: Ntry mit mehr als einem TxDtls). */
+  batchBookings: number;
 }
 export type SparkasseParse = ({ ok: true } & SparkasseResult) | { ok: false; error: string };
 
@@ -24,7 +26,7 @@ export const RETURN_BANK_CODES: readonly string[] = ['RRTN', 'UPDD', 'RPCR', 'AR
 // gegen echte Datei prüfen: Spaltennamen der Sparkassen-CSV (CSV-CAMT V2).
 export const CSV_COLUMNS = {
   account: 'Auftragskonto', booked: 'Buchungstag', text: 'Buchungstext', reference: 'Verwendungszweck',
-  name: 'Beguenstigter/Zahlungspflichtiger', iban: 'Kontonummer/IBAN', amount: 'Betrag', currency: 'Waehrung', info: 'Info',
+  collector: 'Sammlerreferenz', name: 'Beguenstigter/Zahlungspflichtiger', iban: 'Kontonummer/IBAN', amount: 'Betrag', currency: 'Waehrung', info: 'Info',
 };
 const SKIP_ORDER: SkipReason[] = ['expense', 'pending', 'currency', 'before_since', 'unreadable', 'zero'];
 
@@ -102,10 +104,12 @@ export function parseSparkasseCsv(text: string): SparkasseResult | null {
   const counts: Record<SkipReason, number> = { expense: 0, pending: 0, currency: 0, before_since: 0, unreadable: 0, zero: 0 };
   const payments: ImportedPayment[] = [];
   const key = createKeyer();
-  let from: IsoDate | null = null, to: IsoDate | null = null, account: string | null = null;
+  let from: IsoDate | null = null, to: IsoDate | null = null, account: string | null = null, batchBookings = 0;
 
   rows.slice(1).forEach((r, n) => {
     if (n === 0) account = cell(r, idx.account) ? normalizeIban(cell(r, idx.account)) : null;
+    // gegen echte Datei prüfen: CSV führt eine Sammelbuchung als eine Zeile mit Sammlerreferenz, CAMT zerlegt sie je TxDtls.
+    if (cell(r, idx.collector) !== '') batchBookings++;
     const bookedOn = parseDeDate(cell(r, idx.booked));
     if (bookedOn) {
       if (from === null || bookedOn < from) from = bookedOn;
@@ -130,7 +134,7 @@ export function parseSparkasseCsv(text: string): SparkasseResult | null {
   });
 
   return {
-    format: 'csv', payments, from, to, account,
+    format: 'csv', payments, from, to, account, batchBookings,
     skipped: SKIP_ORDER.filter((reason) => counts[reason] > 0).map((reason) => ({ reason, count: counts[reason] })),
   };
 }
@@ -166,7 +170,7 @@ export function parseCamt053(xmlText: string): SparkasseResult | null {
   const counts = emptyCounts();
   const payments: ImportedPayment[] = [];
   const key = createKeyer();
-  let from: IsoDate | null = null, to: IsoDate | null = null, account: string | null = null;
+  let from: IsoDate | null = null, to: IsoDate | null = null, account: string | null = null, batchBookings = 0;
 
   elements(xml, 'Stmt').forEach((stmt, n) => {
     if (n === 0) {
@@ -180,6 +184,7 @@ export function parseCamt053(xmlText: string): SparkasseResult | null {
         if (to === null || bookedOn > to) to = bookedOn;
       }
       const txs = elements(ntry, 'TxDtls');
+      if (txs.length > 1) batchBookings++; // gegen echte Datei prüfen: Sammelbuchung = Ntry mit mehreren TxDtls
       const n = Math.max(txs.length, 1); // Anzahl der Zahlungen dieser Buchung (für Zähler)
       const credit = childText(ntry, ['CdtDbtInd']) === 'CRDT';
       if (childText(ntry, ['Sts'])?.toUpperCase() !== 'BOOK') { counts.pending += n; continue; }
@@ -208,7 +213,7 @@ export function parseCamt053(xmlText: string): SparkasseResult | null {
     }
   });
 
-  return { format: 'camt', payments, from, to, account, skipped: skippedList(counts) };
+  return { format: 'camt', payments, from, to, account, batchBookings, skipped: skippedList(counts) };
 }
 
 /** Überlappende Dateien: gleiche Buchung (gleicher Schlüssel) nur einmal, die erste gewinnt. */
@@ -235,6 +240,7 @@ export function parseSparkasse(files: { name: string; bytes: Uint8Array }[]): Sp
     ok: true, format: results[0].format, account: results[0].account,
     payments: dedupeByExternalId(results.flatMap((r) => r.payments)),
     skipped: skippedList(counts),
+    batchBookings: results.reduce((n, r) => n + r.batchBookings, 0),
     from: froms.length ? froms.reduce((a, b) => (b < a ? b : a)) : null,
     to: tos.length ? tos.reduce((a, b) => (b > a ? b : a)) : null,
   };

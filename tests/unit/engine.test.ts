@@ -6,7 +6,7 @@ import type { StoreEvent } from '@/domain/events';
 import { memberView } from '@/domain/detectors/members';
 import { invoiceOpenCents } from '@/domain/ledger/receivables';
 import { unallocatedBankPayments } from '@/data/selectors';
-import { NOW_0930 as NOW, base, isOpen, stateWith, tx, workshop } from './helpers';
+import { NOW_0930 as NOW, base, inv, isOpen, sptx, stateWith, tx, workshop } from './helpers';
 import { confirmedSub, stripeBatch, stripeState } from './import/helpers';
 
 const IBAN = 'DE02120300000000202051';
@@ -203,6 +203,16 @@ describe('Zuordnung Vertrag/Rechnung (Paket 2b-2)', () => {
     const after = memberView(reducer(s0, { type: 'confirmPaymentMatch', paymentId: 'q1', invoiceId: 'i-ws' }), 'k-yilmaz', '2026-11-12').status;
     expect(after.arrearsCents).toBe(before.arrearsCents);
     expect(after).toEqual(before);
+  });
+  test('erneutes Bestätigen einer in Lexware bezahlten Rechnung hebt die Zuordnung nie über den Rechnungsbetrag', () => {
+    const paid = inv('i-zp', 10000, { status: 'paid', openCents: 0 });
+    const o = sptx({ id: 'sp1', externalId: 'spk-0000000000000001', amountCents: 12000 });
+    const b = sptx({ id: 'sp2', externalId: 'spk-0000000000000002', amountCents: -12000, refundOf: 'spk-0000000000000001' });
+    let r = refresh(reducer(stateWith({ invoices: [paid], payments: [o, b] }), { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceId: 'i-zp' }), NOW);
+    expect(r.allocations.find((a) => a.paymentId === 'sp2')).toMatchObject({ invoiceId: 'i-zp', amountCents: -10000 });
+    r = refresh(reducer(r, { type: 'confirmPaymentMatch', paymentId: 'sp1', invoiceId: 'i-zp' }), NOW);
+    expect(r.allocations.find((a) => a.paymentId === 'sp1')!.amountCents).toBe(10000);
+    expect(r.allocations.filter((a) => a.invoiceId === 'i-zp').reduce((n, a) => n + a.amountCents, 0)).toBe(0);
   });
   test('Bestätigen von Beträgen <= 0 wird abgelehnt', () => {
     const r = reducer(stateWith({ contracts: [yilmaz], payments: [orig, back] }), { type: 'confirmPaymentMatch', paymentId: 'q2', contractId: 'k-yilmaz' });

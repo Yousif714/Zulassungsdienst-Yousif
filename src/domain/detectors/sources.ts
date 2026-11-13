@@ -18,7 +18,7 @@ export function detectStaleSources(s: AppState, now: Date): Insight[] {
         title: 'Sparkasse-Auszug ist älter als 7 Tage – neuen hochladen',
         body: `${cursor ? `Letzter Auszug bis ${shortDateDe(cursor)} ` : ''}Neuen Export (CAMT oder CSV) hochladen.`,
         refs: [connectionRef(c.id, c.label)],
-        nextStep: 'Verbindung prüfen',
+        nextStep: 'Auszug hochladen',
         needsSources: [],
       });
       continue;

@@ -56,7 +56,7 @@ export function StatementUpload() {
     if (!parsed) return;
     const known = new Set(state.payments.map((p) => p.id));
     setBusy(true);
-    const { ok } = await dispatch({ type: 'importBankStatement', connectionId: 'bank_sparkasse', payments: parsed.payments });
+    const { ok } = await dispatch({ type: 'importBankStatement', connectionId: 'bank_sparkasse', payments: parsed.payments, statementTo: parsed.to! });
     setBusy(false);
     if (ok === false) return; // Fehlermeldung zeigt der Store; Vorschau bleibt stehen
     setBefore(known);
@@ -79,7 +79,7 @@ export function StatementUpload() {
           <div data-testid="statement-preview">
             {previewText(preview).map((line, i) => <p key={i} className={i === 0 ? 'list-row-title' : 'list-row-subtitle'}>{line}</p>)}
             <div className="card-buttons">
-              <button type="button" className="btn btn-primary" disabled={preview.fresh === 0 || busy} onClick={() => { void take(); }}>Übernehmen</button>
+              <button type="button" className="btn btn-primary" disabled={!preview.takeable || busy} onClick={() => { void take(); }}>{preview.fresh === 0 ? 'Stand übernehmen' : 'Übernehmen'}</button>
             </div>
           </div>
         )}

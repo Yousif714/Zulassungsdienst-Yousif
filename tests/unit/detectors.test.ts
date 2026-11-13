@@ -227,7 +227,7 @@ describe('Sparkasse-Auszug Frische', () => {
     const s = stateWith({ connections: [conn({ id: 'bank_sparkasse', lastSuccessAt: '2026-11-04T09:00:00Z', sync: { cursor: '2026-11-03', complete: true, failures: 0 } })] });
     const r = detectStaleSources(s, NOW_0930);
     expect(r).toHaveLength(1);
-    expect(r[0]).toMatchObject({ title: 'Sparkasse-Auszug ist älter als 7 Tage – neuen hochladen', body: 'Letzter Auszug bis 03.11. Neuen Export (CAMT oder CSV) hochladen.', priority: 'info', company: 'zulassung', needsSources: [] });
+    expect(r[0]).toMatchObject({ title: 'Sparkasse-Auszug ist älter als 7 Tage – neuen hochladen', body: 'Letzter Auszug bis 03.11. Neuen Export (CAMT oder CSV) hochladen.', priority: 'info', nextStep: 'Auszug hochladen', company: 'zulassung', needsSources: [] });
   });
   test('ohne Cursor kürzerer Text', () => {
     const s = stateWith({ connections: [conn({ id: 'bank_sparkasse', lastSuccessAt: '2026-11-04T09:00:00Z' })] });

@@ -143,8 +143,11 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
   // Rückbuchungen (Betrag <= 0) folgen ihrer Originalzahlung und werden nie direkt bestätigt.
   const ids = target.invoiceIds;
   if (!p || p.amountCents <= 0 || [!!target.contractId, !!target.invoiceId, ids !== undefined].filter(Boolean).length !== 1) return fail;
-  // Vorhandene Zuordnungen dieser Zahlung werden ersetzt, zählen also beim Verteilen nicht mit.
-  const without: AppState = { ...s, allocations: s.allocations.filter((a) => a.paymentId !== paymentId) };
+  // Auto-Zuordnungen der Rückbuchungen dieser Zahlung fallen weg; refresh leitet sie vom neuen Ziel ab.
+  const returnIds = new Set(s.payments.filter((x) => x.source === 'bank' && x.connectionId === p.connectionId && !!p.externalId && x.refundOf === p.externalId).map((x) => x.id));
+  const followsOriginal = (a: Allocation) => a.method === 'auto' && returnIds.has(a.paymentId);
+  // Vorhandene Zuordnungen dieser Zahlung und ihrer Rückbuchungen werden ersetzt, zählen also beim Verteilen (und beim Deckel auf den Rechnungsbetrag) nicht mit.
+  const without: AppState = { ...s, allocations: s.allocations.filter((a) => a.paymentId !== paymentId && !followsOriginal(a)) };
   const ownInvoice = (i: Invoice | undefined): i is Invoice => !!i && i.company === p.company && i.connectionId === LEXWARE_OF[p.company];
   let fresh: Allocation[];
   let contactId: string | null;
@@ -173,9 +176,6 @@ function confirmPaymentMatch(s: AppState, paymentId: string, target: MatchTarget
   const ibanLinks = iban && contactId && !s.ibanLinks.some((l) => normalizeIban(l.iban) === iban && l.contactId === contactId)
     ? [...s.ibanLinks, { iban, contactId, confirmedAt: at.toISOString() }]
     : s.ibanLinks;
-  // Auto-Zuordnungen der Rückbuchungen dieser Zahlung fallen weg; refresh leitet sie vom neuen Ziel ab.
-  const returnIds = new Set(s.payments.filter((x) => x.source === 'bank' && x.connectionId === p.connectionId && !!p.externalId && x.refundOf === p.externalId).map((x) => x.id));
-  const followsOriginal = (a: Allocation) => a.method === 'auto' && returnIds.has(a.paymentId);
   const payments = s.payments.map((x) => {
     if (x.id !== paymentId || !x.ignoredAt) return x;
     const { ignoredAt: _drop, ...rest } = x;
@@ -455,7 +455,10 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       }));
       const r = mergeBatch(s, { ...emptyBatch(), payments }, ctx.newId);
       const added = r.added.payments;
-      const cursor = r.state.payments.filter((p) => p.connectionId === 'bank_sparkasse').reduce<string | null>((m, p) => (m === null || p.bookedOn > m ? p.bookedOn : m), null);
+      // Cursor = spätester Stand: bisheriger Cursor, Dateiende (statementTo) oder jüngste Buchung.
+      const prevCursor = s.connections.find((c) => c.id === 'bank_sparkasse')?.sync?.cursor ?? null;
+      const cursor = [prevCursor, e.statementTo, ...r.state.payments.filter((p) => p.connectionId === 'bank_sparkasse').map((p) => p.bookedOn)]
+        .reduce<string | null>((m, d) => (d !== null && (m === null || d > m) ? d : m), null);
       const connections = r.state.connections.map((c) => {
         if (c.id !== 'bank_sparkasse') return c;
         const next: Connection = { ...c, status: 'connected', lastSuccessAt: at.toISOString(), sync: { cursor, complete: true, failures: 0 } };

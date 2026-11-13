@@ -114,7 +114,7 @@ const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
   createPortalContract: (e) => isStr(e.externalId) && isContractDraft(e.draft) && (e.contactId === null || isStr(e.contactId)),
   ignorePortalMember: (e) => isStr(e.externalId),
   unignorePortalMember: (e) => isStr(e.externalId),
-  importBankStatement: (e) => e.connectionId === 'bank_sparkasse' && Array.isArray(e.payments) && e.payments.length >= 1 && e.payments.length <= 5000 && e.payments.every(isSparkassePayment),
+  importBankStatement: (e) => e.connectionId === 'bank_sparkasse' && Array.isArray(e.payments) && e.payments.length <= 5000 && e.payments.every(isSparkassePayment) && isBookingDate(e.statementTo),
   importPortalList: (e) => Array.isArray(e.entries) && e.entries.length >= 1 && e.entries.length <= 2000 && e.entries.every(isPortalEntry),
 };
 
