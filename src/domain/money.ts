@@ -13,3 +13,8 @@ export function parseEuroInput(input: string): number | null {
   const cents = Number(m[1].replace(/\./g, '')) * 100 + Number((m[2] ?? '').padEnd(2, '0'));
   return cents > 0 ? cents : null;
 }
+
+/** Cent (Ganzzahl) in US-Dollar, deutsch formatiert: 42 → "0,42 $" (Claude-Kosten). */
+export function formatUsdCents(cents: number): string {
+  return `${new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100)} $`;
+}

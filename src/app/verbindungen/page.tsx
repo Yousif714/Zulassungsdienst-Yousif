@@ -7,6 +7,7 @@ import { ListRow } from '@/components/ListRow';
 import { COMPANY_LABEL } from '@/components/MoneyCard';
 import { PageHeader } from '@/components/PageHeader';
 import { SetupChecklist } from '@/components/SetupChecklist';
+import { readerSummary } from '@/domain/import/invoice-reading';
 import { useAppStore } from '@/data/store';
 import { now } from '@/domain/clock';
 import { HOW_TO } from '@/domain/connections';
@@ -66,7 +67,7 @@ export default function ConnectionsPage() {
   return (
     <>
       <PageHeader title="Verbindungen" />
-      {mode === 'real' ? <><SyncNowButton /><SetupChecklist connections={state.connections} /></> : <SourceList />}
+      {mode === 'real' ? <><SyncNowButton /><SetupChecklist connections={state.connections} reader={readerSummary(state, now())} /></> : <SourceList />}
     </>
   );
 }

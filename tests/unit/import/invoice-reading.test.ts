@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  costMicroCents, invoicesToRead, limitReached, monthCostMicroCents, planFromReading, readerSummary, readingProposalId,
+  correctionProposal, costMicroCents, invoicesToRead, limitReached, monthCostMicroCents, planFromReading, readContractSteps, readerSummary, readingProposalId,
 } from '@/domain/import/invoice-reading';
 import { invoiceRef } from '@/domain/ledger/contracts';
 import { base, stateWith } from '../helpers';
@@ -121,5 +121,18 @@ describe('readerSummary', () => {
     expect(readerSummary(s, at)).toEqual({ lastReadAt: '2026-11-12T09:00:00Z', monthCostMicroCents: 1_400_001, monthCostCents: 2, limitMicroCents: 10_000_000_000, limitReached: false, lastError: null });
     const s2 = stateWith({ invoiceReadings: [...s.invoiceReadings, reading({ id: 'c', readAt: '2026-11-12T09:30:00Z', outcome: 'error', result: null, error: 'Überlastet', costMicroCents: 0 })] });
     expect(readerSummary(s2, at).lastError).toBe('Überlastet');
+  });
+});
+
+describe('Claude-Vertrag: Rechenweg und Korrektur-Vorschlag', () => {
+  test('readContractSteps nutzt die angewandte Lesung; correctionProposal trägt die Vertragswerte', () => {
+    const i = readInv();
+    const k = { ...base, id: 'k1', contactId: 'm-x', kind: 'ticket' as const, totalCents: 60000, installments: 6, installmentCents: 10000, dueDay: 15, startDate: '2026-10-15',
+      readBy: { invoiceId: 'i-r1', invoiceNumber: 'RE-9001', quote: 'zahlbar in 6 Monatsraten à 100,00 €', confirmed: false }, origin: [invoiceRef(i)] };
+    const s = stateWith({ invoices: [i], contracts: [k], invoiceReadings: [reading({ outcome: 'applied', contractId: 'k1' })] });
+    expect(readContractSteps(s, k).join(' ')).toContain('6 Raten × 100,00 €');
+    expect(readContractSteps(stateWith({ contracts: [k] }), k)).toEqual([]);
+    expect(correctionProposal(s, k)).toMatchObject({ id: 'correct:k1', totalCents: 60000, installments: 6, installmentCents: 10000, dueDay: 15, startDate: '2026-10-15',
+      sourceLabel: 'Lexware (Claude)', references: ['Rechnung RE-9001'], complete: true, reading: { invoiceId: 'i-r1', kind: 'ticket' } });
   });
 });

@@ -1,8 +1,8 @@
 import { berlinParts, daysBetween, formatIsoDe, type IsoDate } from '../clock';
-import { invoiceRef, membershipContractOf } from '../ledger/contracts';
+import { invoiceRef, membershipContractOf, sourceInvoiceOf } from '../ledger/contracts';
 import { coveringContract } from '../ledger/receivables';
 import { formatEuro } from '../money';
-import type { AppState, ContractKind, Invoice, InvoiceReadResult, InvoiceReading } from '../types';
+import type { AppState, ContractKind, Invoice, InvoiceReadResult, InvoiceReading, MemberContract } from '../types';
 import { validDate, validateContractDraft } from './contract-draft';
 import { MONTH_END, proposalId, type ContractProposal, type ProposalValues } from './proposals';
 
@@ -11,6 +11,7 @@ export const READ_LIMITS = { maxPerRun: 5, budgetMs: 15_000, minInstallments: 2,
 export const READ_PRICE = { model: 'claude-opus-5-5', inputMicroCentsPerToken: 400, outputMicroCentsPerToken: 2000, currency: 'USD' } as const;
 /** 100 € je Kalendermonat Europe/Berlin (1 Cent = 1 000 000 Mikrocent). */
 export const MONTHLY_LIMIT_MICRO_CENTS = 10_000_000_000;
+export const MONTHLY_LIMIT_CENTS = MONTHLY_LIMIT_MICRO_CENTS / 1_000_000;
 
 export const READ_HINT = {
   notCertain: 'Claude ist unsicher',
@@ -128,4 +129,27 @@ export function readingProposals(s: AppState): ContractProposal[] {
     });
   }
   return out;
+}
+
+/** Rechenweg eines Claude-Vertrags aus der Lesung, die ihn angelegt hat; leer ohne Lesung. */
+export function readContractSteps(s: AppState, c: MemberContract): string[] {
+  const inv = sourceInvoiceOf(s, c);
+  const r = (s.invoiceReadings ?? []).filter((x) => x.contractId === c.id && x.result).at(-1);
+  if (!inv || !r?.result) return [];
+  return planFromReading(s, inv, r.result).steps;
+}
+
+/** Vorschlag mit den aktuellen Vertragswerten für „Korrigieren“ (gleiches Formular wie „Übernehmen“). */
+export function correctionProposal(s: AppState, c: MemberContract): ContractProposal {
+  const contact = s.contacts.find((x) => x.id === c.contactId);
+  const number = c.readBy?.invoiceNumber ?? '';
+  return {
+    id: `correct:${c.id}`, totalCents: c.totalCents, installments: c.installments, installmentCents: c.installmentCents, dueDay: c.dueDay, startDate: c.startDate,
+    name: contact?.name ?? `Rechnung ${number}`, email: contact?.emails[0] ?? null, billing: c.billing, sources: c.origin ?? [],
+    contactRefs: (contact?.externalRefs ?? []).filter((r) => r.connectionId === 'lexware_nexus'),
+    sourceLabel: 'Lexware (Claude)', references: [`Rechnung ${number}`],
+    complete: validateContractDraft({ totalCents: c.totalCents, installments: c.installments, installmentCents: c.installmentCents, dueDay: c.dueDay, startDate: c.startDate, catchUpMode: c.catchUpMode }).length === 0,
+    steps: readContractSteps(s, c), possibleMatch: null,
+    reading: c.readBy ? { invoiceId: c.readBy.invoiceId, invoiceNumber: number, kind: c.kind ?? 'membership', quote: c.readBy.quote, note: null } : undefined,
+  };
 }
