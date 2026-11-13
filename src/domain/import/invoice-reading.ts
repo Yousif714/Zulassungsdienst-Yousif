@@ -1,0 +1,110 @@
+import { berlinParts, daysBetween, formatIsoDe, type IsoDate } from '../clock';
+import { invoiceRef, membershipContractOf } from '../ledger/contracts';
+import { formatEuro } from '../money';
+import type { AppState, ContractKind, Invoice, InvoiceReadResult, InvoiceReading } from '../types';
+import { validDate, validateContractDraft } from './contract-draft';
+import { MONTH_END, proposalId, type ProposalValues } from './proposals';
+
+export const READ_LIMITS = { maxPerRun: 5, budgetMs: 15_000, minInstallments: 2, maxInstallments: 36, daysBefore: 60, daysAfter: 365, maxAttempts: 3 } as const;
+/** Quelle: claude-api-Skill, Modelltabelle Stand 2026-11-03 (Claude Opus 5.5: 4 $ / 20 $ je 1 Mio. Token). 1 $ wird als 1 € gezählt (vorsichtig). */
+export const READ_PRICE = { model: 'claude-opus-5-5', inputMicroCentsPerToken: 400, outputMicroCentsPerToken: 2000, currency: 'USD' } as const;
+/** 100 € je Kalendermonat Europe/Berlin (1 Cent = 1 000 000 Mikrocent). */
+export const MONTHLY_LIMIT_MICRO_CENTS = 10_000_000_000;
+
+export const READ_HINT = {
+  notCertain: 'Claude ist unsicher',
+  sumMismatch: 'Raten ergeben nicht die Rechnungssumme',
+  schema: 'Plan passt nicht ins Monatsraten-Schema',
+  noContact: 'Rechnung hat keinen NEXUS-Kontakt',
+  hasMembership: 'Kontakt hat schon einen Mitgliedsvertrag',
+  lexwarePartial: 'Teilzahlung nur in Lexware ausgeglichen – bitte prüfen',
+  incomplete: 'Angaben unvollständig – bitte ergänzen',
+} as const;
+
+export const costMicroCents = (u: { inputTokens: number; outputTokens: number }): number =>
+  u.inputTokens * READ_PRICE.inputMicroCentsPerToken + u.outputTokens * READ_PRICE.outputMicroCentsPerToken;
+
+const berlinMonth = (d: Date): string => berlinParts(d).date.slice(0, 7);
+
+export function monthCostMicroCents(s: AppState, at: Date): number {
+  const m = berlinMonth(at);
+  return (s.invoiceReadings ?? []).filter((r) => berlinMonth(new Date(r.readAt)) === m).reduce((n, r) => n + r.costMicroCents, 0);
+}
+
+export const limitReached = (s: AppState, at: Date, extraMicroCents = 0): boolean =>
+  monthCostMicroCents(s, at) + extraMicroCents >= MONTHLY_LIMIT_MICRO_CENTS;
+
+export const readingProposalId = (inv: Pick<Invoice, 'externalId'>): string => proposalId([invoiceRef(inv)]);
+
+export const readingsOf = (s: AppState, invoiceId: string): InvoiceReading[] =>
+  (s.invoiceReadings ?? []).filter((r) => r.invoiceId === invoiceId).sort((a, b) => a.readAt.localeCompare(b.readAt));
+
+const refKey = (connectionId: string, externalId: string) => `${connectionId}:${externalId}`;
+
+/** Offene NEXUS-Rechnungen, die (für diese Fassung) noch nicht gelesen sind; älteste zuerst. */
+export function invoicesToRead(s: AppState, max: number = READ_LIMITS.maxPerRun): Invoice[] {
+  const covered = new Set(s.contracts.flatMap((c) => (c.origin ?? []).map((o) => refKey(o.connectionId, o.externalId))));
+  const dismissed = new Set(s.dismissedProposals);
+  return s.invoices
+    .filter((i) => i.connectionId === 'lexware_nexus' && i.status !== 'paid' && i.status !== 'void' && i.openCents > 0 && !!i.text)
+    .filter((i) => { const r = invoiceRef(i); return !covered.has(refKey(r.connectionId, r.externalId)); })
+    .filter((i) => !dismissed.has(readingProposalId(i)))
+    .filter((i) => !readingsOf(s, i.id).some((r) => r.sourceUpdatedAt === (i.sourceUpdatedAt ?? '') && r.outcome !== 'error'))
+    .sort((a, b) => a.issuedOn.localeCompare(b.issuedOn) || a.number.localeCompare(b.number))
+    .slice(0, max);
+}
+
+export interface ReadingPlan { decision: 'apply' | 'proposal' | 'none'; kind: ContractKind; values: ProposalValues; steps: string[]; hints: string[] }
+
+const posInt = (n: unknown): number | null => (typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null);
+const dayOk = (n: unknown): number | null => (typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 31 ? n : null);
+
+/** Bewertet eine Lesung auf dem aktuellen Stand: sofort anlegen, Vorschlag oder nichts. Beträge rechnet nur diese Funktion. */
+export function planFromReading(s: AppState, inv: Invoice, r: InvoiceReadResult): ReadingPlan {
+  const kind: ContractKind = r.kind === 'membership' || r.kind === 'ticket' || r.kind === 'other' ? r.kind : 'other';
+  const n = posInt(r.installments);
+  const rate = posInt(r.installmentCents);
+  const first: IsoDate | null = validDate(r.firstDueDate) ? r.firstDueDate : null;
+  // 9a: Tag laut Text, sonst Tag der ersten Fälligkeit, sonst Monatsende (nur wenn Raten bekannt sind).
+  const dueDay = dayOk(r.dueDay) ?? (first ? Number(first.slice(8, 10)) : n !== null && rate !== null ? MONTH_END : null);
+  const startDate = first ?? inv.issuedOn;
+  const values: ProposalValues = { totalCents: inv.totalCents, installments: n, installmentCents: rate, dueDay, startDate };
+
+  const steps: string[] = [`Rechnung ${inv.number} über ${formatEuro(inv.totalCents)}.`];
+  if (r.quote) steps.push(`Laut Rechnung: „${r.quote}“`);
+  const hints: string[] = [];
+  if (!r.hasPlan) return { decision: 'none', kind, values, steps, hints };
+
+  if (n === null || rate === null || values.dueDay === null) hints.push(READ_HINT.incomplete);
+  if (!r.certain) hints.push(r.note ? `${READ_HINT.notCertain}: ${r.note}` : READ_HINT.notCertain);
+  if (n !== null && rate !== null) {
+    const last = inv.totalCents - rate * (n - 1);
+    steps.push(`${n} Raten × ${formatEuro(rate)}${last !== rate ? `, letzte Rate ${formatEuro(last)}` : ''} = ${formatEuro(inv.totalCents)}.`);
+    if (n < READ_LIMITS.minInstallments || n > READ_LIMITS.maxInstallments) hints.push(READ_HINT.schema);
+    if (last <= 0 || Math.abs(last - rate) >= n) hints.push(READ_HINT.sumMismatch);
+  }
+  if (values.dueDay !== null) steps.push(`Fällig zum ${values.dueDay === MONTH_END ? 'Monatsende' : `${values.dueDay}.`}, erste Rate ${formatIsoDe(startDate)}.`);
+  const offset = daysBetween(inv.issuedOn, startDate);
+  if (offset < -READ_LIMITS.daysBefore || offset > READ_LIMITS.daysAfter) hints.push(READ_HINT.schema);
+  if (inv.contactId === null) hints.push(READ_HINT.noContact);
+  else if (kind === 'membership' && membershipContractOf(s, inv.contactId)) hints.push(READ_HINT.hasMembership);
+  const allocated = s.allocations.filter((a) => a.invoiceId === inv.id).reduce((x, a) => x + a.amountCents, 0);
+  if (inv.totalCents - inv.openCents > allocated) hints.push(READ_HINT.lexwarePartial);
+  if (n !== null && rate !== null && values.dueDay !== null
+    && validateContractDraft({ totalCents: inv.totalCents, installments: n, installmentCents: rate, dueDay: values.dueDay, startDate, catchUpMode: 'first_rate' }).length > 0
+    && !hints.includes(READ_HINT.sumMismatch)) hints.push(READ_HINT.sumMismatch);
+
+  return { decision: hints.length === 0 ? 'apply' : 'proposal', kind, values, steps, hints: [...new Set(hints)] };
+}
+
+export function readerSummary(s: AppState, at: Date): { lastReadAt: string | null; monthCostMicroCents: number; monthCostCents: number; limitMicroCents: number; limitReached: boolean; lastError: string | null } {
+  const all = [...(s.invoiceReadings ?? [])].sort((a, b) => a.readAt.localeCompare(b.readAt));
+  const ok = all.filter((r) => r.outcome !== 'error').at(-1);
+  const err = all.filter((r) => r.outcome === 'error').at(-1);
+  const cost = monthCostMicroCents(s, at);
+  return {
+    lastReadAt: ok?.readAt ?? null, monthCostMicroCents: cost, monthCostCents: Math.ceil(cost / 1_000_000),
+    limitMicroCents: MONTHLY_LIMIT_MICRO_CENTS, limitReached: cost >= MONTHLY_LIMIT_MICRO_CENTS,
+    lastError: err && (!ok || err.readAt > ok.readAt) ? err.error ?? null : null,
+  };
+}
