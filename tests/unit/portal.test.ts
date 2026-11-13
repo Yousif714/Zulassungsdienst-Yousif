@@ -3,6 +3,10 @@ import { linkPortalMember, portalProposal, portalSummary, portalViews } from '@/
 import type { AppState, Contact, PortalMember } from '@/domain/types';
 import { inv, stateWith } from './helpers';
 import { lexState } from './import/helpers';
+import { emptyBatch } from '@/domain/import/batch';
+import { mapLexwareOrderConfirmation } from '@/domain/import/lexware';
+import { mergeBatch } from '@/domain/import/merge';
+import { lexOrderConfirmation } from '../fixtures';
 
 const AT = '2026-11-12T08:30:00.000Z';
 const pm = (email: string, name: string, lastSeen = AT, p: Partial<PortalMember> = {}): PortalMember =>
@@ -113,4 +117,37 @@ test('ein Kontakt, zwei Portal-Mitglieder: beide zeigen ihn, sharedWith gesetzt,
 test('Ref-Treffer nur bei Firma nexus', () => {
   const c = contact({ id: 'k1', company: 'zulassung', externalRefs: [{ connectionId: 'portal_nexus', externalId: 'a@b.de' }] });
   expect(linkPortalMember(pm('a@b.de', 'A'), [c]).contactIds).toEqual([]);
+});
+
+// Auftragsbestätigungen im Portal-Status (synthetische Fixtures: AB-2001 Tom Mitgliedschaft, AB-2002 Lisa Workshop, AB-2003 Murat).
+function abState(): AppState {
+  const abs = ['AB-2001', 'AB-2002', 'AB-2003'].map((n) => mapLexwareOrderConfirmation(lexOrderConfirmation(n), 'lexware_nexus'));
+  const s = mergeBatch(lexState, { ...emptyBatch(), orderConfirmations: abs }, () => `oc-id-${Math.random()}`).state;
+  return { ...s, portalMembers: [pm('tom@example.de', 'Tom Beispiel'), pm('lisa@example.de', 'Lisa Beispiel'), pm('murat@example.de', 'Murat Demir')] };
+}
+const view = (s: AppState, email: string) => portalViews(s).find((v) => v.member.email === email)!;
+
+test('AB ohne Mitgliedschaftstext und ohne Rechnung: Status ohne Rechnung, Hinweis mit AB-Nummer', () => {
+  const v = view(abState(), 'lisa@example.de');
+  expect(v.status).toBe('no_invoice');
+  expect(v.abHint).toBe('AB AB-2002 vorhanden, Rechnung fehlt');
+  expect(v.orderConfirmations.map((x) => x.number)).toEqual(['AB-2002']);
+});
+test('Mitgliedschafts-AB ohne Rechnung: Vorschlag offen, Hinweis bleibt', () => {
+  const v = view(abState(), 'tom@example.de');
+  expect(v.status).toBe('proposal');
+  expect(v.proposalId).toBe('lexware_nexus:c-84');
+  expect(v.abHint).toBe('AB AB-2001 vorhanden, Rechnung fehlt');
+});
+test('AB und Rechnung vorhanden: kein Hinweis; stornierte AB: kein Hinweis', () => {
+  expect(view(abState(), 'murat@example.de').abHint).toBeNull();
+  const s = abState();
+  const voided = { ...s, orderConfirmations: s.orderConfirmations.map((x) => ({ ...x, status: 'void' as const })) };
+  expect(view(voided, 'lisa@example.de').abHint).toBeNull();
+});
+test('mehrere ABs: Nummern nach Datum', () => {
+  const s = abState();
+  const lisa = s.orderConfirmations.find((x) => x.number === 'AB-2002')!;
+  const two = { ...s, orderConfirmations: [...s.orderConfirmations, { ...lisa, id: 'x2', externalId: 'oc-x2', number: 'AB-1990', issuedOn: '2026-06-20' }] };
+  expect(view(two, 'lisa@example.de').abHint).toBe('AB AB-1990, AB-2002 vorhanden, Rechnung fehlt');
 });

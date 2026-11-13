@@ -368,6 +368,8 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
         if (c.id !== e.connectionId) return c;
         const next: Connection = { ...c, status: 'connected', lastSuccessAt: at.toISOString(), sync: { cursor: e.cursor, complete: e.complete, failures: 0 } };
         delete next.lastError;
+        // Teil-Störung: verbunden, aber der Grund bleibt sichtbar (Verbindungen-Seite).
+        if (e.warning) next.lastError = e.warning;
         return next;
       });
       const { payments: p, invoices: i, subscriptions: a } = r.added;

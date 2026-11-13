@@ -1,0 +1,54 @@
+{
+  "content": [
+    {
+      "id": "oc-AB-2001",
+      "voucherType": "orderconfirmation",
+      "voucherStatus": "open",
+      "voucherNumber": "AB-2001",
+      "voucherDate": "2026-07-03T00:00:00.000+02:00",
+      "updatedDate": "2026-07-03T09:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 1200.0,
+      "currency": "EUR"
+    },
+    {
+      "id": "oc-AB-2002",
+      "voucherType": "orderconfirmation",
+      "voucherStatus": "open",
+      "voucherNumber": "AB-2002",
+      "voucherDate": "2026-07-10T00:00:00.000+02:00",
+      "updatedDate": "2026-07-10T09:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 500.0,
+      "currency": "EUR"
+    },
+    {
+      "id": "oc-AB-2003",
+      "voucherType": "orderconfirmation",
+      "voucherStatus": "open",
+      "voucherNumber": "AB-2003",
+      "voucherDate": "2026-07-20T00:00:00.000+02:00",
+      "updatedDate": "2026-07-20T09:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 3000.0,
+      "currency": "EUR"
+    },
+    {
+      "id": "oc-draft",
+      "voucherType": "orderconfirmation",
+      "voucherStatus": "draft",
+      "voucherNumber": "",
+      "voucherDate": "2026-11-01T00:00:00.000+01:00",
+      "updatedDate": "2026-11-01T09:00:00.000+01:00",
+      "contactName": "",
+      "totalAmount": 100.0,
+      "currency": "EUR"
+    }
+  ],
+  "first": true,
+  "last": true,
+  "totalPages": 1,
+  "totalElements": 4,
+  "number": 0,
+  "size": 100
+}

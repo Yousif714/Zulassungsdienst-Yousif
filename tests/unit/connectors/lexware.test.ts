@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { fixtureFetch } from '@/server/connectors/fixture-fetch';
 import { pullLexware } from '@/server/connectors/lexware';
 import type { PullContext } from '@/server/connectors/types';
-import { idOf, lexwareRoutes, lexwareRoutesPaged, lexwareRoutesZulassung, updatedOf } from '../../fixtures';
+import { idOf, lexAbListQuery, lexOrderConfirmation, lexwareRoutes, lexwareRoutesPaged, lexwareRoutesZulassung, updatedOf } from '../../fixtures';
 
 const NOW = Date.parse('2026-11-12T10:00:00Z');
 const ctx = (o: Partial<PullContext> = {}): PullContext => ({
@@ -24,7 +24,7 @@ test('Belegliste fragt voucherStatus=any (gültig für jeden Belegtyp), Entwürf
   const q = new URLSearchParams(lexwareVoucherlistQuery(0));
   expect(q.get('voucherType')).toBe('invoice');
   expect(q.get('voucherStatus')).toBe('any');
-  expect(q.get('voucherDateFrom')).toBe('2026-08-01');
+  expect(q.get('voucherDateFrom')).toBe('2026-06-01');
 });
 
 test('anhaltendes 429 mitten in den Details → Teilergebnis mit Cursor statt Fehler; Folgelauf liefert den Rest', async () => {
@@ -61,7 +61,7 @@ describe('pullLexware', () => {
     await pullLexware('lexware_nexus', null, ctx({ fetch: fixtureFetch(lexwareRoutes, { calls }) }));
     const vl = calls.find((c) => c.startsWith('/v1/voucherlist'))!;
     expect(vl).toContain('voucherType=invoice');
-    expect(vl).toContain('voucherDateFrom=2026-08-01');
+    expect(vl).toContain('voucherDateFrom=2026-06-01');
     expect(vl).not.toContain('draft');
     expect(calls.join()).not.toContain('SECRET');
   });
@@ -88,7 +88,7 @@ describe('pullLexware', () => {
   test('blättert über page bis last (Kontakte und Voucherlist)', async () => {
     const calls: string[] = [];
     const r = await pullLexware('lexware_nexus', null, ctx({ fetch: fixtureFetch(lexwareRoutesPaged, { calls }) }));
-    expect(calls.filter((c) => c.startsWith('/v1/voucherlist')).map((c) => /page=(\d+)/.exec(c)![1])).toEqual(['0', '1']);
+    expect(calls.filter((c) => c.startsWith('/v1/voucherlist') && c.includes('voucherType=invoice')).map((c) => /page=(\d+)/.exec(c)![1])).toEqual(['0', '1']);
     expect([...numbers(r)].sort()).toEqual(ALL.slice().sort());
     expect(r.complete).toBe(true);
   });
@@ -97,6 +97,7 @@ describe('pullLexware', () => {
     const r = await pullLexware('lexware_zulassung', null, ctx({ fetch: fixtureFetch(lexwareRoutesZulassung) }));
     expect(numbers(r)).toEqual(['RZ-500']);
     expect(r.batch.invoices[0].company).toBe('zulassung');
+    expect(r.batch.orderConfirmations.map((x) => [x.number, x.company])).toEqual([['AB-Z-1', 'zulassung']]);
   });
 
   test('Abbruch mitten in den Details → Cursor; Folgelauf holt genau den Rest, known nicht leer', async () => {
@@ -104,7 +105,7 @@ describe('pullLexware', () => {
     const first = await pullLexware('lexware_nexus', null, ctx(lim.o));
     expect(first.complete).toBe(false);
     expect(first.batch.invoices).toHaveLength(3);
-    expect(JSON.parse(first.cursor!)).toEqual({ phase: 'invoices', page: 0 });
+    expect(JSON.parse(first.cursor!)).toEqual({ phase: 'invoices', page: 0, since: '2026-06-01' });
     const known = new Map(first.batch.invoices.map((i) => [i.externalId, i.sourceUpdatedAt]));
     expect(known.size).toBe(3);
     const calls: string[] = [];
@@ -116,6 +117,85 @@ describe('pullLexware', () => {
     expect(calls.filter((c) => c.startsWith('/v1/invoices/'))).toHaveLength(ALL.length - 3);
     expect(numbers(first).filter((n) => numbers(second).includes(n))).toEqual([]);
     expect([...numbers(first), ...numbers(second)].sort()).toEqual(ALL.slice().sort());
+  });
+
+  test('Cursor mit späterem oder ohne since → einmal Neustart bei den Kontakten', async () => {
+    for (const since of ['2026-08-01', undefined]) {
+      const calls: string[] = [];
+      const old = JSON.stringify({ phase: 'invoices', page: 1, ...(since ? { since } : {}) });
+      const r = await pullLexware('lexware_nexus', old, ctx({ fetch: fixtureFetch(lexwareRoutesPaged, { calls }) }));
+      expect(calls[0]).toMatch(/^\/v1\/contacts/);
+      expect(r.complete).toBe(true);
+    }
+    const calls: string[] = [];
+    await pullLexware('lexware_nexus', JSON.stringify({ phase: 'invoices', page: 1, since: '2026-06-01' }), ctx({ fetch: fixtureFetch(lexwareRoutesPaged, { calls }) }));
+    expect(calls[0]).toContain('page=1');
+    expect(calls.some((c) => c.startsWith('/v1/contacts'))).toBe(false);
+  });
+
+  test('Auftragsbestätigungen: Phase nach den Rechnungen, Belegliste orderconfirmation ab IMPORT_SINCE, Detail /v1/order-confirmations, ohne Entwurf', async () => {
+    const calls: string[] = [];
+    const r = await pullLexware('lexware_nexus', null, ctx({ fetch: fixtureFetch(lexwareRoutes, { calls }) }));
+    expect(r.complete).toBe(true);
+    expect(r.batch.orderConfirmations.map((x) => x.number)).toEqual(['AB-2001', 'AB-2002', 'AB-2003']);
+    expect(r.batch.invoices.map((i) => i.number)).not.toContain('AB-2001');
+    const abList = calls.indexOf(lexAbListQuery(0));
+    expect(abList).toBeGreaterThan(calls.findLastIndex((c) => c.startsWith('/v1/invoices/')));
+    const q = new URLSearchParams(calls[abList].split('?')[1]);
+    expect(q.get('voucherType')).toBe('orderconfirmation');
+    expect(q.get('voucherDateFrom')).toBe('2026-06-01');
+    expect(calls).toContain(`/v1/order-confirmations/${lexOrderConfirmation('AB-2001').id}`);
+    expect(calls.some((c) => c.includes('oc-draft'))).toBe(false);
+  });
+
+  test('Auftragsbestätigungen: Voucherlist-Status gewinnt, Bekanntes ohne Änderung wird nicht neu geholt', async () => {
+    const calls: string[] = [];
+    const known = new Map([[lexOrderConfirmation('AB-2001').id, lexOrderConfirmation('AB-2001').updatedDate]]);
+    const list = { content: [{ id: 'oc-AB-2001', voucherStatus: 'open', updatedDate: lexOrderConfirmation('AB-2001').updatedDate }, { id: 'oc-AB-2002', voucherStatus: 'voided', updatedDate: 'neu' }], last: true };
+    const r = await pullLexware('lexware_nexus', null, ctx({ fetch: fixtureFetch({ ...lexwareRoutes, [lexAbListQuery(0)]: list }, { calls }), known }));
+    expect(calls).not.toContain('/v1/order-confirmations/oc-AB-2001');
+    expect(r.batch.orderConfirmations).toHaveLength(1);
+    expect(r.batch.orderConfirmations[0]).toMatchObject({ number: 'AB-2002', status: 'void', sourceUpdatedAt: 'neu' });
+  });
+
+  test('AB-Belegliste abgelehnt (400) → Rechnungen trotzdem vollständig, Hinweis statt Fehler', async () => {
+    const inner = fixtureFetch(lexwareRoutes);
+    const f = ((i: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(i);
+      return u.includes('voucherType=orderconfirmation')
+        ? Promise.resolve(Response.json({ IssueList: [{ source: 'voucherType', i18nKey: 'invalid_value' }] }, { status: 400 }))
+        : inner(i, init);
+    }) as typeof fetch;
+    const r = await pullLexware('lexware_nexus', null, ctx({ fetch: f }));
+    expect(r.complete).toBe(true);
+    expect(r.batch.invoices.length).toBeGreaterThan(0);
+    expect(r.batch.orderConfirmations).toHaveLength(0);
+    expect(r.warning).toBe('Auftragsbestätigungen: Lexware: HTTP 400 bei /v1/voucherlist (voucherType invalid_value)');
+  });
+
+  test('Abbruch in der AB-Phase → Cursor phase orderconfirmations; Folgelauf holt nur die ABs', async () => {
+    // Kontakte, Rechnungsliste, 7 Rechnungsdetails, AB-Liste, 1 AB-Detail
+    const lim = limitFetches(lexwareRoutes, 11);
+    const first = await pullLexware('lexware_nexus', null, ctx(lim.o));
+    expect(first.complete).toBe(false);
+    expect(JSON.parse(first.cursor!)).toEqual({ phase: 'orderconfirmations', page: 0, since: '2026-06-01' });
+    expect(first.batch.orderConfirmations.map((x) => x.number)).toEqual(['AB-2001']);
+    const calls: string[] = [];
+    const known = new Map(first.batch.orderConfirmations.map((x) => [x.externalId, x.sourceUpdatedAt]));
+    const second = await pullLexware('lexware_nexus', first.cursor, ctx({ fetch: fixtureFetch(lexwareRoutes, { calls }), known }));
+    expect(second.complete).toBe(true);
+    expect(second.cursor).toBeNull();
+    expect(calls.some((c) => c.startsWith('/v1/contacts') || c.startsWith('/v1/invoices'))).toBe(false);
+    expect(second.batch.orderConfirmations.map((x) => x.number)).toEqual(['AB-2002', 'AB-2003']);
+  });
+
+  test('400 bei der AB-Belegliste: Hinweis nennt den Grund in Klammern (kein Abbruch)', async () => {
+    const inner = fixtureFetch(lexwareRoutes);
+    const f = ((i: RequestInfo | URL, init?: RequestInit) => (String(i).includes('orderconfirmation')
+      ? Promise.resolve(Response.json({ message: 'voucherType ungültig' }, { status: 400 }))
+      : inner(i, init))) as typeof fetch;
+    const r = await pullLexware('lexware_nexus', null, ctx({ fetch: f }));
+    expect(r.warning).toMatch(/^Auftragsbestätigungen: Lexware: HTTP 400 bei \/v1\/voucherlist \(.*voucherType ungültig.*\)$/);
   });
 
   test('Eintrag ohne updatedDate wird nie übersprungen', async () => {

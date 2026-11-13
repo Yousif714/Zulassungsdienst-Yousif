@@ -29,6 +29,7 @@ Kernziele:
 | `docs/superpowers/plans/2026-11-12-phase2b1-vertraege.md` | Bauplan Paket 2b-1 (Verträge aus Stripe und Lexware) |
 | `docs/setup-phase2b2.md` | **Inhaber-Checkliste** Paket 2b-2: Migration, Qonto-Schlüssel, Vercel-Variablen |
 | `docs/superpowers/plans/2026-11-13-phase2b2-qonto.md` | Bauplan Paket 2b-2 (Qonto, Forderungen, Zuordnungs-Härtung) |
+| `docs/setup-ab.md` | **Inhaber-Checkliste** Auftragsbestätigungen und Import ab 01.06. |
 | `docs/NEXUS-Assistent-Prompt.md` | Fachliche Anforderungen (Prompt-Form) |
 | `docs/Codex-Vergleich-Prompt.md` | Zweitmeinungs-Prompt für Codex |
 | `docs/vorschau/README.md` | Anleitung für den Inhaber, Vercel/iPhone |
@@ -64,6 +65,7 @@ Kernziele:
 - Nur ~19 Vorschläge bei ~45 Mitgliedern: Ursachen offen (Rechnungstext ohne „Mitgliedschaft“, Rechnung vor 01.08., Entwürfe, fehlende Rechnungen). Klärung über Portal-Abgleich (siehe unten).
 - **Paket 2b-2 live** (PR #10, 13.11.): Qonto verbunden (`QONTO_LOGIN`/`QONTO_SECRET_KEY`), NEXUS › Offen, NEXUS › Zuordnen mit „Ja, gehört zu …“. `ANTHROPIC_API_KEY` ist gesetzt (Max-Plan: 100 $ API-Guthaben/Monat), wird erst von „Rechnungen lesen“ genutzt.
 - **Portal-Abgleich gebaut, PR offen, NICHT gemergt** (Spec `docs/superpowers/specs/2026-11-13-portal-abgleich-design.md`, Plan `docs/superpowers/plans/2026-11-13-portal-abgleich.md`): Inhaber lädt die Excel-Mitgliederliste aus dem Portal hoch (NEXUS › Portal-Mitglieder; Spalten Mitglied/E-Mail-Adresse(n)/Beigetreten/Zuletzt aktiv; echte Liste mit 43 Mitgliedern lokal geprüft, nie im Repo). Status je Mitglied (Vertrag / Vorschlag / Rechnung ohne Mitgliedschaft / keine Rechnung / ausgeblendet), „Vertrag anlegen“, „Kein zahlendes Mitglied“ + „Wieder einblenden“, Hinweis „N Mitglieder ohne Rechnung“. Portal-Supabase-Schlüssel liegen bei der Agentur → API-Abgleich später.
+- **Auftragsbestätigungen + Import ab 01.06. gebaut, NICHT gemergt, nicht gepusht** (Spec `docs/superpowers/specs/2026-11-13-auftragsbestaetigungen-design.md`): `IMPORT_SINCE = 2026-06-01`, Cursor mit `since` (Neustart je Verbindung), Lexware-Phase `orderconfirmations` (NEXUS + Zulassung), Liste `orderConfirmations`/Tabelle `order_confirmations`, Vorschläge „Lexware (AB)“ (Rechnung gewinnt), Portal-Hinweis „AB … vorhanden, Rechnung fehlt“, Heute-Hinweis `ab-ohne-rechnung`. ABs sind nie Forderung. Inhaber: vor dem Merge SQL `20261116000000_auftragsbestaetigungen.sql`, danach mehrmals „Jetzt abgleichen“ (`docs/setup-ab.md`). Lexware-Feldnamen der AB gegen echte Antwort prüfen.
 - **Als Nächstes (Inhaber):** 1) SQL `supabase/migrations/20261115000000_portal.sql` im Supabase-SQL-Editor ausführen, 2) PR mergen lassen, 3) Excel-Liste hochladen, „Vertrag anlegen“ für Mitglieder ohne Rechnung, Zahlungen zuordnen. Checkliste `docs/setup-portal.md`.
 - **Danach:** „Rechnungen lesen“ mit Claude (Entscheidung (a): Plan gilt sofort, markiert, korrigierbar; unsicher → Vorschlag) → Sparkasse-Upload → 2b-3 Umstellung auf Stripe.
 - Weiter offen: Supabase auf Pro vor echten Bankdaten; überzählige Vercel-Projekte löschen; `npm run test:integration` gegen Testprojekt.

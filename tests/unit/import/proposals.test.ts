@@ -1,12 +1,12 @@
 import { expect, test } from 'vitest';
 import { emptyBatch, type ImportBatch } from '@/domain/import/batch';
-import { mapLexwareContacts, mapLexwareInvoice } from '@/domain/import/lexware';
+import { mapLexwareContacts, mapLexwareInvoice, mapLexwareOrderConfirmation } from '@/domain/import/lexware';
 import { mapStripe } from '@/domain/import/stripe';
 import { mergeBatch } from '@/domain/import/merge';
-import { deriveProposals, findContactFor, proposalId } from '@/domain/import/proposals';
+import { deriveProposals, findContactFor, MONTH_END, proposalId } from '@/domain/import/proposals';
 import { normalizeName, normalizeNameStrict, nameMatches } from '@/domain/matching/payments';
 import type { AppState, Contact, Invoice } from '@/domain/types';
-import { lexContacts, lexInvoices, stripeRaw } from '../../fixtures';
+import { lexContacts, lexInvoices, lexOrderConfirmation, stripeRaw } from '../../fixtures';
 import { confirmedSub, emptyState, lexState, patchSub, seq, stripeState, withContract } from './helpers';
 
 const P = (s: AppState, id: string) => deriveProposals(s).find((p) => p.id === id);
@@ -151,4 +151,47 @@ test('Firmenzusätze: „Müller GmbH“ und „Müller UG“ werden nicht zusam
   expect(findContactFor(p, [mk('a', 'Müller GmbH')]).match).toBe('name');
   expect(normalizeNameStrict('Müller GmbH')).toBe('mueller gmbh');
   expect(normalizeNameStrict('Dr. Ayşe Öztürk')).toBe('ayse oeztuerk');
+});
+
+// Auftragsbestätigungen (AB): Quelle wie eine Mitgliedschafts-Rechnung, die Rechnung gewinnt je Kontakt.
+const abs = ['AB-2001', 'AB-2002', 'AB-2003'].map((n) => mapLexwareOrderConfirmation(lexOrderConfirmation(n), 'lexware_nexus'));
+const abState = mergeBatch(lexState, { ...emptyBatch(), orderConfirmations: abs }, seq()).state;
+
+test('AB mit Mitgliedschaft und Laufzeit → Vorschlag „Lexware (AB)“, zum Monatsende, Referenz Auftragsbestätigung', () => {
+  expect(P(abState, 'lexware_nexus:c-84')).toMatchObject({
+    name: 'Tom Beispiel', email: 'tom@example.de', billing: 'legacy', sourceLabel: 'Lexware (AB)',
+    totalCents: 120000, installments: 12, installmentCents: 10000, dueDay: MONTH_END, startDate: '2026-07-03',
+    references: ['Auftragsbestätigung AB-2001'], complete: true,
+    sources: [{ connectionId: 'lexware_nexus', externalId: 'c-84' }],
+  });
+  expect(P(abState, 'lexware_nexus:c-84')!.steps.join(' ')).toContain('Auftragsbestätigung AB-2001');
+});
+test('AB ohne Mitgliedschaftstext → kein Vorschlag; stornierte AB → kein Vorschlag; Zulassung-AB → kein Vorschlag', () => {
+  expect(P(abState, 'lexware_nexus:c-85')).toBeUndefined();
+  const voided = { ...abState, orderConfirmations: abState.orderConfirmations.map((x) => ({ ...x, status: 'void' as const })) };
+  expect(P(voided, 'lexware_nexus:c-84')).toBeUndefined();
+  const zul = { ...abState, orderConfirmations: abState.orderConfirmations.map((x) => ({ ...x, connectionId: 'lexware_zulassung' as const, company: 'zulassung' as const })) };
+  expect(P(zul, 'lexware_nexus:c-84')).toBeUndefined();
+});
+test('AB mit Mitgliedschaft, aber ohne Laufzeit → kein Vorschlag', () => {
+  const noMonths = { ...abState, orderConfirmations: abState.orderConfirmations.map((x) => (x.number === 'AB-2001' ? { ...x, text: 'NEXUS-Mitgliedschaft' } : x)) };
+  expect(P(noMonths, 'lexware_nexus:c-84')).toBeUndefined();
+});
+test('Rechnung schlägt AB: derselbe Kontakt hat Mitgliedschafts-Rechnungen → Werte und Quelle aus den Rechnungen', () => {
+  const withAb = P(abState, 'lexware_nexus:c-77')!;
+  expect(withAb).toEqual(P(lexState, 'lexware_nexus:c-77'));
+  expect(withAb.sourceLabel).toBe('Lexware');
+  expect(withAb.references.join()).not.toContain('AB-2003');
+  expect(deriveProposals(abState).filter((p) => p.id.includes('c-77'))).toHaveLength(1);
+});
+test('mehrere Mitgliedschafts-ABs eines Kontakts → ein Vorschlag aus der neuesten', () => {
+  const older = { ...abs[0], externalId: 'oc-alt', number: 'AB-1999', issuedOn: '2026-06-10', totalCents: 60000, text: 'Mitgliedschaft 6 Monate' };
+  const s = mergeBatch(abState, { ...emptyBatch(), orderConfirmations: [older] }, seq()).state;
+  const p = deriveProposals(s).filter((x) => x.id === 'lexware_nexus:c-84');
+  expect(p).toHaveLength(1);
+  expect(p[0]).toMatchObject({ references: ['Auftragsbestätigung AB-2001'], totalCents: 120000 });
+});
+test('AB-Vorschlag mit Fälligkeitstag im Text: Start im Folgemonat wie bei der Gesamtrechnung', () => {
+  const s = { ...abState, orderConfirmations: abState.orderConfirmations.map((x) => (x.number === 'AB-2001' ? { ...x, text: 'Mitgliedschaft 12 Monate, fällig jeweils zum 1. des Monats' } : x)) };
+  expect(P(s, 'lexware_nexus:c-84')).toMatchObject({ dueDay: 1, startDate: '2026-08-01' });
 });

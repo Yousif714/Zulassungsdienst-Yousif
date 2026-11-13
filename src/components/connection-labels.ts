@@ -7,5 +7,7 @@ export function connectionSubtitle(c: Connection, at: Date): string {
   if (c.status === 'missing') return HOW_TO[c.id];
   const stand = c.lastSuccessAt ? ageText(c, at) : 'noch nie abgerufen';
   if (c.status === 'error') return `${c.lastError ? `Störung: ${c.lastError}` : 'Störung'} · ${stand}`;
-  return c.lastSuccessAt ? `Verbunden · ${stand}` : 'Verbunden';
+  const base = c.lastSuccessAt ? `Verbunden · ${stand}` : 'Verbunden';
+  // Teil-Störung (z. B. ABs abgelehnt): verbunden, Grund trotzdem sichtbar.
+  return c.lastError ? `${base} · Hinweis: ${c.lastError}` : base;
 }

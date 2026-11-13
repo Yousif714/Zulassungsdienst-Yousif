@@ -102,6 +102,16 @@ describe('syncConnections', () => {
     await syncConnections(repos, deps());
     expect((await conn('lexware_nexus')).sync!.complete).toBe(true);
   });
+  test('Lexware-ABs landen im Zustand; zweiter Lauf holt bekannte AB-Details nicht neu', async () => {
+    await syncConnections(repos, deps({ only: ['lexware_nexus'] }));
+    const s = (await repos.state.load()).state;
+    expect(s.orderConfirmations.map((x) => x.number).sort()).toEqual(['AB-2001', 'AB-2002', 'AB-2003']);
+    expect(s.orderConfirmations.find((x) => x.number === 'AB-2001')!.contactId).toBe(s.contacts.find((c) => c.name === 'Tom Beispiel')!.id);
+    const calls: string[] = [];
+    await syncConnections(repos, deps({ only: ['lexware_nexus'], fetch: fixtureFetch({ ...stripeRoutes, ...lexwareRoutes }, { calls }) }));
+    expect(calls.some((c) => c.startsWith('/v1/order-confirmations/'))).toBe(false);
+    expect((await repos.state.load()).state.orderConfirmations).toHaveLength(3);
+  });
   test('only begrenzt auf eine Verbindung', async () => {
     expect(Object.keys(await syncConnections(repos, deps({ only: ['stripe_nexus'] })))).toEqual(['stripe_nexus']);
   });

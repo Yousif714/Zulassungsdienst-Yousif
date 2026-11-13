@@ -19,3 +19,21 @@ export function detectPortalNoInvoice(s: AppState): Insight[] {
     needsSources: ['portal_nexus', 'lexware_nexus'],
   }];
 }
+
+/** Sammelhinweis „N Mitglieder mit Auftragsbestätigung, aber ohne Rechnung“ (Schlüssel ohne Datum). */
+export function detectPortalAbNoInvoice(s: AppState): Insight[] {
+  const views = portalViews(s).filter((v) => v.abHint !== null && v.status !== 'ignored' && v.inLatestList);
+  if (views.length === 0) return [];
+  const rest = views.length - 3;
+  return [{
+    dedupeKey: 'ab-ohne-rechnung',
+    type: 'portal_ab_no_invoice',
+    company: 'nexus',
+    priority: 'info',
+    title: `${views.length === 1 ? '1 Mitglied' : `${views.length} Mitglieder`} mit Auftragsbestätigung, aber ohne Rechnung`,
+    body: views.slice(0, 3).map((v) => `${v.member.name} (${v.orderConfirmations.map((x) => x.number).join(', ')})`).join(', ') + (rest > 0 ? ` und ${rest} weitere` : ''),
+    refs: [portalRef('Portal-Mitglieder')],
+    nextStep: 'Rechnungen in Lexware schreiben',
+    needsSources: ['portal_nexus', 'lexware_nexus'],
+  }];
+}

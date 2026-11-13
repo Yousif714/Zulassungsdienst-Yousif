@@ -61,14 +61,14 @@ export async function syncConnections(repos: Repos, deps: SyncDeps): Promise<Par
         continue;
       }
       const known = new Map<string, string | undefined>(
-        id === 'bank_qonto' ? [] : state.invoices.filter((i) => i.connectionId === id).map((i) => [i.externalId, i.sourceUpdatedAt]),
+        id === 'bank_qonto' ? [] : [...state.invoices, ...(state.orderConfirmations ?? [])].filter((i) => i.connectionId === id).map((i) => [i.externalId, i.sourceUpdatedAt]),
       );
       const ctx: PullContext = { fetch: deps.fetch, key, sleep: deps.sleep, now: deps.now, deadline, known };
       const cursor = conn.sync?.cursor ?? null;
       const r: PullResult = id === 'stripe_nexus' ? await pullStripe(cursor, ctx)
         : id === 'bank_qonto' ? await pullQonto(cursor, ctx)
         : await pullLexware(id as LexwareConnection, cursor, ctx);
-      await dispatchEvents(repos, [{ type: 'importBatch', connectionId: id, batch: r.batch, cursor: r.cursor, complete: r.complete }], { at: deps.at, provider: deps.provider });
+      await dispatchEvents(repos, [{ type: 'importBatch', connectionId: id, batch: r.batch, cursor: r.cursor, complete: r.complete, ...(r.warning ? { warning: sanitizeError(new ConnectorError(r.warning), secrets) } : {}) }], { at: deps.at, provider: deps.provider });
       out[id] = r.complete ? 'ok' : 'partial';
     } catch (err) {
       out[id] = 'error';

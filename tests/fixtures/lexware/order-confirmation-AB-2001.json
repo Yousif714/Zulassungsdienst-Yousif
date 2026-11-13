@@ -1,0 +1,32 @@
+{
+  "id": "oc-AB-2001",
+  "organizationId": "org-test",
+  "createdDate": "2026-07-03T09:00:00.000+02:00",
+  "updatedDate": "2026-07-03T09:00:00.000+02:00",
+  "version": 1,
+  "language": "de",
+  "archived": false,
+  "voucherStatus": "open",
+  "voucherNumber": "AB-2001",
+  "voucherDate": "2026-07-03T00:00:00.000+02:00",
+  "address": {
+    "contactId": "c-84"
+  },
+  "lineItems": [
+    {
+      "type": "custom",
+      "name": "NEXUS-Mitgliedschaft 12 Monate",
+      "description": "Monatliche Raten",
+      "quantity": 1,
+      "unitName": "Stück"
+    }
+  ],
+  "totalPrice": {
+    "currency": "EUR",
+    "totalNetAmount": 1008.4,
+    "totalGrossAmount": 1200.0
+  },
+  "title": "Auftragsbestätigung",
+  "introduction": "Vielen Dank für Ihren Auftrag.",
+  "remark": "Die Rechnung folgt separat."
+}

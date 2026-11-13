@@ -16,6 +16,8 @@ export interface PullResult {
   /** Fortsetzungspunkt (bei `complete: false`) bzw. Startpunkt des nächsten Laufs (bei `complete: true`, Lexware: null). */
   cursor: string | null;
   complete: boolean;
+  /** Teil-Störung ohne Abbruch (z. B. Lexware lehnt die AB-Belegliste ab): schon bereinigte Meldung, Verbindung bleibt verbunden. */
+  warning?: string;
 }
 
 /** Nachricht ist bereits sicher: ohne Schlüssel, ohne URL-Query, ohne Antworttext. */

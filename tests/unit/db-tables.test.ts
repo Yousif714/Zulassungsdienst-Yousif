@@ -3,7 +3,7 @@ import { createDemoState } from '@/data/seed';
 import { applyEvent, refresh } from '@/data/engine';
 import { toRows, fromRows, diffState, TABLES } from '@/server/db/tables';
 import { createEmptyState } from '@/data/empty-state';
-import type { PortalMember, Subscription } from '@/domain/types';
+import type { OrderConfirmation, PortalMember, Subscription } from '@/domain/types';
 
 import { NOW_0930 as NOW, stateWith } from './helpers';
 
@@ -130,4 +130,14 @@ it('Portal-Mitglieder und Ausgeblendete überstehen toRows/fromRows', () => {
   expect(rows.portal_members[0]).toMatchObject({ id: 'pm1', connection_id: 'portal_nexus', external_id: 'a@b.de' });
   expect(rows.ignored_portal_members[0]).toMatchObject({ id: 'x@y.de', data: 'x@y.de' });
   expect(fromRows(rows)).toMatchObject({ portalMembers: [m], ignoredPortalMembers: ['x@y.de'] });
+});
+
+it('Auftragsbestätigungen überstehen toRows/fromRows, eigene Tabelle mit Schlüsselspalten', () => {
+  const ab: OrderConfirmation = { id: 'ab1', company: 'nexus', connectionId: 'lexware_nexus', externalId: 'oc-1', contactExternalId: 'c-1', contactId: null, number: 'AB-1', totalCents: 120000, issuedOn: '2026-07-01', status: 'open', text: 'Mitgliedschaft 12 Monate' };
+  const s = { ...createEmptyState(), orderConfirmations: [ab] };
+  const rows = toRows(s);
+  expect(TABLES.orderConfirmations).toBe('order_confirmations');
+  expect(rows.order_confirmations[0]).toMatchObject({ id: 'ab1', connection_id: 'lexware_nexus', external_id: 'oc-1' });
+  expect(fromRows(rows).orderConfirmations).toEqual([ab]);
+  expect(fromRows({}).orderConfirmations).toEqual([]);
 });

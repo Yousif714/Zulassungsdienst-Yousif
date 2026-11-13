@@ -1,7 +1,7 @@
 import type { ImportBatch } from '@/domain/import/batch';
 import { classifyBankTx, linkBankReturns, normalizeIban } from '@/domain/matching/payments';
 import { upsertImported } from '@/domain/matching/imports';
-import type { AppState, Contact, ExternalRef, Invoice, Payment, Subscription } from '@/domain/types';
+import type { AppState, Contact, ExternalRef, Invoice, OrderConfirmation, Payment, Subscription } from '@/domain/types';
 
 export interface MergeAdded { contacts: number; invoices: number; payments: number; subscriptions: number }
 
@@ -55,6 +55,15 @@ export function mergeBatch(s: AppState, b: ImportBatch, newId: () => string): { 
   // ältere Rechnungen ohne Kontakt: nachziehen, sobald der Kontakt da ist
   const invoices = inv.items.map((i) => (i.contactId === null && i.contactExternalId ? { ...i, contactId: resolveContact(i) } : i));
 
+  // Auftragsbestätigungen: eigene Liste (nie Forderung), Kontakt wie bei Rechnungen
+  const oc = upsertImported<OrderConfirmation, (typeof b.orderConfirmations)[number]>(
+    s.orderConfirmations ?? [],
+    b.orderConfirmations ?? [],
+    (next, old) => ({ ...next, contactId: resolveContact(next) ?? old?.contactId ?? null }),
+    newId,
+  );
+  const orderConfirmations = oc.items.map((x) => (x.contactId === null && x.contactExternalId ? { ...x, contactId: resolveContact(x) } : x));
+
   // Zahlungen: Bestehende gewinnen (wie mergeImported, aber mit neuer ID und Zählung)
   // Qonto: Rückbuchungen mit Original verknüpfen (sonst verworfen), neue Zahlungen mit Mitglieds-IBANs klassifizieren
   const memberIbans = new Set(s.ibanLinks.map((l) => normalizeIban(l.iban)));
@@ -90,7 +99,7 @@ export function mergeBatch(s: AppState, b: ImportBatch, newId: () => string): { 
   }
 
   return {
-    state: { ...s, contacts, invoices, payments: pay.items, subscriptions },
+    state: { ...s, contacts, invoices, orderConfirmations, payments: pay.items, subscriptions },
     added: { contacts: addedContacts, invoices: inv.added, payments: pay.added, subscriptions: sub.added },
   };
 }

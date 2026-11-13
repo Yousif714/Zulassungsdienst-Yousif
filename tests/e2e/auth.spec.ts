@@ -220,6 +220,23 @@ test('Echtmodus: Excel-Export (.xlsx) hochladen, Vorschau, Übernehmen mit Beige
   await expect(page.getByTestId('portal-row-calvin.beispiel@example.de')).toContainText('Zuletzt aktiv nie');
 });
 
+test('Echtmodus: Lexware-AB aus dem Test-Import → Vorschlag „Lexware (AB)“ und Portal-Hinweis „Rechnung fehlt“', async () => {
+  await page.goto('/nexus/mitglieder/vorschlaege');
+  const card = page.getByTestId('proposal-lexware_nexus:c-84');
+  await expect(card).toContainText('Lexware (AB)');
+  await expect(card).toContainText('Auftragsbestätigung AB-2001');
+  await expect(card).toContainText('zum Monatsende');
+  await expect(page.getByTestId('proposal-lexware_nexus:c-85')).toHaveCount(0);
+  await page.goto('/nexus/mitglieder');
+  await page.getByRole('button', { name: 'Mitgliederliste einfügen' }).click();
+  await page.getByLabel('Mitgliederliste', { exact: true }).fill('Name\tE-Mail\nTom Beispiel\ttom@example.de\nLisa Beispiel\tlisa@example.de');
+  await page.getByRole('button', { name: '2 Mitglieder übernehmen' }).click();
+  await expect(page.getByTestId('portal-row-tom@example.de')).toContainText('Vorschlag offen');
+  await expect(page.getByTestId('portal-row-tom@example.de')).toContainText('AB AB-2001 vorhanden, Rechnung fehlt');
+  await expect(page.getByTestId('portal-row-lisa@example.de')).toContainText('Keine Rechnung');
+  await expect(page.getByTestId('portal-row-lisa@example.de')).toContainText('AB AB-2002 vorhanden, Rechnung fehlt');
+});
+
 test('Echtmodus: „Jetzt abgleichen“ gleicht ab, zweiter Klick binnen einer Minute bittet um Geduld', async () => {
   await page.goto('/verbindungen');
   await page.getByRole('button', { name: 'Jetzt abgleichen' }).click();

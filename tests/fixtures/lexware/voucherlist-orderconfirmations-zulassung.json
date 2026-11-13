@@ -1,0 +1,21 @@
+{
+  "content": [
+    {
+      "id": "oc-AB-Z-1",
+      "voucherType": "orderconfirmation",
+      "voucherStatus": "open",
+      "voucherNumber": "AB-Z-1",
+      "voucherDate": "2026-06-15T00:00:00.000+02:00",
+      "updatedDate": "2026-06-15T09:00:00.000+02:00",
+      "contactName": "",
+      "totalAmount": 238.0,
+      "currency": "EUR"
+    }
+  ],
+  "first": true,
+  "last": true,
+  "totalPages": 1,
+  "totalElements": 1,
+  "number": 0,
+  "size": 100
+}

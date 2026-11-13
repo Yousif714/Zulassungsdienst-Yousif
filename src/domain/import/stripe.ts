@@ -123,5 +123,5 @@ export function mapStripe(raw: StripeRaw): ImportBatch {
 
   const disputes: ImportedDispute[] = (raw.disputes as Obj[]).map((d) => ({ externalId: d.id, invoiceExternalId: d.invoiceId ?? null }));
 
-  return { contacts: [], invoices: [], payments, subscriptions, disputes };
+  return { contacts: [], invoices: [], payments, subscriptions, disputes, orderConfirmations: [] };
 }
