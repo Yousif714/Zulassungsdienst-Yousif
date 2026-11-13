@@ -13,6 +13,7 @@ import { useAppStore } from '@/data/store';
 import { MONEY_SOURCES, buildBriefing } from '@/domain/briefing';
 import { formatBerlin, formatBerlinDe, now, todayBerlin } from '@/domain/clock';
 import { areaStale } from '@/domain/freshness';
+import { nexusReceivables } from '@/domain/ledger/receivables';
 import { deriveProposals } from '@/domain/import/proposals';
 import { formatEuro } from '@/domain/money';
 
@@ -28,6 +29,7 @@ export default function NexusPage() {
   const forecast = nexusForecast(state, today);
   const rows = memberRows(state, today).sort((a, b) => b.arrearsCents - a.arrearsCents || a.name.localeCompare(b.name, 'de'));
   const shown = filter === 'overdue' ? rows.filter((r) => r.traffic !== 'green') : rows;
+  const receivables = nexusReceivables(state, today);
   const toMatch = unallocatedBankPayments(state).length + stripeLexCases(state).length;
   const openProposals = deriveProposals(state).length;
   const calls = [...state.calls].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
@@ -45,6 +47,7 @@ export default function NexusPage() {
         <ListRow key="forecast" testId="forecast" title={formatBerlinDe(at, 'MMMM yyyy')}
           subtitle={<>erwartet <span className="amount">{formatEuro(forecast.expectedCents)}</span>, davon <span className="amount">{formatEuro(forecast.atRiskCents)}</span> wackelig</>} />
         <ListRow key="match" href="/nexus/zuordnen" title={`Zuordnen (${toMatch})`} testId="match-link" />
+        <ListRow key="open" href="/nexus/offen" title={`Offen (${formatEuro(receivables.totalCents)})`} testId="open-link" />
       </ListGroup>
 
       {openProposals > 0 && (

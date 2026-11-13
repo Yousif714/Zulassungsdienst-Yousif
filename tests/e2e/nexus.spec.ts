@@ -164,3 +164,11 @@ test('Bank nicht verbunden: Übernahme-Seite zeigt keinen Rückstand und keinen 
   await expect(page.getByTestId('rate-preview')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Stripe-Plan vorbereiten/ })).toHaveCount(0);
 });
+
+test('NEXUS → Offen: Summe oben, sortiert nach Überfälligkeit', async ({ page }) => {
+  await page.goto('/nexus?reset=1');
+  await page.getByTestId('open-link').click();
+  await expect(page).toHaveURL(/\/nexus\/offen$/);
+  await expect(page.getByTestId('receivables-total')).toContainText('Summe offen');
+  await expect(page.locator('[data-testid^="receivable-"]').first()).toBeVisible();
+});
