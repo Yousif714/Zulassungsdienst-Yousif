@@ -6,6 +6,7 @@ import type { Repos, StateRepository } from '@/server/db/repository';
 import type { ActionProvider } from '@/domain/actions/machine';
 import { DemoProvider } from '@/domain/actions/demo-provider';
 import type { Action } from '@/domain/types';
+import { addDaysIso, realNow, todayBerlin } from '@/domain/clock';
 import { NOW_0930 as NOW } from './helpers';
 import { createDemoState } from '@/data/seed';
 import { emptyBatch } from '@/domain/import/batch';
@@ -129,10 +130,12 @@ describe('Zustands-Dienst', () => {
   });
 
   const validSpk = { company: 'zulassung', source: 'bank', connectionId: 'bank_sparkasse', kind: 'incoming', externalId: 'spk-0123456789abcdef', amountCents: 64000, bookedOn: '2026-11-03', payerName: 'Autohaus Mueller GmbH', iban: 'DE00100000000000000001', reference: 'RE-Z-2026-290' };
+  const today = todayBerlin(realNow());
   const spkEvent = (payments: unknown[]) => ({ type: 'importBankStatement', connectionId: 'bank_sparkasse', payments });
   test.each([
     [{}, true], [{ company: 'nexus' }, false], [{ amountCents: 0 }, false], [{ amountCents: 1.5 }, false], [{ amountCents: 100_000_000_01 }, false],
-    [{ bookedOn: '12.11.2026' }, false], [{ externalId: 'abc' }, false], [{ reference: 'x'.repeat(501) }, false], [{ connectionId: 'bank_qonto' }, false],
+    [{ bookedOn: '12.11.2026' }, false], [{ bookedOn: '2026-13-45' }, false], [{ bookedOn: '9999-99-99' }, false], [{ bookedOn: '2026-02-31' }, false],
+    [{ bookedOn: '2026-05-31' }, false], [{ bookedOn: '2026-06-01' }, true], [{ bookedOn: today }, true], [{ bookedOn: addDaysIso(today, 1) }, true], [{ bookedOn: addDaysIso(today, 2) }, false], [{ externalId: 'abc' }, false], [{ reference: 'x'.repeat(501) }, false], [{ connectionId: 'bank_qonto' }, false],
     [{ source: 'stripe' }, false], [{ kind: 'stripe_payout' }, false], [{ payerName: 'x'.repeat(201) }, false], [{ iban: 'D'.repeat(35) }, false],
   ])('importBankStatement Zahlung %j erlaubt: %s', (patch, ok) => expect(isClientEvent(spkEvent([{ ...validSpk, ...patch }]))).toBe(ok));
   test('importBankStatement: 0 oder 5001 Zahlungen abgelehnt, 5000 erlaubt', () => {

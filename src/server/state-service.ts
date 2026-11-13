@@ -2,6 +2,8 @@ import 'server-only';
 import { applyEvent, applyEvents, refresh, type EngineContext } from '@/data/engine';
 import { checkAction, executeApproved, sweepStaleExecutions, type EventSink } from '@/data/executor';
 import type { ActionProvider } from '@/domain/actions/machine';
+import { addDaysIso, realNow, todayBerlin } from '@/domain/clock';
+import { IMPORT_SINCE } from '@/domain/import/batch';
 import { isPortalEmail } from '@/domain/import/portal-list';
 import type { StoreEvent } from '@/domain/events';
 import { newId } from '@/domain/ids';
@@ -65,12 +67,20 @@ const isPortalEntry = (x: unknown) =>
   && (x.emails === undefined || (Array.isArray(x.emails) && x.emails.length >= 1 && x.emails.length <= 10 && x.emails.every(isPortalMail) && String(x.emails[0]).toLowerCase() === String(x.email).toLowerCase()))
   && optDate(x.joinedOn) && optDate(x.lastActiveOn) && optStr(x.joinedText, 100) && optStr(x.lastActiveText, 100);
 
+/** Echtes Kalenderdatum, ab Importbeginn, höchstens morgen (Europe/Berlin, ein Tag Toleranz): ein Zukunftsdatum würde zum Cursor und den Hinweis stumm halten. */
+const isBookingDate = (v: unknown) => {
+  if (!isIsoDate(v)) return false;
+  const d = v as string;
+  const parsed = new Date(`${d}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === d && d >= IMPORT_SINCE && d <= addDaysIso(todayBerlin(realNow()), 1);
+};
+
 /** Strenge Form einer Sparkasse-Zahlung aus dem Client: feste Werte, Schlüssel- und Betragsgrenzen. */
 const isSparkassePayment = (x: unknown) =>
   isObj(x) && x.company === 'zulassung' && x.source === 'bank' && x.connectionId === 'bank_sparkasse' && x.kind === 'incoming'
   && typeof x.externalId === 'string' && /^spk-[0-9a-f]{16}$/.test(x.externalId)
   && Number.isInteger(x.amountCents) && x.amountCents !== 0 && Math.abs(x.amountCents as number) <= 100_000_000_00
-  && isIsoDate(x.bookedOn)
+  && isBookingDate(x.bookedOn)
   && optStr(x.payerName, 200) && optStr(x.iban, 34) && optStr(x.reference, 500);
 
 /** Sammelzahlung: 1–50 eindeutige Rechnungs-IDs. */
