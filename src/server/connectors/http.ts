@@ -1,8 +1,9 @@
 import 'server-only';
 
-import { ConnectorError, type PullContext } from './types';
+import { ConnectorError, RateLimited, type PullContext } from './types';
 
 const MAX_RETRY_WAIT_MS = 10_000;
+const MAX_RETRIES = 3;
 
 /** Kurzer, bereinigter Grund aus einer 400-Antwort (Lexware `IssueList`/`message`, Stripe `error.message`). Nie der Schlüssel. */
 async function reason(res: Response, key: string): Promise<string> {
@@ -49,10 +50,11 @@ export function createApiClient(o: {
     async getJson(pathAndQuery) {
       const path = pathAndQuery.split('?')[0];
       let res = await send(pathAndQuery);
-      if (res.status === 429) {
+      for (let attempt = 0; res.status === 429; attempt++) {
+        if (attempt >= MAX_RETRIES) throw new RateLimited(`${o.label}: gedrosselt bei ${path}`);
         const h = res.headers.get('retry-after');
         const s = h ? Number(h) : NaN;
-        await o.sleep(Number.isFinite(s) && s > 0 ? Math.min(s * 1000, MAX_RETRY_WAIT_MS) : 1000);
+        await o.sleep(Number.isFinite(s) && s > 0 ? Math.min(s * 1000, MAX_RETRY_WAIT_MS) : 1000 * 2 ** attempt);
         res = await send(pathAndQuery);
       }
       if (!res.ok) {

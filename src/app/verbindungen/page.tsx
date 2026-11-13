@@ -67,7 +67,7 @@ export default function ConnectionsPage() {
   return (
     <>
       <PageHeader title="Verbindungen" />
-      {mode === 'real' ? <><SetupChecklist connections={state.connections} /><SyncNowButton /></> : <SourceList />}
+      {mode === 'real' ? <><SyncNowButton /><SetupChecklist connections={state.connections} /></> : <SourceList />}
     </>
   );
 }

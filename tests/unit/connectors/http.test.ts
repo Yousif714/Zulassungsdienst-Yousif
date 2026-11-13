@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import { fixtureFetch } from '@/server/connectors/fixture-fetch';
 import { createApiClient } from '@/server/connectors/http';
-import { ConnectorError } from '@/server/connectors/types';
+import { BudgetExceeded, ConnectorError, RateLimited } from '@/server/connectors/types';
 
 const noSleep = async () => {};
 const spyFetch = (calls: Request[], bodies: unknown[]): typeof fetch =>
@@ -76,13 +76,23 @@ describe('createApiClient', () => {
     }
   });
 
-  test('zweites 429 → sicherer Fehler, kein dritter Versuch', async () => {
+  test('429 → bis zu 3 Wiederholungen mit wachsender Pause (1 s, 2 s, 4 s)', async () => {
+    const calls: Request[] = [];
+    const waits: number[] = [];
+    const r429 = () => new Response('{}', { status: 429 });
+    const f = spyFetch(calls, [r429(), r429(), r429(), { ok: true }]);
+    expect(await createApiClient({ ...base, minIntervalMs: 0, fetch: f, sleep: async (ms) => { waits.push(ms); } }).getJson('/v1/x')).toEqual({ ok: true });
+    expect(calls).toHaveLength(4);
+    expect(waits).toEqual([1000, 2000, 4000]);
+  });
+
+  test('anhaltendes 429 → RateLimited (zählt als „später weiter“, BudgetExceeded), kein fünfter Versuch', async () => {
     const calls: Request[] = [];
     const f = spyFetch(calls, [new Response('{}', { status: 429 })]);
     const err = await createApiClient({ ...base, minIntervalMs: 0, fetch: f }).getJson('/v1/x').then(() => { throw new Error('kein Fehler'); }, (e: Error) => e);
-    expect(err).toBeInstanceOf(ConnectorError);
-    expect(err.message).toBe('Lexware: HTTP 429 bei /v1/x');
-    expect(calls).toHaveLength(2);
+    expect(err).toBeInstanceOf(RateLimited);
+    expect(err).toBeInstanceOf(BudgetExceeded);
+    expect(calls).toHaveLength(4);
   });
 
   test('Fehler ohne Schlüssel, ohne Query, ohne Antworttext', async () => {
