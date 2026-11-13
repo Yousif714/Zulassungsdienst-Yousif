@@ -196,3 +196,15 @@ test('falsche Datei → verständlicher Fehler', () => {
 test('xml-Helfer: Namespaces, Entities', () => {
   expect(childText(stripNamespaces('<a:X><a:Y>A &amp; B</a:Y></a:X>'), ['X', 'Y'])).toBe('A & B');
 });
+
+test('überlappende Dateien: gleiche Buchung nur einmal, Doppelzeile innerhalb einer Datei bleibt 2-fach', () => {
+  const enc = new TextEncoder();
+  const a = doc(ntry() + ntry() + ntry({ date: '2026-11-04', amt: '20.00', ref: 'RE-A' }));
+  const b = doc(ntry() + ntry() + ntry({ date: '2026-11-05', amt: '30.00', ref: 'RE-B' }));
+  const r = parseSparkasse([{ name: 'a.xml', bytes: enc.encode(a) }, { name: 'b.xml', bytes: enc.encode(b) }]);
+  expect(r.ok).toBe(true);
+  if (!r.ok) return;
+  const ids = r.payments.map((p) => p.externalId);
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(r.payments.map((p) => p.amountCents)).toEqual([1000, 1000, 2000, 3000]);
+});

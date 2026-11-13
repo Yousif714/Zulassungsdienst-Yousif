@@ -211,6 +211,12 @@ export function parseCamt053(xmlText: string): SparkasseResult | null {
   return { format: 'camt', payments, from, to, account, skipped: skippedList(counts) };
 }
 
+/** Überlappende Dateien: gleiche Buchung (gleicher Schlüssel) nur einmal, die erste gewinnt. */
+function dedupeByExternalId(payments: ImportedPayment[]): ImportedPayment[] {
+  const seen = new Set<string>();
+  return payments.filter((p) => (seen.has(p.externalId) ? false : (seen.add(p.externalId), true)));
+}
+
 /** Dateien (CSV oder CAMT-XML, ggf. aus einem ZIP entpackt) lesen und zusammenführen. */
 export function parseSparkasse(files: { name: string; bytes: Uint8Array }[]): SparkasseParse {
   if (files.length === 0) return { ok: false, error: NOT_SPARKASSE };
@@ -227,7 +233,7 @@ export function parseSparkasse(files: { name: string; bytes: Uint8Array }[]): Sp
   const froms = dates('from'), tos = dates('to');
   return {
     ok: true, format: results[0].format, account: results[0].account,
-    payments: results.flatMap((r) => r.payments),
+    payments: dedupeByExternalId(results.flatMap((r) => r.payments)),
     skipped: skippedList(counts),
     from: froms.length ? froms.reduce((a, b) => (b < a ? b : a)) : null,
     to: tos.length ? tos.reduce((a, b) => (b > a ? b : a)) : null,
