@@ -197,7 +197,12 @@ test('Echtmodus: Mitgliederliste einfügen, Status, Vertrag anlegen, Kein zahlen
 test('Echtmodus: Excel-Export (.xlsx) hochladen, Vorschau, Übernehmen mit Beigetreten und Zuletzt aktiv', async () => {
   await page.goto('/nexus/mitglieder');
   await page.getByRole('button', { name: 'Mitgliederliste einfügen' }).click();
-  await page.getByLabel('Excel- oder CSV-Datei').setInputFiles('tests/fixtures/portal/mitglieder-portal-export.xlsx');
+  const input = page.getByLabel('Excel- oder CSV-Datei');
+  await input.setInputFiles({ name: 'gross.csv', mimeType: 'text/csv', buffer: Buffer.alloc(2 * 1024 * 1024 + 1, 'a') });
+  await expect(page.locator('.form-error')).toContainText('zu groß');
+  await input.setInputFiles({ name: 'alt.xls', mimeType: 'application/vnd.ms-excel', buffer: Buffer.from('x') });
+  await expect(page.locator('.form-error')).toContainText('Dateiformat');
+  await input.setInputFiles('tests/fixtures/portal/mitglieder-portal-export.xlsx');
   await expect(page.getByTestId('portal-preview')).toHaveText(/4 Mitglieder erkannt · 0 doppelt · 0 Zeilen ohne E-Mail/);
   await page.getByRole('button', { name: '4 Mitglieder übernehmen' }).click();
   const row = page.getByTestId('portal-row-max@example.de');

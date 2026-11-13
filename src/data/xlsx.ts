@@ -13,9 +13,29 @@ function xmlText(bytes: Uint8Array): string {
   return td.decode(bytes).replace(/^\uFEFF/, '').replace(/<(\/?)[A-Za-z_][\w.-]*:(?=[A-Za-z_])/g, '<$1');
 }
 
-async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+/** Obergrenze für die entpackte Gesamtgröße (Schutz vor Zip-Bomben). */
+export const MAX_UNZIPPED_BYTES = 20 * 1024 * 1024;
+const TOO_BIG = 'Die Datei ist entpackt zu groß (über 20 MB). Bitte nur die Mitgliederliste exportieren.';
+
+/** Entpackt mit Budget: bricht beim Überschreiten ab, statt alles in den Speicher zu laden. */
+async function inflateRaw(data: Uint8Array, budget: number): Promise<Uint8Array> {
+  const reader = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > budget) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error(TOO_BIG);
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.length; }
+  return out;
 }
 
 /** Alle Dateien des Archivs: Name → Rohbytes (entpackt). */
@@ -32,6 +52,7 @@ async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
   const count = dv.getUint16(eocd + 10, true);
   let p = dv.getUint32(eocd + 16, true);
   const files = new Map<string, Uint8Array>();
+  let total = 0;
   for (let n = 0; n < count; n++) {
     if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('Beschädigtes ZIP-Verzeichnis.');
     const method = dv.getUint16(p + 10, true);
@@ -44,9 +65,11 @@ async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
     p += 46 + nameLen + extraLen + commentLen;
     const dataStart = localOffset + 30 + dv.getUint16(localOffset + 26, true) + dv.getUint16(localOffset + 28, true);
     const raw = bytes.subarray(dataStart, dataStart + compSize);
-    if (method === 0) files.set(name, raw);
-    else if (method === 8) files.set(name, await inflateRaw(raw));
-    else throw new Error(`Nicht unterstütztes ZIP-Verfahren ${method}.`);
+    if (method !== 0 && method !== 8) throw new Error(`Nicht unterstütztes ZIP-Verfahren ${method}.`);
+    const data = method === 0 ? raw : await inflateRaw(raw, MAX_UNZIPPED_BYTES - total);
+    total += data.length;
+    if (total > MAX_UNZIPPED_BYTES) throw new Error(TOO_BIG);
+    files.set(name, data);
   }
   return files;
 }

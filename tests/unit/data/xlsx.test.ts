@@ -102,6 +102,12 @@ describe('readXlsxRows', () => {
     expect(await readXlsxRows(bytes)).toEqual([['', '&lt; <b>', '', 'x']]);
   });
 
+  test('entpackt zu groß → Fehler statt Einfrieren', async () => {
+    const bytes = zip({ 'xl/worksheets/sheet1.xml': '<worksheet>' + 'a'.repeat(21 * 1024 * 1024) + '</worksheet>' });
+    expect(bytes.length).toBeLessThan(200_000);
+    await expect(readXlsxRows(bytes)).rejects.toThrow(/zu groß/);
+  });
+
   test('kein ZIP → Fehler', async () => {
     await expect(readXlsxRows(new Uint8Array([1, 2, 3]))).rejects.toThrow(/XLSX/);
   });

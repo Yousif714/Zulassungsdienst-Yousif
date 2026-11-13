@@ -17,11 +17,15 @@ import { decodeListFile, parsePortalList, parsePortalRows } from '@/domain/impor
 import { portalProposal, portalSummary, type PortalStatus } from '@/domain/portal';
 import type { PortalMember } from '@/domain/types';
 
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
 type Filter = 'all' | 'no_invoice' | 'proposal' | 'contract';
 
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'Alle' }, { value: 'no_invoice', label: 'Ohne Rechnung' }, { value: 'proposal', label: 'Vorschlag' }, { value: 'contract', label: 'Vertrag' },
 ];
+
+const STATUS_RANK: Record<PortalStatus, number> = { no_invoice: 0, invoice_only: 1, proposal: 2, contract: 3, ignored: 4 };
 
 const dateText = (text: string | undefined, iso: string | null | undefined): string | null => text || (iso ? formatIsoDe(iso) : null);
 
@@ -45,23 +49,27 @@ export default function PortalMembersPage() {
   async function onFile(file: File | undefined) {
     setFileError(null);
     if (!file) return;
+    const fail = (msg: string) => { setFileRows(null); setFileError(msg); };
+    if (file.size > MAX_FILE_BYTES) return fail('Die Datei ist zu groß (über 2 MB). Bitte nur die Mitgliederliste exportieren.');
+    const isXlsx = /\.xlsx$/i.test(file.name);
+    if (!isXlsx && !/\.(csv|txt)$/i.test(file.name)) return fail('Dieses Dateiformat wird nicht gelesen. Bitte Excel (.xlsx) oder CSV wählen oder die Liste einfügen.');
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      if (/\.xlsx$/i.test(file.name)) {
+      if (isXlsx) {
         setFileRows({ name: file.name, rows: await readXlsxRows(bytes) });
         setText('');
       } else {
         setFileRows(null);
         setText(decodeListFile(bytes));
       }
-    } catch {
-      setFileRows(null);
-      setFileError('Die Datei konnte nicht gelesen werden. Bitte als Excel (.xlsx) oder CSV speichern oder die Liste einfügen.');
+    } catch (err) {
+      fail(err instanceof Error && /zu groß/.test(err.message) ? err.message : 'Die Datei konnte nicht gelesen werden. Bitte als Excel (.xlsx) oder CSV speichern oder die Liste einfügen.');
     }
   }
 
   async function doImport() {
-    await dispatch({ type: 'importPortalList', entries: preview.entries });
+    const { ok } = await dispatch({ type: 'importPortalList', entries: preview.entries });
+    if (ok === false) return; // Fehlermeldung zeigt der Store; Eingabe bleibt stehen
     setText('');
     setFileRows(null);
     setOpen(false);
@@ -72,7 +80,7 @@ export default function PortalMembersPage() {
     if (filter === 'all') return true;
     if (filter === 'no_invoice') return r.status === 'no_invoice' || r.status === 'invoice_only';
     return r.status === filter;
-  });
+  }).sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.member.name.localeCompare(b.member.name, 'de'));
   const nameOf = (id: string) => rows.find((r) => r.member.id === id)?.member.name ?? id;
   const statusText = (r: (typeof rows)[number]): string => ({
     contract: 'Vertrag', proposal: 'Vorschlag offen', ignored: 'Kein zahlendes Mitglied', no_invoice: 'Keine Rechnung',
