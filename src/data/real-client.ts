@@ -11,6 +11,8 @@ export class UnauthorizedError extends Error {
 export interface RealClient {
   load(): Promise<AppState>;
   dispatch(e: StoreEvent): Promise<{ state: AppState; created: string[] }>;
+  /** Stößt den Abgleich mit den Quellen an. `wait`: höchstens einmal pro Minute. */
+  syncNow(): Promise<{ ok: true; state: AppState } | { ok: false; reason: 'wait' }>;
 }
 
 async function read<T>(res: Response): Promise<T> {
@@ -28,6 +30,11 @@ export function createRealClient(f: typeof fetch = (...a) => fetch(...a)): RealC
   return {
     async load() {
       return (await read<{ state: AppState }>(await f('/api/state', { cache: 'no-store' }))).state;
+    },
+    async syncNow() {
+      const res = await f('/api/sync', { method: 'POST', cache: 'no-store' });
+      if (res.status === 429) return { ok: false, reason: 'wait' } as const;
+      return { ok: true, state: (await read<{ state: AppState }>(res)).state } as const;
     },
     dispatch(e) {
       const run = async () => read<{ state: AppState; created: string[] }>(await f('/api/events', {

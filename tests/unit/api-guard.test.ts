@@ -40,6 +40,12 @@ describe('API-Schutz', () => {
   });
   it('Stripe-Webhook prüft die Signatur', () =>
     expect(readFileSync(path.join(API, 'webhooks/stripe/route.ts'), 'utf8')).toContain('verifyStripeSignature('));
+  it('manueller Abgleich: Sitzung, Zeitbudget und Ratenbegrenzung über job_runs', () => {
+    const src = readFileSync(path.join(API, 'sync/route.ts'), 'utf8');
+    expect(src).toContain('requireSession(');
+    expect(src).toMatch(/export const maxDuration = 60/);
+    expect(src).toContain("claimJobRun('manual-sync:'");
+  });
   it('keine Route setzt runtime', () => {
     for (const f of files) expect(readFileSync(f, 'utf8')).not.toMatch(/export const runtime/);
   });
