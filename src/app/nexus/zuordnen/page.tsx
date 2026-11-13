@@ -54,7 +54,7 @@ function PaymentCard({ payment, match }: { payment: Payment; match: MatchResult 
           </p>
           <p className="card-note">{match.reason}</p>
           <div className="card-buttons">
-            <button type="button" className="btn btn-primary" aria-label={`Zahlung von ${payer} an ${targetLabel} bestätigen`}
+            <button type="button" className="btn btn-primary" aria-label={`Ja, gehört zu ${targetLabel} (Zahlung von ${payer})`}
               onClick={() => confirm(`${target.kind}:${target.id}`)}>Ja, gehört zu {targetLabel}</button>
           </div>
         </>
@@ -67,13 +67,13 @@ function PaymentCard({ payment, match }: { payment: Payment; match: MatchResult 
               <option value="">{match.candidates.length > 0 ? 'Zuordnung wählen …' : 'Mitglied oder Rechnung wählen …'}</option>
               {list.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <button type="button" className="btn btn-primary" disabled={!chosen} aria-label={`Zahlung von ${payer} zuordnen`}
+            <button type="button" className="btn btn-primary" disabled={!chosen} aria-label={`Zuordnen (Zahlung von ${payer})`}
               onClick={() => confirm(chosen)}>Zuordnen</button>
           </div>
         </>
       )}
       <div className="card-buttons">
-        <button type="button" className="btn btn-secondary" aria-label={`Keine Mitgliedszahlung: Zahlung von ${payer}`}
+        <button type="button" className="btn btn-secondary" aria-label={`Keine Mitgliedszahlung (Zahlung von ${payer})`}
           onClick={() => dispatch({ type: 'dismissPayment', paymentId: payment.id })}>Keine Mitgliedszahlung</button>
       </div>
     </article>

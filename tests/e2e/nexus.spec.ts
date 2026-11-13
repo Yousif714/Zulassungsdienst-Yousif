@@ -26,7 +26,7 @@ test('Abnahme 3: Übernahme Referenzbeispiel', async ({ page }) => {
 
 test('Abnahme 4: unbekannte Überweisung zuordnen, IBAN lernen', async ({ page }) => {
   await page.goto('/nexus/zuordnen?reset=1');
-  await page.getByTestId('match-p-yilmaz-1').getByRole('button', { name: 'Bestätigen' }).click();
+  await page.getByTestId('match-p-yilmaz-1').getByRole('button', { name: /Ja, gehört zu/ }).click();
   await page.getByRole('button', { name: 'Überweisung simulieren' }).click();
   await page.getByLabel('IBAN').fill('DE02120300000000202051'); await page.getByLabel('Name').fill('Selin Yilmaz'); await page.getByLabel('Betrag').fill('300');
   await page.getByRole('button', { name: 'Buchen' }).click();
@@ -36,10 +36,15 @@ test('Abnahme 4: unbekannte Überweisung zuordnen, IBAN lernen', async ({ page }
 test('Zuordnen: „Ja, gehört zu …“ ordnet zu und lernt die IBAN', async ({ page }) => {
   await page.goto('/nexus/zuordnen?reset=1');
   const card = page.getByTestId('match-p-yilmaz-1');
-  const ja = card.getByRole('button', { name: 'Zahlung von S. Yilmaz an Selin Yilmaz bestätigen' });
+  const ja = card.getByRole('button', { name: 'Ja, gehört zu Selin Yilmaz (Zahlung von S. Yilmaz)', exact: true });
   await expect(ja).toHaveText('Ja, gehört zu Selin Yilmaz');
   await ja.click();
   await expect(card).toHaveCount(0);
+  // IBAN gelernt: eine zweite Zahlung derselben IBAN wird automatisch zugeordnet.
+  await page.getByRole('button', { name: 'Überweisung simulieren' }).click();
+  await page.getByLabel('IBAN').fill('DE02120300000000202051'); await page.getByLabel('Name').fill('Selin Yilmaz'); await page.getByLabel('Betrag').fill('300');
+  await page.getByRole('button', { name: 'Buchen' }).click();
+  await expect(page.getByText('Automatisch zugeordnet: Selin Yilmaz')).toBeVisible();
 });
 
 test('Zuordnen: „Keine Mitgliedszahlung“ blendet aus und bleibt nach Neuladen weg', async ({ page }) => {
@@ -132,7 +137,7 @@ test('Erinnerung: eigene Aktion je Rückstandsstand', async ({ page }) => {
 
 test('Wiederholte Knöpfe nennen im Namen, worum es geht', async ({ page }) => {
   await page.goto('/nexus/zuordnen?reset=1');
-  await expect(page.getByRole('button', { name: 'Zahlung von S. Yilmaz an Selin Yilmaz bestätigen', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ja, gehört zu Selin Yilmaz (Zahlung von S. Yilmaz)', exact: true })).toBeVisible();
   await page.goto('/zulassung/auftraege/j-mueller-1');
   await expect(page.getByRole('button', { name: 'Rechnung RE-Z-2026-311 zuordnen', exact: true })).toBeVisible();
 });
