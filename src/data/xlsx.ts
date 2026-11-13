@@ -51,15 +51,13 @@ async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
   return files;
 }
 
+const ENTITIES: Record<string, string> = { lt: '<', gt: '>', quot: '"', apos: "'", amp: '&' };
+
+/** Entities in einem Durchlauf dekodieren (kein Doppeldekodieren). */
 function decodeXml(s: string): string {
-  return s
-    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&');
+  return s.replace(/&(?:#x([0-9a-f]+)|#(\d+)|(lt|gt|quot|apos|amp));/gi, (m, h?: string, d?: string, n?: string) =>
+    h ? String.fromCodePoint(parseInt(h, 16)) : d ? String.fromCodePoint(Number(d)) : (ENTITIES[n!.toLowerCase()] ?? m),
+  );
 }
 
 /** Text aller `<t>`-Elemente (ohne Phonetik-Hinweise). */
@@ -71,8 +69,8 @@ function textOf(xml: string): string {
 }
 
 function attr(attrs: string, name: string): string | undefined {
-  const m = attrs.match(new RegExp(`(?:^|\\s)${name}="([^"]*)"`));
-  return m ? decodeXml(m[1]) : undefined;
+  const m = attrs.match(new RegExp(`(?:^|\\s)${name}=(?:"([^"]*)"|'([^']*)')`));
+  return m ? decodeXml(m[1] ?? m[2]) : undefined;
 }
 
 function sharedStrings(xml: string | undefined): string[] {

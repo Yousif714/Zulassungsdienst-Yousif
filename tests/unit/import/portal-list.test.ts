@@ -83,6 +83,27 @@ describe('parsePortalRows (XLSX-Zeilen)', () => {
   });
 });
 
+describe('Deduplizierung über alle Adressen', () => {
+  test('A=[a, shared], B=[shared]: ein Mitglied, zählt als Duplikat', () => {
+    const r = parsePortalRows([
+      ['Mitglied', 'E-Mail-Adresse(n)'],
+      ['', 'a@x.de; shared@x.de'],
+      ['Bea', 'shared@x.de'],
+    ]);
+    expect(r.duplicates).toBe(1);
+    expect(r.entries).toEqual([{ email: 'a@x.de', name: 'Bea', emails: ['a@x.de', 'shared@x.de'] }]);
+  });
+  test('B-Hauptadresse = A-Zweitadresse; C verbindet zwei bestehende Einträge', () => {
+    const out = normalizePortalEntries([
+      { email: 'a@x.de', name: 'A', emails: ['a@x.de', 'b@x.de'] },
+      { email: 'c@x.de', name: 'C' },
+      { email: 'b@x.de', name: 'B' },
+      { email: 'c@x.de', name: '', emails: ['c@x.de', 'a@x.de'] },
+    ]);
+    expect(out).toEqual([{ email: 'a@x.de', name: 'A', emails: ['a@x.de', 'b@x.de', 'c@x.de'] }]);
+  });
+});
+
 describe('Hilfsfunktionen', () => {
   test('normalizePortalEntries: ungültige raus, klein, Duplikate', () => {
     expect(

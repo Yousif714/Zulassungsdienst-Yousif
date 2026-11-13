@@ -94,6 +94,14 @@ describe('readXlsxRows', () => {
     expect(r.entries[3].name).toBe('Dr. Lena Muster & Co');
   });
 
+  test('Einzelquote-Attribute, selbstschließende Zellen, Entities ohne Doppeldekodierung', async () => {
+    const bytes = zip({
+      'xl/worksheets/sheet1.xml':
+        "<worksheet><sheetData><row r='1'><c r='B1' t='inlineStr'><is><t>&#38;lt; &lt;b&gt;</t></is></c><c r='C1'/><c r='D1' t='str'><v>x</v></c></row></sheetData></worksheet>",
+    });
+    expect(await readXlsxRows(bytes)).toEqual([['', '&lt; <b>', '', 'x']]);
+  });
+
   test('kein ZIP → Fehler', async () => {
     await expect(readXlsxRows(new Uint8Array([1, 2, 3]))).rejects.toThrow(/XLSX/);
   });

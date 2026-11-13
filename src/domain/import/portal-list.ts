@@ -46,7 +46,9 @@ export function entryEmails(e: PortalListEntry): string[] {
 
 /** Trimmt, schreibt E-Mails klein, lässt ungültige weg, führt Duplikate zusammen (erster nicht leerer Name gewinnt). */
 export function normalizePortalEntries(raw: PortalListEntry[]): PortalListEntry[] {
-  const byEmail = new Map<string, PortalListEntry>();
+  const out: PortalListEntry[] = [];
+  /** Jede bekannte Adresse → Eintrag, der sie führt. */
+  const owner = new Map<string, PortalListEntry>();
   for (const r of raw) {
     const all: string[] = [];
     for (const e of entryEmails(r)) {
@@ -54,23 +56,35 @@ export function normalizePortalEntries(raw: PortalListEntry[]): PortalListEntry[
       if (isPortalEmail(m) && !all.includes(m)) all.push(m);
     }
     if (all.length === 0) continue;
-    const key = all[0];
-    const name = r.name.trim();
-    const have = byEmail.get(key);
-    if (!have) {
-      const entry: PortalListEntry = { email: key, name };
-      if (all.length > 1) entry.emails = all;
-      copyExtras(entry, r);
-      byEmail.set(key, entry);
-      continue;
+    // Teilen zwei Einträge irgendeine Adresse, sind sie dasselbe Mitglied (Union).
+    const hits = new Set<PortalListEntry>();
+    for (const e of all) {
+      const h = owner.get(e);
+      if (h) hits.add(h);
     }
-    if (!have.name && name) have.name = name;
-    const merged = [...entryEmails(have)];
-    for (const e of all) if (!merged.includes(e)) merged.push(e);
-    if (merged.length > 1) have.emails = merged;
-    copyExtras(have, r);
+    const name = r.name.trim();
+    let target: PortalListEntry;
+    if (hits.size === 0) {
+      target = { email: all[0], name };
+      copyExtras(target, r);
+      out.push(target);
+    } else {
+      const ordered = out.filter((x) => hits.has(x));
+      target = ordered[0];
+      if (!target.name && name) target.name = name;
+      copyExtras(target, r);
+      for (const other of ordered.slice(1)) {
+        if (!target.name && other.name) target.name = other.name;
+        copyExtras(target, other);
+        target.emails = [...new Set([...entryEmails(target), ...entryEmails(other)])];
+        out.splice(out.indexOf(other), 1);
+      }
+    }
+    const merged = [...new Set([...entryEmails(target), ...all])];
+    if (merged.length > 1) target.emails = merged;
+    for (const e of merged) owner.set(e, target);
   }
-  return [...byEmail.values()];
+  return out;
 }
 
 /** Übernimmt Zusatzfelder, die am Ziel noch fehlen. */
