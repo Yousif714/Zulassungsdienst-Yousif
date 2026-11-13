@@ -1,0 +1,26 @@
+{
+  "id": "inv-RE-1200",
+  "voucherNumber": "RE-1200",
+  "voucherDate": "2026-10-01T00:00:00.000+02:00",
+  "dueDate": "2026-10-15T00:00:00.000+02:00",
+  "voucherStatus": "open",
+  "address": {
+    "contactId": "c-85"
+  },
+  "title": "Rechnung",
+  "introduction": null,
+  "lineItems": [
+    {
+      "type": "custom",
+      "name": "Ticket NEXUS Summit 2027",
+      "description": null
+    }
+  ],
+  "remark": "Zahlbar in 6 Monatsraten.",
+  "totalPrice": {
+    "currency": "EUR",
+    "totalNetAmount": 504.2,
+    "totalGrossAmount": 600.0
+  },
+  "updatedDate": "2026-10-01T08:00:00.000+02:00"
+}
