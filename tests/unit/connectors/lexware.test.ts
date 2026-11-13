@@ -27,6 +27,21 @@ test('Belegliste fragt voucherStatus=any (gültig für jeden Belegtyp), Entwürf
   expect(q.get('voucherDateFrom')).toBe('2026-08-01');
 });
 
+test('anhaltendes 429 mitten in den Details → Teilergebnis mit Cursor statt Fehler; Folgelauf liefert den Rest', async () => {
+  const inner = fixtureFetch(lexwareRoutesPaged);
+  let n = 0;
+  // Kontakte, Liste 0, 3 Details gehen durch; danach antwortet Lexware dauerhaft 429.
+  const f = ((i: RequestInfo | URL, init?: RequestInit) => (++n > 5 ? Promise.resolve(new Response('{}', { status: 429 })) : inner(i, init))) as typeof fetch;
+  const first = await pullLexware('lexware_nexus', null, ctx({ fetch: f }));
+  expect(first.complete).toBe(false);
+  expect(first.cursor).not.toBeNull();
+  expect(first.batch.invoices).toHaveLength(3);
+  const known = new Map(first.batch.invoices.map((i) => [i.externalId, updatedOf(i.number)]));
+  const second = await pullLexware('lexware_nexus', first.cursor, ctx({ fetch: fixtureFetch(lexwareRoutesPaged), known }));
+  expect(second.complete).toBe(true);
+  expect([...numbers(first), ...numbers(second)].sort()).toEqual(ALL);
+});
+
 describe('pullLexware', () => {
   test('Kontakte, dann Rechnungen; Details nur für Neues', async () => {
     const calls: string[] = [];

@@ -28,3 +28,6 @@ export class ConnectorError extends Error {
 
 /** Intern: Zeitbudget erreicht. Wird vom Connector gefangen und in ein Teilergebnis verwandelt. */
 export class BudgetExceeded extends Error {}
+
+/** Der Anbieter drosselt auch nach Wiederholungen (HTTP 429): wie Zeitbudget behandeln, im nächsten Lauf am Cursor weiter. */
+export class RateLimited extends BudgetExceeded {}
