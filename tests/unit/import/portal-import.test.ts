@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { applyEvent, type EngineContext } from '@/data/engine';
-import { mergePortalList } from '@/domain/import/portal-list';
+import { mergePortalList, parsePortalList } from '@/domain/import/portal-list';
 import type { PortalMember } from '@/domain/types';
 import { NOW_0930 } from '../helpers';
+import { portalListText } from '../../fixtures';
 import { portalState, seq } from './helpers';
 
 const ctx = (p: Partial<EngineContext> = {}): EngineContext => ({ at: NOW_0930, isDemo: true, newId: seq(), ...p });
@@ -47,4 +48,30 @@ describe('mergePortalList', () => {
     expect(r.items[0]).toMatchObject({ id: 'm1', externalId: 'a@x.de', name: 'Alt', joinedText: 'alt', lastSeenInListAt: at, firstSeenAt: old.firstSeenAt });
     expect(r.items[0].emails).toEqual(['a@x.de', 'c@x.de']);
   });
+  test('Eintrag trifft zwei Mitglieder: beide bleiben getrennt, nur das mit der Hauptadresse wird aktualisiert, keiner fehlt', () => {
+    const mk = (id: string, email: string, name: string): PortalMember => ({ id, connectionId: 'portal_nexus', externalId: email, email, name, firstSeenAt: '2026-01-01T00:00:00.000Z', lastSeenInListAt: '2026-01-01T00:00:00.000Z' });
+    const a = mk('m1', 'a@x.de', 'Anna');
+    const b = mk('m2', 'b@x.de', 'Berta');
+    const r = mergePortalList([a, b], [{ email: 'b@x.de', name: 'Neu', emails: ['b@x.de', 'a@x.de', 'c@x.de'] }], at, seq());
+    expect(r.items).toHaveLength(2);
+    expect(r.added).toBe(0);
+    expect(r.missing).toBe(0);
+    expect(r.items[0]).toEqual(a);
+    expect(r.items[1]).toMatchObject({ id: 'm2', name: 'Neu', lastSeenInListAt: at, emails: ['b@x.de', 'c@x.de'] });
+    // ohne Hauptadresse-Treffer: das erste
+    const r2 = mergePortalList([a, b], [{ email: 'z@x.de', name: '', emails: ['z@x.de', 'b@x.de', 'a@x.de'] }], at, seq());
+    expect(r2.items[0]).toMatchObject({ id: 'm1', lastSeenInListAt: at, emails: ['a@x.de', 'z@x.de'] });
+    expect(r2.items[1]).toEqual(b);
+    expect(r2.missing).toBe(0);
+  });
+});
+
+test('Idempotenz: dieselbe Liste zweimal ändert nur Zeitstempel', () => {
+  const later = new Date('2026-11-20T08:00:00Z');
+  const entries = parsePortalList(portalListText).entries;
+  const r = applyEvent(portalState, { type: 'importPortalList', entries }, ctx({ at: later })).state;
+  const strip = (ms: PortalMember[]) => ms.map(({ lastSeenInListAt: _l, ...m }) => m);
+  expect(strip(r.portalMembers)).toEqual(strip(portalState.portalMembers));
+  expect(r.portalMembers.every((m) => m.lastSeenInListAt === later.toISOString())).toBe(true);
+  expect(r.audit.at(-1)!.text).toBe('Mitgliederliste übernommen: 5 Mitglieder, 0 neu, 0 nicht mehr in der Liste');
 });

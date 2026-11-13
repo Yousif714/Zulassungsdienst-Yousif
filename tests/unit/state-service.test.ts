@@ -143,6 +143,17 @@ describe('Zustands-Dienst', () => {
     expect(isClientEvent({ type: 'importPortalList', entries: Array.from({ length: 2001 }, (_, i) => ({ email: `u${i}@x.de`, name: '' })) })).toBe(false);
   });
 
+  test('importPortalList: Zusatzfelder streng geprüft', () => {
+    const ok = (extra: object) => isClientEvent({ type: 'importPortalList', entries: [{ email: 'a@b.de', name: 'A', ...extra }] });
+    expect(ok({ emails: ['a@b.de', 'c@b.de'], joinedOn: '2026-08-01', joinedText: 'x', lastActiveOn: null, lastActiveText: 'y' })).toBe(true);
+    for (const bad of [
+      { emails: [1] }, { emails: 'a@b.de' }, { emails: [] }, { emails: ['c@b.de'] }, { emails: ['a@b.de', 'kaputt'] },
+      { emails: Array.from({ length: 11 }, (_, i) => (i ? `u${i}@b.de` : 'a@b.de')) },
+      { joinedOn: {} }, { joinedOn: '1.8.2026' }, { lastActiveOn: 5 }, { joinedText: 'x'.repeat(101) }, { lastActiveText: 7 },
+      { name: 'x'.repeat(201) },
+    ]) expect(ok(bad), JSON.stringify(bad).slice(0, 40)).toBe(false);
+  });
+
   test('isClientEvent: nur erlaubte Ereignisse mit Grundform', () => {
     expect(CLIENT_EVENTS.size).toBe(18);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);

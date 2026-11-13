@@ -124,15 +124,20 @@ export function mergePortalList(existing: PortalMember[], entries: PortalListEnt
   let added = 0;
   for (const e of entries) {
     const mails = entryEmails(e);
-    const idx = items.findIndex((m) => memberEmails(m).some((x) => mails.includes(x)));
+    // Passt der Eintrag zu mehreren Mitgliedern, bleiben sie getrennt (IDs und Verträge hängen daran):
+    // aktualisiert wird nur das Mitglied mit der Hauptadresse (sonst das erste); keine Adresse wandert.
+    const hits = items.map((m, i) => (memberEmails(m).some((x) => mails.includes(x)) ? i : -1)).filter((i) => i >= 0);
+    const idx = hits.find((i) => memberEmails(items[i]).includes(e.email)) ?? hits[0] ?? -1;
     const old = idx >= 0 ? items[idx] : undefined;
-    const all = old ? [...new Set([...memberEmails(old), ...mails])] : mails;
+    for (const i of hits) touched.add(items[i].id);
+    const foreign = new Set(hits.filter((i) => i !== idx).flatMap((i) => memberEmails(items[i])));
+    const all = [...new Set([...(old ? memberEmails(old) : []), ...mails.filter((x) => !foreign.has(x))])];
     const next: PortalMember = {
       id: old?.id ?? newId(),
       connectionId: 'portal_nexus',
-      externalId: old?.externalId ?? e.email,
-      email: old?.email ?? e.email,
-      name: e.name || old?.name || e.email.split('@')[0],
+      externalId: old?.externalId ?? all[0],
+      email: old?.email ?? all[0],
+      name: e.name || old?.name || (old?.email ?? all[0]).split('@')[0],
       firstSeenAt: old?.firstSeenAt ?? at,
       lastSeenInListAt: at,
     };

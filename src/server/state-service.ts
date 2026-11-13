@@ -56,8 +56,14 @@ const isContractDraft = (d: unknown) =>
 
 const isSlides = (v: unknown) => Array.isArray(v) && v.every((x) => isObj(x) && Number.isInteger(x.position) && typeof x.title === 'string' && typeof x.body === 'string');
 
+const isPortalMail = (v: unknown) => typeof v === 'string' && v.length <= 254 && isPortalEmail(v);
+const optStr = (v: unknown, max: number) => v === undefined || (typeof v === 'string' && v.length <= max);
+const optDate = (v: unknown) => v === undefined || v === null || isIsoDate(v);
+/** Strenge Form eines Listeneintrags: Typen und Größen aller Felder, `emails[0]` ist die Hauptadresse. */
 const isPortalEntry = (x: unknown) =>
-  isObj(x) && typeof x.email === 'string' && x.email.length <= 254 && isPortalEmail(x.email) && typeof x.name === 'string' && x.name.length <= 200;
+  isObj(x) && isPortalMail(x.email) && typeof x.name === 'string' && x.name.length <= 200
+  && (x.emails === undefined || (Array.isArray(x.emails) && x.emails.length >= 1 && x.emails.length <= 10 && x.emails.every(isPortalMail) && String(x.emails[0]).toLowerCase() === String(x.email).toLowerCase()))
+  && optDate(x.joinedOn) && optDate(x.lastActiveOn) && optStr(x.joinedText, 100) && optStr(x.lastActiveText, 100);
 
 /** Pflichtfelder je erlaubtem Ereignis (Grundform; die Fachregeln prüft die Engine). */
 const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
