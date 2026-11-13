@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { coveringContract, invoiceOpenCents, nexusReceivables } from '@/domain/ledger/receivables';
 import { memberView } from '@/domain/detectors/members';
-import { base, member, stateWith, tx, workshop } from '../helpers';
+import { invoiceRef } from '@/domain/ledger/contracts';
+import { base, conn, member, stateWith, tx, workshop } from '../helpers';
+import { readInv } from '../import/reading-fixtures';
 import { legacyNoBank } from '../import/helpers';
 
 const TODAY = '2026-11-12';
@@ -47,5 +49,31 @@ describe('Forderungen', () => {
     const r = nexusReceivables(stateWith({ contracts: [], invoices: [{ ...workshop, dueDate: '2026-12-01', status: 'open' }] }), TODAY);
     expect(r.items[0].traffic).toBe('green');
     expect(r.overdueCents).toBe(0);
+  });
+});
+
+describe('Ratenverträge aus Lesungen', () => {
+  const qonto = [conn({ id: 'bank_qonto', status: 'connected' })];
+  test('Rechnung mit Vertrag aus der Lesung (origin invoice:) zählt nicht doppelt', () => {
+    const i = readInv();
+    const s = stateWith({ invoices: [i], contracts: [{ ...base, id: 'k1', contactId: 'm-x', kind: 'ticket', origin: [invoiceRef(i)] }] });
+    expect(coveringContract(s, i)).toBe('k1');
+    expect(invoiceOpenCents(s, i)).toBe(0);
+  });
+  test('Ticket-Vertrag desselben Kontakts deckt die Mitgliedsrechnung nicht ab', () => {
+    const m = member('i-m1');
+    const s = stateWith({ invoices: [m], contracts: [{ ...base, id: 't1', kind: 'ticket', origin: [{ connectionId: 'lexware_nexus', externalId: 'c-77' }] }] });
+    expect(coveringContract(s, m)).toBeNull();
+  });
+  test('Offen: Label „Ticket-Raten“ und Rate statt Gesamtsumme', () => {
+    const i = readInv();
+    const k = { ...base, id: 'k1', contactId: 'm-x', kind: 'ticket' as const, totalCents: 60000, installments: 6, installmentCents: 10000, dueDay: 15, startDate: '2026-10-15', origin: [invoiceRef(i)] };
+    const r = nexusReceivables(stateWith({ invoices: [i], contracts: [k], connections: qonto }), TODAY);
+    expect(r.items.map((x) => [x.label, x.amountCents])).toEqual([['Ticket-Raten', 10000]]);
+  });
+  test('9a: Vertrag aus stornierter Rechnung ist nicht in Offen', () => {
+    const i = readInv({ status: 'void' });
+    const k = { ...base, id: 'k1', contactId: 'm-x', kind: 'ticket' as const, origin: [invoiceRef(i)] };
+    expect(nexusReceivables(stateWith({ invoices: [i], contracts: [k], connections: qonto }), TODAY).items).toEqual([]);
   });
 });

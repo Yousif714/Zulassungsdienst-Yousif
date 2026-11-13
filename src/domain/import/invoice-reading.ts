@@ -1,9 +1,10 @@
 import { berlinParts, daysBetween, formatIsoDe, type IsoDate } from '../clock';
 import { invoiceRef, membershipContractOf } from '../ledger/contracts';
+import { coveringContract } from '../ledger/receivables';
 import { formatEuro } from '../money';
 import type { AppState, ContractKind, Invoice, InvoiceReadResult, InvoiceReading } from '../types';
 import { validDate, validateContractDraft } from './contract-draft';
-import { MONTH_END, proposalId, type ProposalValues } from './proposals';
+import { MONTH_END, proposalId, type ContractProposal, type ProposalValues } from './proposals';
 
 export const READ_LIMITS = { maxPerRun: 5, budgetMs: 15_000, minInstallments: 2, maxInstallments: 36, daysBefore: 60, daysAfter: 365, maxAttempts: 3 } as const;
 /** Quelle: claude-api-Skill, Modelltabelle Stand 2026-11-03 (Claude Opus 5.5: 4 $ / 20 $ je 1 Mio. Token). 1 $ wird als 1 € gezählt (vorsichtig). */
@@ -39,15 +40,12 @@ export const readingProposalId = (inv: Pick<Invoice, 'externalId'>): string => p
 export const readingsOf = (s: AppState, invoiceId: string): InvoiceReading[] =>
   (s.invoiceReadings ?? []).filter((r) => r.invoiceId === invoiceId).sort((a, b) => a.readAt.localeCompare(b.readAt));
 
-const refKey = (connectionId: string, externalId: string) => `${connectionId}:${externalId}`;
-
 /** Offene NEXUS-Rechnungen, die (für diese Fassung) noch nicht gelesen sind; älteste zuerst. */
 export function invoicesToRead(s: AppState, max: number = READ_LIMITS.maxPerRun): Invoice[] {
-  const covered = new Set(s.contracts.flatMap((c) => (c.origin ?? []).map((o) => refKey(o.connectionId, o.externalId))));
   const dismissed = new Set(s.dismissedProposals);
   return s.invoices
     .filter((i) => i.connectionId === 'lexware_nexus' && i.status !== 'paid' && i.status !== 'void' && i.openCents > 0 && !!i.text)
-    .filter((i) => { const r = invoiceRef(i); return !covered.has(refKey(r.connectionId, r.externalId)); })
+    .filter((i) => coveringContract(s, i) === null)
     .filter((i) => !dismissed.has(readingProposalId(i)))
     .filter((i) => !readingsOf(s, i.id).some((r) => r.sourceUpdatedAt === (i.sourceUpdatedAt ?? '') && r.outcome !== 'error'))
     .sort((a, b) => a.issuedOn.localeCompare(b.issuedOn) || a.number.localeCompare(b.number))
@@ -107,4 +105,27 @@ export function readerSummary(s: AppState, at: Date): { lastReadAt: string | nul
     limitMicroCents: MONTHLY_LIMIT_MICRO_CENTS, limitReached: cost >= MONTHLY_LIMIT_MICRO_CENTS,
     lastError: err && (!ok || err.readAt > ok.readAt) ? err.error ?? null : null,
   };
+}
+
+/** Vorschläge aus Lesungen mit outcome 'proposal' für die aktuelle Fassung offener, nicht abgedeckter Rechnungen. */
+export function readingProposals(s: AppState): ContractProposal[] {
+  const out: ContractProposal[] = [];
+  for (const inv of s.invoices) {
+    if (inv.connectionId !== 'lexware_nexus' || inv.status === 'void' || inv.status === 'paid' || coveringContract(s, inv) !== null) continue;
+    const r = readingsOf(s, inv.id).filter((x) => x.outcome === 'proposal' && x.sourceUpdatedAt === (inv.sourceUpdatedAt ?? '') && x.result).at(-1);
+    if (!r?.result) continue;
+    const plan = planFromReading(s, inv, r.result);
+    const v = plan.values;
+    const complete = v.totalCents !== null && v.installments !== null && v.installmentCents !== null && v.dueDay !== null && v.startDate !== null
+      && validateContractDraft({ totalCents: v.totalCents, installments: v.installments, installmentCents: v.installmentCents, dueDay: v.dueDay, startDate: v.startDate, catchUpMode: 'first_rate' }).length === 0;
+    const contact = inv.contactId ? s.contacts.find((c) => c.id === inv.contactId) : undefined;
+    const sources = [invoiceRef(inv)];
+    out.push({
+      ...v, id: readingProposalId(inv), name: contact?.name ?? `Rechnung ${inv.number}`, email: contact?.emails[0] ?? null, billing: 'legacy', sources,
+      contactRefs: inv.contactExternalId ? [{ connectionId: 'lexware_nexus', externalId: inv.contactExternalId }] : [],
+      sourceLabel: 'Lexware (Claude)', references: [`Rechnung ${inv.number}`], complete, steps: [...plan.steps, ...plan.hints], possibleMatch: null,
+      reading: { invoiceId: inv.id, invoiceNumber: inv.number, kind: plan.kind, quote: r.result.quote, note: r.result.note },
+    });
+  }
+  return out;
 }

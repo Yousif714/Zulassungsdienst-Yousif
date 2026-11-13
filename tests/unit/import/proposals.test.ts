@@ -4,6 +4,9 @@ import { mapLexwareContacts, mapLexwareInvoice, mapLexwareOrderConfirmation } fr
 import { mapStripe } from '@/domain/import/stripe';
 import { mergeBatch } from '@/domain/import/merge';
 import { deriveProposals, findContactFor, MONTH_END, proposalId } from '@/domain/import/proposals';
+import { readingProposalId } from '@/domain/import/invoice-reading';
+import { member, stateWith } from '../helpers';
+import { okResult, readInv, reading } from './reading-fixtures';
 import { normalizeName, normalizeNameStrict, nameMatches } from '@/domain/matching/payments';
 import type { AppState, Contact, Invoice } from '@/domain/types';
 import { lexContacts, lexInvoices, lexOrderConfirmation, stripeRaw } from '../../fixtures';
@@ -194,4 +197,32 @@ test('mehrere Mitgliedschafts-ABs eines Kontakts → ein Vorschlag aus der neues
 test('AB-Vorschlag mit Fälligkeitstag im Text: Start im Folgemonat wie bei der Gesamtrechnung', () => {
   const s = { ...abState, orderConfirmations: abState.orderConfirmations.map((x) => (x.number === 'AB-2001' ? { ...x, text: 'Mitgliedschaft 12 Monate, fällig jeweils zum 1. des Monats' } : x)) };
   expect(P(s, 'lexware_nexus:c-84')).toMatchObject({ dueDay: 1, startDate: '2026-08-01' });
+});
+
+const withLexContact = (s: AppState): AppState => ({ ...s, contacts: [...s.contacts.filter((c) => c.id !== 'm-x'),
+  { id: 'm-x', company: 'nexus', kind: 'member', name: 'Erika Beispiel', phones: [], emails: ['erika@example.de'], externalRefs: [{ connectionId: 'lexware_nexus', externalId: 'c-77' }] }] });
+
+test('Lesung mit outcome proposal → Vorschlag „Lexware (Claude)“ mit Zitat und Rechenweg', () => {
+  const i = readInv();
+  const s = withLexContact(stateWith({ invoices: [i], invoiceReadings: [reading({ outcome: 'proposal', result: okResult({ certain: false, note: 'Anzahl unklar' }) })] }));
+  const p = deriveProposals(s).find((x) => x.id === readingProposalId(i))!;
+  expect(p).toMatchObject({ sourceLabel: 'Lexware (Claude)', references: ['Rechnung RE-9001'], billing: 'legacy', name: 'Erika Beispiel', email: 'erika@example.de',
+    contactRefs: [{ connectionId: 'lexware_nexus', externalId: 'c-77' }], complete: true,
+    reading: { invoiceId: 'i-r1', invoiceNumber: 'RE-9001', kind: 'ticket', quote: 'zahlbar in 6 Monatsraten à 100,00 €', note: 'Anzahl unklar' } });
+  expect(p.steps).toContain('Claude ist unsicher: Anzahl unklar');
+});
+
+test('verworfen bleibt verworfen; none- und applied-Lesungen erzeugen keinen Vorschlag', () => {
+  const i = readInv();
+  const prop = reading({ outcome: 'proposal', result: okResult({ certain: false }) });
+  expect(deriveProposals(withLexContact(stateWith({ invoices: [i], invoiceReadings: [prop], dismissedProposals: [readingProposalId(i)] })))).toEqual([]);
+  expect(deriveProposals(withLexContact(stateWith({ invoices: [i], invoiceReadings: [reading({ outcome: 'none' })] })))).toEqual([]);
+  expect(deriveProposals(withLexContact(stateWith({ invoices: [i], invoiceReadings: [reading({ outcome: 'applied' })] })))).toEqual([]);
+  expect(deriveProposals(withLexContact(stateWith({ invoices: [{ ...i, sourceUpdatedAt: '2026-11-01T00:00:00Z' }], invoiceReadings: [prop] })))).toEqual([]);
+});
+
+test('Review 1: Mitgliedsrechnung, die schon im Textsuche-Vorschlag steht → nur der Textsuche-Vorschlag', () => {
+  const m = { ...member('i-m1'), externalId: 'lex-m1', sourceUpdatedAt: '2026-10-01T08:00:00Z' };
+  const s = withLexContact(stateWith({ invoices: [m], invoiceReadings: [reading({ invoiceId: 'i-m1', outcome: 'proposal', result: okResult({ kind: 'membership' }) })] }));
+  expect(deriveProposals(s).map((p) => p.sourceLabel)).toEqual(['Lexware']);
 });
