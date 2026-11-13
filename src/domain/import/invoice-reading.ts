@@ -4,9 +4,10 @@ import { coveringContract } from '../ledger/receivables';
 import { formatEuro } from '../money';
 import type { AppState, ContractKind, Invoice, InvoiceReadResult, InvoiceReading, MemberContract } from '../types';
 import { validDate, validateContractDraft } from './contract-draft';
-import { MONTH_END, proposalId, type ContractProposal, type ProposalValues } from './proposals';
+import { parseMembership } from './membership';
+import { MONTH_END, firstDueOnOrAfter, proposalId, type ContractProposal, type ProposalValues } from './proposals';
 
-export const READ_LIMITS = { maxPerRun: 5, budgetMs: 15_000, minInstallments: 2, maxInstallments: 36, daysBefore: 60, daysAfter: 365, maxAttempts: 3 } as const;
+export const READ_LIMITS = { maxPerRun: 5, budgetMs: 15_000, minInstallments: 2, maxInstallments: 36, daysBefore: 60, daysAfter: 365, maxAttempts: 3, minCallMs: 10_000, backoffAfterFailures: 3 } as const;
 /** Quelle: claude-api-Skill, Modelltabelle Stand 2026-11-03 (Claude Opus 5.5: 4 $ / 20 $ je 1 Mio. Token). 1 $ wird als 1 € gezählt (vorsichtig). */
 export const READ_PRICE = { model: 'claude-opus-5-5', inputMicroCentsPerToken: 400, outputMicroCentsPerToken: 2000, currency: 'USD' } as const;
 /** 100 € je Kalendermonat Europe/Berlin (1 Cent = 1 000 000 Mikrocent). */
@@ -41,13 +42,18 @@ export const readingProposalId = (inv: Pick<Invoice, 'externalId'>): string => p
 export const readingsOf = (s: AppState, invoiceId: string): InvoiceReading[] =>
   (s.invoiceReadings ?? []).filter((r) => r.invoiceId === invoiceId).sort((a, b) => a.readAt.localeCompare(b.readAt));
 
+/** Mitgliedsrechnung, deren Textsuche-Vorschlag der Inhaber verworfen hat: Claude liest sie nicht (Final-Review I3). */
+export const textSearchDismissed = (s: AppState, inv: Invoice): boolean =>
+  !!inv.contactExternalId && parseMembership(inv.text ?? '') !== null
+  && s.dismissedProposals.includes(proposalId([{ connectionId: 'lexware_nexus', externalId: inv.contactExternalId }]));
+
 /** Offene NEXUS-Rechnungen, die (für diese Fassung) noch nicht gelesen sind; älteste zuerst. */
 export function invoicesToRead(s: AppState, max: number = READ_LIMITS.maxPerRun): Invoice[] {
   const dismissed = new Set(s.dismissedProposals);
   return s.invoices
     .filter((i) => i.connectionId === 'lexware_nexus' && i.status !== 'paid' && i.status !== 'void' && i.openCents > 0 && !!i.text)
     .filter((i) => coveringContract(s, i) === null)
-    .filter((i) => !dismissed.has(readingProposalId(i)))
+    .filter((i) => !dismissed.has(readingProposalId(i)) && !textSearchDismissed(s, i))
     .filter((i) => !readingsOf(s, i.id).some((r) => r.sourceUpdatedAt === (i.sourceUpdatedAt ?? '') && r.outcome !== 'error'))
     .sort((a, b) => a.issuedOn.localeCompare(b.issuedOn) || a.number.localeCompare(b.number))
     .slice(0, max);
@@ -66,7 +72,9 @@ export function planFromReading(s: AppState, inv: Invoice, r: InvoiceReadResult)
   const first: IsoDate | null = validDate(r.firstDueDate) ? r.firstDueDate : null;
   // 9a: Tag laut Text, sonst Tag der ersten Fälligkeit, sonst Monatsende (nur wenn Raten bekannt sind).
   const dueDay = dayOk(r.dueDay) ?? (first ? Number(first.slice(8, 10)) : n !== null && rate !== null ? MONTH_END : null);
-  const startDate = first ?? inv.issuedOn;
+  // 9a/I6: ohne erste Fälligkeit, aber mit Tag wie fromSingleDocument (nie vor dem Rechnungsdatum).
+  const readDay = dayOk(r.dueDay);
+  const startDate = first ?? (readDay !== null ? firstDueOnOrAfter(inv.issuedOn, readDay) : inv.issuedOn);
   const values: ProposalValues = { totalCents: inv.totalCents, installments: n, installmentCents: rate, dueDay, startDate };
 
   const steps: string[] = [`Rechnung ${inv.number} über ${formatEuro(inv.totalCents)}.`];
@@ -75,6 +83,9 @@ export function planFromReading(s: AppState, inv: Invoice, r: InvoiceReadResult)
   if (!r.hasPlan) return { decision: 'none', kind, values, steps, hints };
 
   if (n === null || rate === null || values.dueDay === null) hints.push(READ_HINT.incomplete);
+  // I1: ein gelieferter, aber ungültiger Wert wird nie still ersetzt.
+  if ((r.installments !== null && n === null) || (r.installmentCents !== null && rate === null)) hints.push(READ_HINT.incomplete);
+  if ((r.dueDay !== null && readDay === null) || (r.firstDueDate !== null && first === null)) hints.push(READ_HINT.schema);
   if (!r.certain) hints.push(r.note ? `${READ_HINT.notCertain}: ${r.note}` : READ_HINT.notCertain);
   if (n !== null && rate !== null) {
     const last = inv.totalCents - rate * (n - 1);

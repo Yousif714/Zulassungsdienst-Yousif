@@ -75,7 +75,8 @@ export async function syncConnections(repos: Repos, deps: SyncDeps): Promise<Par
       await dispatchEvents(repos, [{ type: 'importBatch', connectionId: id, batch: r.batch, cursor: r.cursor, complete: r.complete, ...(r.warning ? { warning: sanitizeError(new ConnectorError(r.warning), secrets) } : {}) }], { at: deps.at, provider: deps.provider });
       out[id] = r.complete ? 'ok' : 'partial';
       if (id === 'lexware_nexus' && deps.reader) {
-        out.claude_invoices = await readInvoices(repos, { at: deps.at, now: deps.now, deadline, reader: deps.reader, provider: deps.provider });
+        // Eigener Fehlerbereich: ein Problem beim Lesen ist kein Lexware-Fehler (Final-Review I4).
+        out.claude_invoices = await readInvoices(repos, { at: deps.at, now: deps.now, deadline, reader: deps.reader, provider: deps.provider }).catch(() => 'error' as const);
       }
     } catch (err) {
       out[id] = 'error';

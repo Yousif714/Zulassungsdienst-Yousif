@@ -12,7 +12,7 @@ import { normalizePhone, validPhone } from '@/domain/matching/messages';
 import { bankReturnAllocations, classifyBankTx, matchBankPayment, normalizeIban, type MatchContext } from '@/domain/matching/payments';
 import { stripeAllocations } from '@/domain/matching/stripe';
 import { validateContractDraft, type ContractDraft } from '@/domain/import/contract-draft';
-import { READ_LIMITS, limitReached, planFromReading, readingProposalId } from '@/domain/import/invoice-reading';
+import { READ_LIMITS, limitReached, planFromReading, readingProposalId, textSearchDismissed } from '@/domain/import/invoice-reading';
 import { invoiceRef, membershipContractOf, retargetAllocations } from '@/domain/ledger/contracts';
 import { mergeBatch } from '@/domain/import/merge';
 import { mergePortalList, normalizePortalEntries } from '@/domain/import/portal-list';
@@ -543,7 +543,7 @@ function applyReadings(s0: AppState, readings: NewInvoiceReading[], warning: str
     if (nr.error) {
       const fails = (s.invoiceReadings ?? []).filter((x) => x.invoiceId === nr.invoiceId && x.sourceUpdatedAt === nr.sourceUpdatedAt && x.outcome === 'error').length + 1;
       r = fails >= READ_LIMITS.maxAttempts ? { ...nr, outcome: 'none', error: `Nach ${READ_LIMITS.maxAttempts} Versuchen aufgegeben: ${nr.error}` } : { ...nr, outcome: 'error' };
-    } else if (!inv || !nr.result || coveringContract(s, inv) !== null || s.dismissedProposals.includes(readingProposalId(inv))) {
+    } else if (!inv || !nr.result || coveringContract(s, inv) !== null || s.dismissedProposals.includes(readingProposalId(inv)) || textSearchDismissed(s, inv)) {
       r = { ...nr, outcome: 'none' };
     } else {
       const plan = planFromReading(s, inv, nr.result);
@@ -565,8 +565,9 @@ function applyReadings(s0: AppState, readings: NewInvoiceReading[], warning: str
   const at = ctx.at.toISOString();
   const connections = s.connections.map((c) => {
     if (c.id !== 'claude_invoices') return c;
-    if (error) return { ...c, status: 'error' as const, lastError: error };
-    const next: Connection = { ...c, status: 'connected', lastSuccessAt: at };
+    const failures = c.sync?.failures ?? 0;
+    if (error) return { ...c, status: 'error' as const, lastError: error, sync: { cursor: null, complete: false, failures: failures + 1 } };
+    const next: Connection = { ...c, status: 'connected', lastSuccessAt: at, sync: { cursor: null, complete: true, failures: 0 } };
     delete next.lastError;
     const note = warning ?? (limitReached(s, ctx.at) ? 'Monatslimit erreicht' : undefined);
     if (note) next.lastError = note;

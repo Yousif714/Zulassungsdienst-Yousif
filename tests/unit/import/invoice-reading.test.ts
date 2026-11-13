@@ -136,3 +136,18 @@ describe('Claude-Vertrag: Rechenweg und Korrektur-Vorschlag', () => {
       sourceLabel: 'Lexware (Claude)', references: ['Rechnung RE-9001'], complete: true, reading: { invoiceId: 'i-r1', kind: 'ticket' } });
   });
 });
+
+describe('Final-Review I1/I6', () => {
+  const s0 = stateWith({ invoices: [readInv()] });
+  test('I1: einzelner ungültiger Wert von Claude → nur Vorschlag mit Hinweis', () => {
+    for (const bad of [{ dueDay: 40 }, { firstDueDate: '2026-02-30' }, { firstDueDate: 'bald', dueDay: 15 }, { installments: 6.5 }, { installmentCents: 99.5 }]) {
+      const p = planFromReading(s0, readInv(), okResult(bad));
+      expect(p.decision, JSON.stringify(bad)).toBe('proposal');
+    }
+  });
+  test('I6: Tag gelesen, keine erste Fälligkeit, Tag vor dem Rechnungstag → Start im Folgemonat', () => {
+    const i = readInv({ issuedOn: '2026-10-20' });
+    expect(planFromReading(s0, i, okResult({ firstDueDate: null, dueDay: 1 })).values).toMatchObject({ dueDay: 1, startDate: '2026-11-01' });
+    expect(planFromReading(s0, i, okResult({ firstDueDate: null, dueDay: 25 })).values).toMatchObject({ dueDay: 25, startDate: '2026-10-25' });
+  });
+});

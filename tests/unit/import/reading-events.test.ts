@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { applyEvent, type EngineContext } from '@/data/engine';
 import { memberView } from '@/domain/detectors';
 import type { NewInvoiceReading } from '@/domain/events';
-import { readingProposalId } from '@/domain/import/invoice-reading';
+import { invoicesToRead, readingProposalId } from '@/domain/import/invoice-reading';
 import { deriveProposals } from '@/domain/import/proposals';
 import { invoiceOpenCents } from '@/domain/ledger/receivables';
 import type { AppState } from '@/domain/types';
@@ -100,4 +100,22 @@ test('Passt und Korrigieren setzen confirmed; Korrigieren übernimmt Werte; ung�
 test('error im Ereignis → Verbindung Störung mit Text', () => {
   const { state } = applyEvent(s0(), { type: 'invoicesRead', readings: [], error: 'Schlüssel ungültig' }, ctx());
   expect(claude(state)).toMatchObject({ status: 'error', lastError: 'Schlüssel ungültig' });
+});
+
+test('Final-Review I2: Mitgliedsrechnung als „other“ gelesen → Textsuche-Vorschlag verschwindet', () => {
+  const m = readInv({ text: 'NEXUS Mitgliedschaft 12 Monate, zahlbar in 6 Monatsraten à 100,00 €' });
+  const s = withLexContact(stateWith({ invoices: [m] }));
+  expect(deriveProposals(s).map((p) => p.sourceLabel)).toEqual(['Lexware']);
+  const a = applyEvent(s, { type: 'invoicesRead', readings: [lesung({ result: okResult({ kind: 'other' }) })] }, ctx());
+  expect(a.state.contracts).toHaveLength(1);
+  expect(deriveProposals(a.state)).toEqual([]);
+});
+
+test('Final-Review I3: verworfener Textsuche-Vorschlag → Claude legt keinen Vertrag an und liest nicht', () => {
+  const m = readInv({ text: 'NEXUS Mitgliedschaft 12 Monate, zahlbar in 6 Monatsraten à 100,00 €' });
+  const s = withLexContact(stateWith({ invoices: [m], dismissedProposals: ['lexware_nexus:c-77'] }));
+  expect(invoicesToRead(s)).toEqual([]);
+  const a = applyEvent(s, { type: 'invoicesRead', readings: [lesung({ result: okResult({ kind: 'membership' }) })] }, ctx());
+  expect(a.state.contracts).toHaveLength(0);
+  expect(a.state.invoiceReadings.at(-1)?.outcome).toBe('none');
 });

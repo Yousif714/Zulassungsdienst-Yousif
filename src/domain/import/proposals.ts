@@ -3,6 +3,7 @@ import { monthDate } from '../ledger/schedule';
 import { nameMatches, normalizeNameStrict } from '../matching/payments';
 import { formatEuro } from '../money';
 import type { AppState, Contact, ContractKind, ExternalRef, Invoice, OrderConfirmation, Subscription } from '../types';
+import { invoiceRef } from '../ledger/contracts';
 import { readingProposals } from './invoice-reading';
 import { isMembership, parseMembership } from './membership';
 
@@ -89,17 +90,19 @@ function fromInvoices(contactExternalId: string, invs: Invoice[], contact: Conta
   };
 }
 
+/** Erste Fälligkeit am Tag `dueDay` ab dem Belegdatum: im selben Monat, sonst im Folgemonat. */
+export function firstDueOnOrAfter(issuedOn: IsoDate, dueDay: number): IsoDate {
+  const [y, m, d] = issuedOn.split('-').map(Number);
+  return monthDate(y, m - 1 + (dueDay >= d ? 0 : 1), dueDay);
+}
+
 /** Ein Beleg über die ganze Laufzeit (Gesamtrechnung oder AB): Gesamt ÷ Monate; ohne Tag im Text zum Monatsende. */
 function fromSingleDocument(doc: { number: string; totalCents: number; issuedOn: IsoDate; text?: string }, kind: string, textLabel: string, dateLabel: string): { values: ProposalValues; steps: string[] } {
   const parsedDoc = parseMembership(doc.text ?? '')!;
   const { months } = parsedDoc;
   // Ohne Tag im Text: fällig zum Monatsende (31 = letzter Tag des Monats). Inhaber: „Hauptsache im Monat gezahlt“.
   const dueDay = parsedDoc.dueDay ?? MONTH_END;
-  let startDate: IsoDate = doc.issuedOn;
-  if (parsedDoc.dueDay !== null) {
-    const [y, m, d] = doc.issuedOn.split('-').map(Number);
-    startDate = monthDate(y, m - 1 + (dueDay >= d ? 0 : 1), dueDay);
-  }
+  const startDate: IsoDate = parsedDoc.dueDay !== null ? firstDueOnOrAfter(doc.issuedOn, dueDay) : doc.issuedOn;
   const values = {
     totalCents: doc.totalCents, installments: months, installmentCents: months ? Math.floor(doc.totalCents / months) : null,
     dueDay, startDate,
@@ -138,6 +141,7 @@ export function deriveProposals(s: AppState): ContractProposal[] {
     if (i.connectionId !== 'lexware_nexus' || i.status === 'void' || !i.contactExternalId) continue;
     if (!parseMembership(i.text ?? '')) continue;
     if (consumed.has(refKey({ connectionId: 'lexware_nexus', externalId: i.contactExternalId }))) continue;
+    if (consumed.has(refKey(invoiceRef(i)))) continue; // schon Ratenvertrag aus Claude-Lesung (Final-Review I2)
     byContact.set(i.contactExternalId, [...(byContact.get(i.contactExternalId) ?? []), i]);
   }
   const lexContact = (id: string) => s.contacts.find((c) => (c.externalRefs ?? []).some((r) => r.connectionId === 'lexware_nexus' && r.externalId === id));

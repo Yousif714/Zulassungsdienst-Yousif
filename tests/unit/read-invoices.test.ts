@@ -53,10 +53,33 @@ test('liest höchstens 5 Rechnungen pro Lauf, Rest im nächsten', async () => {
 test('Zeitbudget 15 s: ab Fristablauf kein weiterer Aufruf, timeoutMs = Restzeit', async () => {
   await seed({ invoices: invs(3) });
   const clock = { t: 0 };
-  const r = fakeReader({ delayMs: 8000 }, clock);
+  const r = fakeReader({ delayMs: 4000 }, clock);
   expect(await run(r, clock)).toBe('partial');
   expect(r.calls).toHaveLength(2);
-  expect(r.timeouts).toEqual([15_000, 7000]);
+  expect(r.timeouts).toEqual([15_000, 11_000]);
+});
+
+test('Final-Review I5: unter 10 s Restzeit kein Aufruf, kein Fehlversuch', async () => {
+  await seed({ invoices: invs(1) });
+  const r = fakeReader();
+  const out = await readInvoices(repos, { at: () => NOW, now: () => 0, deadline: 9_000, reader: r, provider: new DemoProvider() });
+  expect(out).toBe('partial');
+  expect(r.calls).toEqual([]);
+  expect((await load()).invoiceReadings).toEqual([]);
+});
+
+test('Final-Review I4: Speichern scheitert → Fehler an Claude, nicht geworfen; nach 3 Fehlern nur noch zur vollen Stunde', async () => {
+  await seed({ invoices: invs(1) });
+  const save = repos.state.save.bind(repos.state);
+  repos.state.save = async (c, rev) => { if ((c as Record<string, { upsert: unknown[] }>).invoice_readings?.upsert.length) throw new Error('relation invoice_readings does not exist'); return save(c, rev); };
+  for (let k = 0; k < 3; k++) expect(await run(fakeReader())).toBe('error');
+  expect((await load()).connections.find((c) => c.id === 'claude_invoices')).toMatchObject({ status: 'error', lastError: 'Lesungen konnten nicht gespeichert werden', sync: { failures: 3 } });
+  const later = fakeReader();
+  expect(await readInvoices(repos, { at: () => new Date('2026-11-12T10:30:00Z'), now: () => 0, deadline: 40_000, reader: later, provider: new DemoProvider() })).toBe('skipped');
+  expect(later.calls).toEqual([]);
+  const hourly = fakeReader();
+  await readInvoices(repos, { at: () => new Date('2026-11-12T11:02:00Z'), now: () => 0, deadline: 40_000, reader: hourly, provider: new DemoProvider() });
+  expect(hourly.calls).toEqual(['RE-900']);
 });
 
 test('Review 4: Limit mitten im Lauf → kein weiterer Aufruf, Hinweis', async () => {

@@ -1,5 +1,5 @@
 import type { AIProvider, AITools } from './ai-port';
-import { membershipContractOf } from './ledger/contracts';
+import { contractsOfContact, membershipContractOf } from './ledger/contracts';
 import { newId } from './ids';
 import { reminderAction, reminderActionId } from './action-factory';
 import { REJECT_REASON_DE, approve } from './actions/machine';
@@ -8,19 +8,23 @@ import { memberView } from './detectors';
 import type { InboundChannel, StoreEvent } from './events';
 import { normalizePhone, validPhone } from './matching/messages';
 import { paymentLinkFor } from './payment-link';
-import type { Action, AppState, AssistantMessage, Contact, MemberContract } from './types';
+import type { Action, AppState, AssistantMessage, Contact, IsoDate, MemberContract } from './types';
 
 type Button = NonNullable<AssistantMessage['buttons']>[number];
 type LinkRef = NonNullable<AssistantMessage['links']>[number];
 
 const words = (t: string) => t.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
-/** Mitglied, dessen Vor- oder Nachname als ganzes Wort im Text steht. */
-function findMember(s: AppState, text: string): { contract: MemberContract; contact: Contact } | null {
+/** Mitglied, dessen Vor- oder Nachname als ganzes Wort im Text steht; bei mehreren Verträgen der mit dem höchsten Rückstand (9a). */
+function findMember(s: AppState, text: string, today: IsoDate): { contract: MemberContract; contact: Contact } | null {
   const w = new Set(words(text));
-  for (const contract of s.contracts) {
-    const contact = s.contacts.find((c) => c.id === contract.contactId && c.kind === 'member');
-    if (contact && words(contact.name).some((n) => w.has(n))) return { contract, contact };
+  for (const first of s.contracts) {
+    const contact = s.contacts.find((c) => c.id === first.contactId && c.kind === 'member');
+    if (!contact || !words(contact.name).some((n) => w.has(n))) continue;
+    const all = contractsOfContact(s, contact.id);
+    const arrears = (c: MemberContract) => memberView(s, c.id, today).status.arrearsCents;
+    const contract = all.reduce((best, c) => (arrears(c) > arrears(best) ? c : best), membershipContractOf(s, contact.id) ?? first);
+    return { contract, contact };
   }
   return null;
 }
@@ -60,7 +64,7 @@ export async function handleInbound(
     if (owner === null || normalizePhone(from) !== owner) return { events: [inbound], reply: null };
   }
 
-  const member = isReminderCommand(text) ? findMember(s, text) : null;
+  const member = isReminderCommand(text) ? findMember(s, text, todayBerlin(now)) : null;
   if (member) {
     const { contract, contact } = member;
     const status = memberView(s, contract.id, todayBerlin(now)).status;
