@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { paymentLinkFor, takeoverLinkFor } from '@/domain/payment-link';
 import { ensureTakeoverDrafts } from '@/domain/takeover/drafts';
+import { syncTakeoverDraft } from '@/domain/takeover/prepare';
 import type { Action, AppState, Installment, MemberContract, Payment, StripeTakeover } from '@/domain/types';
 import { base, stateWith } from '../helpers';
 
@@ -155,5 +156,38 @@ describe('Umstellungs-Entwurf aktuell halten', () => {
     const s = start({ payments: [bank({ amountCents: 120000 })], allocations: [paidAlloc(120000)] });
     const st = ensureTakeoverDrafts(s, new Date('2026-11-20T09:00:00Z'), false);
     expect(st.actions.find((x) => x.id === 'stripe-takeover-c1-1')!.status).toBe('cancelled');
+  });
+});
+
+describe('Rückstands-Erinnerung (gespeicherter Entwurf)', () => {
+  const overdue = (p: Partial<Action> = {}): Action => ({
+    id: 'reminder-c1-2026-11-01', type: 'send_reminder', company: 'nexus', title: 'Erinnerung an Lena Kaya', version: 1, status: 'draft', createdAt: '2026-11-20T08:00:00Z', isDemo: false,
+    payload: { threadId: 't-m-lena', channel: 'whatsapp', contactId: 'm-lena', text: 'Hallo Lena' }, insightKey: 'overdue:c1', ...p,
+  });
+  const viaStripe = (actions: Action[]) => world({ actions, contracts: [{ ...legacy, billing: 'stripe' as const }], takeovers: [takeover({ status: 'set_up', setUpAt: '2026-11-29T08:00:00Z', scheduleId: 'sub_sched_test_1', paymentMethodId: 'pm_test_1' })] });
+  const T2 = new Date('2026-11-29T09:00:00Z');
+  test('eingerichtet: offener Rückstands-Entwurf wird abgebrochen', () => {
+    const st = ensureTakeoverDrafts(viaStripe([overdue()]), T2, false);
+    expect(st.actions.find((a) => a.id === 'reminder-c1-2026-11-01')!.status).toBe('cancelled');
+  });
+  test('nicht gesperrt: Rückstands-Entwurf bleibt offen', () => {
+    const st = ensureTakeoverDrafts(world({ actions: [overdue()] }), T2, false);
+    expect(st.actions.find((a) => a.id === 'reminder-c1-2026-11-01')!.status).toBe('draft');
+  });
+  test('bereits gesendet: unverändert', () => {
+    const st = ensureTakeoverDrafts(viaStripe([overdue({ status: 'executed' })]), T2, false);
+    expect(st.actions.find((a) => a.id === 'reminder-c1-2026-11-01')!.status).toBe('executed');
+  });
+});
+
+describe('veraltete fehlgeschlagene Umstellung bei Sperrgrund', () => {
+  test('„Nichts mehr offen“: failed-Aktion wird trotzdem aufgegeben, Sperrgrund bleibt', () => {
+    const failed = draft({ status: 'failed' });
+    const s = world({
+      actions: [failed], payments: [bank({ amountCents: 120000 })], allocations: [paidAlloc(120000)],
+    });
+    const r = syncTakeoverDraft(s, 'c1', 'first_rate', T1, false);
+    expect(r.outcome).toBe('blocked');
+    expect(r.state.actions.find((a) => a.id === failed.id)!.status).toBe('cancelled');
   });
 });

@@ -5,12 +5,13 @@ import { unusedLinks, upcomingRates } from '../detectors/takeover';
 import { takeoverLinkFor } from '../payment-link';
 import type { Action, AppState, IsoDate, MemberContract } from '../types';
 import { cancelTakeoverDraft, syncTakeoverDraft } from './prepare';
-import { runsViaStripe } from './status';
+import { reminderBlockedReason, runsViaStripe } from './status';
 import { linkNudgeText, upcomingReminderText } from './texts';
 
 export { linkNudgeAction, linkNudgeId, upcomingReminderAction, upcomingReminderId };
 
 const UPCOMING_PREFIX = 'upcoming-';
+const REMINDER_PREFIX = 'reminder-';
 const NUDGE_PREFIX = linkNudgeId('');
 
 /** Fälligkeitstag aus dem Schlüssel `upcoming:<contractId>:<dueDate>`. */
@@ -46,6 +47,11 @@ export function ensureTakeoverDrafts(s: AppState, at: Date, isDemo: boolean): Ap
       if (a.id.startsWith(NUDGE_PREFIX) && a.status === 'draft') {
         const t = st.takeovers.find((x) => linkNudgeId(x.id) === a.id);
         return t && t.status !== 'link_sent' ? cancelDraft(a) : a;
+      }
+      // Rückstands-Erinnerung (Hinweis overdue:<Vertrag>): gesperrt, sobald die Raten über Stripe laufen (sonst Doppelzahlung).
+      if (a.id.startsWith(REMINDER_PREFIX) && a.status === 'draft') {
+        const cid = /^overdue:(.+)$/.exec(a.insightKey ?? '')?.[1];
+        return cid && reminderBlockedReason(st, cid) ? cancelDraft(a) : a;
       }
       if (!a.id.startsWith(UPCOMING_PREFIX) || a.status !== 'draft') return a;
       const due = dueDateOf(a);

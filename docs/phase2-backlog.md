@@ -190,6 +190,8 @@ Erledigt im Final-Fix (14.11.): I1–I3, M1–M10 (Erinnerung trotz Stripe, Neu-
 - Umstellung bleibt dauerhaft „eingerichtet“, wenn das Abo beim ersten Abgleich schon gekündigt ist oder der Zeitplan vor dem Start storniert wurde: Hinweis „eingerichtet, aber kein Abo X Tage nach erstem Planstart“ (heute fängt nur `member_overdue` das auf).
 - Umstellung ohne `stripeCustomerId` (Altbestand/Fehler) wird nie verknüpft; Sperrgrund „Stripe-Lesezugang nicht verbunden“, wenn der Schreib-Schlüssel da ist, `stripe_nexus` aber nicht verbunden.
 - Preis-Hinweis bei Plan-Abos zeigt „bestätigt: unbekannt“; stattdessen die Plan-Preise nennen.
+- Ausführer-Planprüfung hängt am Kalendertag (`planTakeover(…, today)`): eine über Mitternacht liegengebliebene Freigabe verlangt „Neu vorbereiten“ (sicher, ein Klick mehr).
+- Import-Zyklus `detectors/members` ↔ `takeover/status` ↔ `takeover/link`: heute unkritisch (nur Laufzeit-Nutzung); bei künftigen Top-Level-Konstanten aus diesen Modulen bricht er.
 - `double_payment` prüft ab `setUpAt`: Überweisung, die vor der Einrichtung gebucht, aber erst danach importiert wurde, bleibt ohne Hinweis (nur Guthaben im Ledger); ab Link-Versand prüfen.
 - `checkCompletion` vergleicht nur die Summe: gleiche Summe bei anderer Verteilung (Zahlung plus Vertragsänderung) wird mit alten Fälligkeiten eingerichtet.
 - Provider-Pfad: Phasen mit `o.now()`, `confirmedEndDate` mit `setUpAt` → um Mitternacht ein Tag Versatz möglich; Planende besser an der Umstellung speichern.

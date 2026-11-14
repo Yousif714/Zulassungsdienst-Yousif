@@ -38,15 +38,16 @@ export function takeoverActionCurrent(s: AppState, a: Action, at: Date): boolean
 export function syncTakeoverDraft(s: AppState, contractId: string, mode: MemberContract['catchUpMode'], at: Date, isDemo: boolean): DraftSync {
   if (!s.contracts.some((c) => c.id === contractId)) return { outcome: 'blocked', state: s, reason: 'Vertrag nicht gefunden.' };
   const today = todayBerlin(at);
-  const reason = takeoverBlockReason(s, contractId, today);
-  if (reason) return { outcome: 'blocked', state: s, reason };
   let open = openTakeoverAction(s, contractId);
-  // Fehlgeschlagen mit veraltetem Plan: aufgeben, frischer Versuch aus dem aktuellen Stand („Erneut versuchen“ ginge nie mehr).
+  // Fehlgeschlagen mit veraltetem Plan: aufgeben (auch bei Sperrgrund, sonst bleibt die Karte dauerhaft „Fehlgeschlagen“);
+  // frischer Versuch aus dem aktuellen Stand („Erneut versuchen“ ginge nie mehr).
   if (open?.status === 'failed' && !takeoverActionCurrent(s, open, at)) {
     const gone = abandonFailed(open);
     s = { ...s, actions: s.actions.map((a) => (a.id === gone.id ? gone : a)) };
     open = undefined;
   }
+  const reason = takeoverBlockReason(s, contractId, today);
+  if (reason) return { outcome: 'blocked', state: s, reason };
   if (open && open.status !== 'draft') return { outcome: 'running', state: s, action: open };
   const v = memberView(s, contractId, today);
   if (!v.contact) return { outcome: 'blocked', state: s, reason: 'Kontakt fehlt.' };

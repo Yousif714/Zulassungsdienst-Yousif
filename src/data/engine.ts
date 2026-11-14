@@ -368,7 +368,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     }
     case 'prepareTakeover': {
       const r = syncTakeoverDraft(s, e.contractId, e.mode, at, ctx.isDemo);
-      if (r.outcome === 'blocked') return owner({ state: s, text: `Umstellung nicht vorbereitet: ${r.reason}` });
+      if (r.outcome === 'blocked') return owner({ state: r.state, text: `Umstellung nicht vorbereitet: ${r.reason}` });
       const name = contactName(s, s.contracts.find((c) => c.id === e.contractId)?.contactId);
       if (r.outcome === 'running') return owner({ state: s, text: `Umstellung läuft bereits: ${name}` }, r.action.id);
       if (r.outcome === 'unchanged') return { state: s };
