@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { reconcileInsights, runDetectors, selectTop } from '@/domain/detectors';
 import { buildMatchContext } from '@/domain/detectors/payments';
-import { detectInvoiceOverdue } from '@/domain/detectors/invoices';
+import { detectInvoiceOverdue, detectStripePaidLexwareOpen } from '@/domain/detectors/invoices';
 import { detectMemberOverdue, memberView } from '@/domain/detectors/members';
 import type { Connection, OrderConfirmation, PortalMember } from '@/domain/types';
 import { detectPortalAbNoInvoice, detectPortalNoInvoice } from '@/domain/detectors/portal';
 import { detectStaleSources } from '@/domain/detectors/sources';
-import type { StoredInsight } from '@/domain/types';
+import type { StoredInsight, StripeTakeover } from '@/domain/types';
 import { NOW_0930, base, conn, find, inv, ins, member, muellerDone, schmidtIn, stateWith, tx, types, workshop } from './helpers';
 
 const run = (p: Parameters<typeof stateWith>[0]) => runDetectors(stateWith(p), NOW_0930);
@@ -107,6 +107,24 @@ describe('Detektoren', () => {
     const one = detectInvoiceOverdue({ ...st, invoices: [covered, workshop] }, NOW_0930).filter((i) => i.company === 'nexus');
     expect(one).toHaveLength(1);
     expect(one[0].title).toBe('1 Rechnung überfällig, zusammen 149,00 €');
+  });
+  test('Lexware-Gesamtrechnung schweigt, wenn der Vertrag über Stripe läuft', () => {
+    const covered = { ...member('RE-1043'), contactExternalId: 'c-77', dueDate: '2026-10-01', status: 'overdue' as const };
+    const takeover: StripeTakeover = {
+      id: 'stripe-takeover-k77-1', contractId: 'k77', contactId: 'm-kaya', actionId: 'stripe-takeover-k77-1', actionVersion: 1, status: 'set_up',
+      token: 'tok', link: 'x/zahlung/tok', mode: 'first_rate', rates: [{ no: 1, dueDate: '2026-12-01', amountCents: 30000 }], openCents: 30000,
+      stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1', scheduleId: 'sub_sched_test_1', subscriptionExternalId: null, isDemo: false,
+      linkSentAt: '2026-11-05T08:00:00Z', setUpAt: '2026-11-10T08:00:00Z',
+    };
+    const k77 = { ...base, id: 'k77', contactId: 'm-kaya', origin: [{ connectionId: 'lexware_nexus' as const, externalId: 'c-77' }] };
+    const pay = tx({ id: 'p-st', source: 'stripe', connectionId: 'stripe_nexus', externalId: 'py_test_1', reference: 'RE-1043' });
+    const viaStripe = stateWith({ contracts: [{ ...k77, billing: 'stripe' }], takeovers: [takeover], invoices: [covered], payments: [pay] });
+    const k = run({ contracts: [{ ...k77, billing: 'stripe' }], takeovers: [takeover], invoices: [covered], payments: [pay] }).map((i) => i.dedupeKey);
+    expect(k).not.toContain(`stripe-lex:${covered.id}`);
+    expect(k).not.toContain('inv-over:nexus');
+    expect(detectStripePaidLexwareOpen(viaStripe)).toEqual([]);
+    // Gegenprobe: ohne Umstellung meldet sich die Stripe-Zahlung auf die offene Lexware-Rechnung wie bisher.
+    expect(detectStripePaidLexwareOpen({ ...viaStripe, contracts: [k77], takeovers: [] }).map((i) => i.dedupeKey)).toEqual([`stripe-lex:${covered.id}`]);
   });
   test('call_slides_missing: heute now, morgen today', () => {
     const call = (id: string, startsAt: string) => ({ id, series: 's', startsAt, topic: 'T', slideCount: 5, slidesStatus: 'todo' as const, slides: [] });
