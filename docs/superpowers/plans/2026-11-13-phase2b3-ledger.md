@@ -67,7 +67,7 @@ Task 8: review → Needs fixes (Important: Rückbuchung nach Einrichtung (negati
 Task 8: minor (deferred): Abgleich-Prädikat doppelt (takeover.ts:124-126 vs link.ts:23-30); Text „bestätigt: unbekannt“ bei Plan-Abos; Tests fehlen: aufgeteilte Zahlung, Erinnerungen nach aborted; Demo-Briefing 6× rate_upcoming → Bündelung in Task 9 entscheiden.
 Task 8: fix round 1/5 (1 addressed, 0 open; commits 6f44ecc..07a3d15)
 Task 8: complete (commits 5169104..07a3d15, review clean after fix)
-NÄCHSTER SCHRITT: Task 9 (Brief per task-brief-Skript aus dem Plan erzeugen; Carry: Demo-Briefing-Bündelung der rate_upcoming-Hinweise entscheiden; B3 paymentLinkFor nur bei link_sent; B7 syncTakeoverDraft aus Task 6 wiederverwenden).
+(erledigt, Session 14.11.) Task 9 (Brief per task-brief-Skript aus dem Plan erzeugen; Carry: Demo-Briefing-Bündelung der rate_upcoming-Hinweise entscheiden; B3 paymentLinkFor nur bei link_sent; B7 syncTakeoverDraft aus Task 6 wiederverwenden).
 
 Task 9: dispatched (BASE 07a3d15, sonnet; B3,B7,B11; Bündelung → Backlog) [Session 3, 14.11.]
 Task 9: implementer DONE_WITH_CONCERNS 517384b (refresh legt im Demo Erinnerungsentwürfe an → Testbasen executor/store/assistant/api-events angepasst; E2E nicht gelaufen). Hinweis: tsc-Fehler LayoutProps = fehlende .next/types im frischen Container → `npx next typegen` vorher. Review dispatched (sonnet).
