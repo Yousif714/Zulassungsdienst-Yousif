@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { DemoProvider } from '@/domain/actions/demo-provider';
-import { approve, editDraft, finishExecution, idempotencyKey, reconcileUncertain, retry, startExecution } from '@/domain/actions/machine';
+import { approve, cancelDraft, editDraft, finishExecution, idempotencyKey, reconcileUncertain, retry, startExecution } from '@/domain/actions/machine';
 import type { Action } from '@/domain/types';
 import { NOW_0930 as NOW } from './helpers';
 
@@ -86,5 +86,18 @@ describe('Aktionen-Zustandsmaschine', () => {
     test.each(without('executing'))('finishExecution aus %s wirft', (st) => expect(() => finishExecution({ ...draft(), status: st }, 'ok', NOW)).toThrow('Ungültiger Übergang'));
     test.each(without('failed'))('retry aus %s wirft', (st) => expect(() => retry({ ...draft(), status: st })).toThrow('Ungültiger Übergang'));
     test.each(without('uncertain'))('reconcileUncertain aus %s wirft', (st) => expect(() => reconcileUncertain({ ...draft(), status: st }, true, NOW)).toThrow('Ungültiger Übergang'));
+  });
+});
+
+describe('cancelDraft', () => {
+  const draft: Action = {
+    id: 'a-1', type: 'send_whatsapp', company: 'zulassung', title: 'x', payload: {}, version: 1,
+    status: 'draft', createdAt: NOW.toISOString(), isDemo: true,
+  };
+  test('cancelDraft nur aus draft', () => {
+    expect(cancelDraft(draft).status).toBe('cancelled');
+    for (const st of ['approved', 'executing', 'executed', 'failed', 'uncertain', 'cancelled'] as const) {
+      expect(() => cancelDraft({ ...draft, status: st })).toThrow('Ungültiger Übergang');
+    }
   });
 });

@@ -48,6 +48,11 @@ export function approve(
   return { ok: true, action: { ...a, status: 'approved', approvedVia: req.via, approvedAt: now.toISOString() } };
 }
 
+export function cancelDraft(a: Action): Action {
+  if (a.status !== 'draft') fail(a.status, 'cancelled');
+  return { ...a, status: 'cancelled' };
+}
+
 export function startExecution(a: Action): Action {
   if (a.status !== 'approved') fail(a.status, 'executing');
   return { ...a, status: 'executing' };
@@ -74,9 +79,13 @@ export function retry(a: Action): Action {
   return { ...rest, status: 'approved' };
 }
 
+/** Ergebnisdaten, die ein Anbieter nach der Ausführung zurückmeldet (z. B. Stripe-IDs). */
+export type ActionOutput = Record<string, string>;
+export type ExecuteOutcome = 'ok' | 'error' | 'timeout' | { result: 'ok'; output: ActionOutput };
+
 export interface ActionProvider {
   /** true: führt nichts wirklich aus (Demo-Ausführer). */
   readonly simulated: boolean;
-  execute(a: Action, key: string): Promise<'ok' | 'error' | 'timeout'>;
-  lookup(key: string): Promise<boolean>;
+  execute(a: Action, key: string): Promise<ExecuteOutcome>;
+  lookup(key: string, a?: Action): Promise<boolean | { output: ActionOutput }>;
 }

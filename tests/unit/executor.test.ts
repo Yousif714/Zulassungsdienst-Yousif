@@ -163,3 +163,56 @@ describe('Ausführer', () => {
     expect(sink.current().jobs.find((j) => j.id === 'j-mueller-1')!.invoiceIds).toContain('i-z-311');
   });
 });
+
+describe('Ergebnisdaten (output) des Anbieters', () => {
+  test('output des Anbieters landet im Ereignis actionExecuted', async () => {
+    const provider: ActionProvider = {
+      simulated: false,
+      execute: async () => ({ result: 'ok' as const, output: { stripeCustomerId: 'cus_test_1' } }),
+      lookup: async () => false,
+    };
+    const sink = makeSink();
+    await approved(sink);
+    await executeApproved(sink, provider);
+    const ev = sink.events.find((e) => e.type === 'actionExecuted');
+    expect(ev).toMatchObject({ type: 'actionExecuted', id: 'a-1', result: 'ok', output: { stripeCustomerId: 'cus_test_1' } });
+    expect(status(sink)).toBe('executed');
+  });
+
+  test('einfaches Ergebnis ohne output bleibt unverändert (kein output-Feld)', async () => {
+    const sink = makeSink();
+    await approved(sink);
+    await executeApproved(sink, new DemoProvider());
+    const ev = sink.events.find((e) => e.type === 'actionExecuted') as Record<string, unknown>;
+    expect(ev.result).toBe('ok');
+    expect('output' in ev).toBe(false);
+  });
+
+  test('checkAction reicht output aus lookup weiter und übergibt die Aktion', async () => {
+    let seen: Action | undefined;
+    const provider: ActionProvider = {
+      simulated: false,
+      execute: async () => 'timeout',
+      lookup: async (_key, a) => { seen = a; return { output: { stripeScheduleId: 'sub_sched_test_1' } }; },
+    };
+    const sink = makeSink();
+    await approved(sink);
+    await executeApproved(sink, provider);
+    expect(status(sink)).toBe('uncertain');
+    await checkAction(sink, provider, 'a-1');
+    expect(seen?.id).toBe('a-1');
+    expect(sink.events.find((e) => e.type === 'actionReconciled')).toMatchObject({ found: true, output: { stripeScheduleId: 'sub_sched_test_1' } });
+    expect(status(sink)).toBe('executed');
+  });
+
+  test('checkAction mit lookup false: found false, kein output', async () => {
+    const provider: ActionProvider = { simulated: false, execute: async () => 'timeout', lookup: async () => false };
+    const sink = makeSink();
+    await approved(sink);
+    await executeApproved(sink, provider);
+    await checkAction(sink, provider, 'a-1');
+    const ev = sink.events.find((e) => e.type === 'actionReconciled') as Record<string, unknown>;
+    expect(ev.found).toBe(false);
+    expect('output' in ev).toBe(false);
+  });
+});

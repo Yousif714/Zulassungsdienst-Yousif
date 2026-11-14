@@ -1,4 +1,4 @@
-import { EXECUTE_TIMEOUT_MS, STALE_EXECUTING_MS, idempotencyKey, type ActionProvider } from '@/domain/actions/machine';
+import { EXECUTE_TIMEOUT_MS, STALE_EXECUTING_MS, idempotencyKey, type ActionOutput, type ActionProvider, type ExecuteOutcome } from '@/domain/actions/machine';
 import type { StoreEvent } from '@/domain/events';
 import type { AppState } from '@/domain/types';
 
@@ -20,11 +20,13 @@ async function claimStart(sink: EventSink, id: string): Promise<boolean> {
   return sink.current().actions.find((x) => x.id === id)?.status === 'executing';
 }
 
-async function runWithTimeout(run: () => Promise<'ok' | 'error' | 'timeout'>, ms: number): Promise<{ result: 'ok' | 'error' | 'timeout'; error?: string }> {
+async function runWithTimeout(run: () => Promise<ExecuteOutcome>, ms: number): Promise<{ result: 'ok' | 'error' | 'timeout'; output?: ActionOutput; error?: string }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const limit = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), ms); });
   try {
-    return { result: await Promise.race([run(), limit]) };
+    const outcome = await Promise.race([run(), limit]);
+    if (typeof outcome === 'string') return { result: outcome };
+    return { result: outcome.result, output: outcome.output };
   } catch (err) {
     return { result: 'error', error: err instanceof Error ? err.message : String(err) };
   } finally {
@@ -40,8 +42,8 @@ export async function executeApproved(sink: EventSink, provider: ActionProvider,
     if (!(await claimStart(sink, id))) continue;
     const a = sink.current().actions.find((x) => x.id === id);
     if (!a || a.status !== 'executing') continue;
-    const { result, error } = await runWithTimeout(() => provider.execute(a, idempotencyKey(a)), timeoutMs);
-    await sink.apply({ type: 'actionExecuted', id, result, ...(error ? { error } : {}), simulated: provider.simulated });
+    const { result, output, error } = await runWithTimeout(() => provider.execute(a, idempotencyKey(a)), timeoutMs);
+    await sink.apply({ type: 'actionExecuted', id, result, ...(error ? { error } : {}), ...(output ? { output } : {}), simulated: provider.simulated });
   }
 }
 
@@ -49,8 +51,10 @@ export async function executeApproved(sink: EventSink, provider: ActionProvider,
 export async function checkAction(sink: EventSink, provider: ActionProvider, id: string): Promise<void> {
   const a = sink.current().actions.find((x) => x.id === id);
   if (!a || a.status !== 'uncertain') return;
-  const found = await provider.lookup(idempotencyKey(a));
-  await sink.apply({ type: 'actionReconciled', id, found, simulated: provider.simulated });
+  const looked = await provider.lookup(idempotencyKey(a), a);
+  const found = typeof looked === 'boolean' ? looked : true;
+  const output = typeof looked === 'object' ? looked.output : undefined;
+  await sink.apply({ type: 'actionReconciled', id, found, ...(output ? { output } : {}), simulated: provider.simulated });
 }
 
 /** Eine Ausführung, die zu lange „executing“ ist (z. B. Seite geschlossen), wird zu „Ausgang unklar“. */

@@ -2,6 +2,7 @@ import type { ImportBatch, ImportedPayment } from './import/batch';
 import type { ContractDraft } from './import/contract-draft';
 import type { PortalListEntry } from './import/portal-list';
 import type { Action, AssistantMessage, Call, Connection, ConnectionId, InvoiceReading, IsoDate, Job, Settings } from './types';
+import type { ActionOutput } from './actions/machine';
 
 /** Neue Lesung vom Server; `error` gesetzt = Fehlversuch. Ergebnis und Vertrag bestimmt der Reducer. */
 export type NewInvoiceReading = Omit<InvoiceReading, 'outcome' | 'contractId'>;
@@ -22,8 +23,8 @@ export type StoreEvent =
   | { type: 'editAction'; id: string; payload: Record<string, unknown> }
   | { type: 'approveAction'; id: string; version: number; via: 'app' | 'whatsapp'; buttonIssuedAt?: string }
   | { type: 'actionStarted'; id: string }
-  | { type: 'actionExecuted'; id: string; result: 'ok' | 'error' | 'timeout'; error?: string; simulated?: boolean }
-  | { type: 'actionReconciled'; id: string; found: boolean; simulated?: boolean }
+  | { type: 'actionExecuted'; id: string; result: 'ok' | 'error' | 'timeout'; error?: string; simulated?: boolean; output?: ActionOutput }
+  | { type: 'actionReconciled'; id: string; found: boolean; simulated?: boolean; output?: ActionOutput }
   | { type: 'retryAction'; id: string }
   | { type: 'checkAction'; id: string }
   | { type: 'dismissInsight'; key: string }
