@@ -14,10 +14,9 @@ import { Segmented } from '@/components/Segmented';
 import { TakeoverCard } from '@/components/TakeoverCard';
 import { useAppStore } from '@/data/store';
 import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
-import { contractSources, notConnected } from '@/domain/connections';
 import { memberView } from '@/domain/detectors';
 import { planTakeover } from '@/domain/ledger/takeover';
-import { currentTakeover, openTakeoverAction, takeoverBlockReason } from '@/domain/takeover/status';
+import { currentTakeover, openTakeoverAction, standUnknown, takeoverBlockReason } from '@/domain/takeover/status';
 import { formatEuro } from '@/domain/money';
 import type { MemberContract } from '@/domain/types';
 
@@ -56,7 +55,7 @@ export default function TakeoverPage() {
     })
     .sort((x, y) => x.p.bookedOn.localeCompare(y.p.bookedOn));
 
-  const missing = notConnected(contractSources(contract), state.connections);
+  const missing = standUnknown(state, contract);
 
   // Ein offener Entwurf folgt dem gewählten Modus (neue Version, Raten rechnet der Reducer).
   const changeMode = (m: Mode) => {

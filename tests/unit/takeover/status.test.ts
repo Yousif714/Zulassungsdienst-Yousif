@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   TAKEOVER_STATUS_LABEL, contractLockedReason, currentTakeover, nextTakeoverAttempt, openTakeoverAction, runsViaStripe, takeoverActionId, takeoverBlockReason, takeoverStatus,
+  standUnknown,
 } from '@/domain/takeover/status';
 import { takeoverCandidates } from '@/domain/takeover/prepare';
 import type { Action, ActionStatus, MemberContract, Payment, StripeTakeover } from '@/domain/types';
@@ -67,6 +68,20 @@ describe('Umstellungs-Status', () => {
       expect(runsViaStripe(stateWith({ takeovers: [tk({ status: status as StripeTakeover['status'] })] }), 'c1')).toBe(want);
     }
     expect(runsViaStripe(stateWith(), 'c1')).toBe(false);
+  });
+});
+
+describe('standUnknown', () => {
+  test('Bank fehlt: unbekannt, aber nicht mehr, sobald die Raten über Stripe laufen', () => {
+    const withTk = (status?: StripeTakeover['status']) => {
+      const st = stateWith({ contracts: [base], takeovers: status ? [tk({ status })] : [] });
+      st.connections = st.connections.map((c) => (c.id === 'bank_qonto' ? conn({ id: 'bank_qonto', status: 'missing' }) : c));
+      return st;
+    };
+    expect(standUnknown(withTk(), base)).toBe(true);
+    expect(standUnknown(withTk('link_sent'), base)).toBe(true);
+    expect(standUnknown(withTk('set_up'), base)).toBe(false);
+    expect(standUnknown(withTk('active'), base)).toBe(false);
   });
 });
 

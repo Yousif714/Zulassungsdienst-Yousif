@@ -1,7 +1,7 @@
 import { contractSources, notConnected } from '../connections';
 import { memberView } from '../detectors/members';
 import { contractOnHold, isMembershipContract } from '../ledger/contracts';
-import type { Action, ActionStatus, AppState, IsoDate, StripeTakeover, TakeoverStatus } from '../types';
+import type { Action, ActionStatus, AppState, IsoDate, MemberContract, StripeTakeover, TakeoverStatus } from '../types';
 
 export const TAKEOVER_STATUS_LABEL: Record<TakeoverStatus, string> = {
   prepared: 'vorbereitet',
@@ -57,6 +57,11 @@ export function runsViaStripe(s: AppState, contractId: string): boolean {
   return st === 'set_up' || st === 'active';
 }
 
+/** Stand unbekannt, weil die Quelle fehlt. Läuft die Rate über Stripe, spielt die Bank keine Rolle mehr. */
+export function standUnknown(s: AppState, contract: MemberContract): boolean {
+  return notConnected(contractSources(contract), s.connections) && !runsViaStripe(s, contract.id);
+}
+
 /** Keine Zahlungserinnerung, solange die Raten über Stripe laufen (sonst droht Doppelzahlung); null = Erinnerung erlaubt. */
 export function reminderBlockedReason(s: AppState, contractId: string): string | null {
   return runsViaStripe(s, contractId) ? 'Raten laufen über Stripe – keine Erinnerung nötig.' : null;
@@ -69,7 +74,7 @@ export function takeoverBlockReason(s: AppState, contractId: string, today: IsoD
   if (!isMembershipContract(v.contract)) return 'Nur Mitgliedschaften.';
   if (contractOnHold(s, v.contract)) return 'Quellrechnung storniert.';
   if (v.contract.readBy && !v.contract.readBy.confirmed) return 'Ratenplan erst bestätigen.';
-  if (notConnected(contractSources(v.contract), s.connections)) return 'Bank nicht verbunden: Der Restbetrag wird erst nach der Bankanbindung berechnet.';
+  if (standUnknown(s, v.contract)) return 'Bank nicht verbunden: Der Restbetrag wird erst nach der Bankanbindung berechnet.';
   if (v.status.openCents <= 0) return 'Nichts mehr offen.';
   const st = currentTakeover(s, contractId)?.status;
   if (st === 'link_sent' || st === 'set_up' || st === 'active') return 'Umstellung läuft bereits.';
