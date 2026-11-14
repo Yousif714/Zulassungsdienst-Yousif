@@ -174,7 +174,7 @@ describe('completeTakeoverCheckout: Schutz vor doppeltem oder verwaistem Zeitpla
     expect(schedules(requests)).toHaveLength(1);
     const c = cancels(requests);
     expect(c).toHaveLength(1);
-    expect(c[0]).toMatchObject({ path: '/v1/subscription_schedules/sub_sched_test_1/cancel', idempotencyKey: `takeover:${TAKEOVER_ID}:schedule-cancel` });
+    expect(c[0]).toMatchObject({ path: '/v1/subscription_schedules/sub_sched_test_1/cancel', idempotencyKey: null });
     expect(Object.fromEntries(new URLSearchParams(c[0].body))).toEqual({ invoice_now: 'false', prorate: 'false' });
     const s = await loadState(repos, T0);
     expect(s.takeovers[0]).toMatchObject({ status: 'withdrawn', scheduleId: null });
@@ -193,6 +193,23 @@ describe('completeTakeoverCheckout: Schutz vor doppeltem oder verwaistem Zeitpla
     };
     expect(await completeTakeoverCheckout(repos, racing, session(), deps())).toBe('set_up');
     expect(cancels(requests)).toHaveLength(0);
+  });
+
+  test('M1: gleichzeitiger Lauf richtet ein und Import verknüpft schon (active) → gültiger Zeitplan bleibt', async () => {
+    const { repos, writer, requests } = await setup();
+    const racing: StripeWriter = {
+      ...writer,
+      createSchedule: async (i, k) => {
+        const id = await writer.createSchedule(i, k);
+        await dispatchEvents(repos, [{ type: 'takeoverSetUp', takeoverId: TAKEOVER_ID, scheduleId: id, paymentMethodId: 'pm_test_1' }], { at: () => T0, provider: new DemoProvider() });
+        const s = (await repos.state.load()).state;
+        await seed(repos, { ...s, takeovers: s.takeovers.map((t) => (t.id === TAKEOVER_ID ? { ...t, status: 'active' as const } : t)) });
+        return id;
+      },
+    };
+    expect(await completeTakeoverCheckout(repos, racing, session(), deps())).toBe('set_up');
+    expect(cancels(requests)).toHaveLength(0);
+    expect((await loadState(repos, T0)).takeovers[0].status).toBe('active');
   });
 
   test('Umstellung hat schon einen anderen Zeitplan → eigener wird storniert, nicht set_up', async () => {
@@ -221,7 +238,7 @@ describe('completeTakeoverCheckout: Schutz vor doppeltem oder verwaistem Zeitpla
     return { routes, open: () => { st = 'active'; } };
   }
   const audits = async (repos: Repos) => (await loadState(repos, T0)).audit.filter((a) => a.text.startsWith('Zeitplan storniert'));
-  const CANCEL_KEY = `takeover:${TAKEOVER_ID}:schedule-cancel`;
+  const CANCEL_KEY = null; // Storno ohne Idempotency-Key
 
   test('Storno scheitert beim ersten Lauf → wirft; zweiter Lauf (zurückgezogen) storniert, Audit genau einmal', async () => {
     const live = liveSchedule('sub_sched_test_1', false);
@@ -263,6 +280,26 @@ describe('completeTakeoverCheckout: Schutz vor doppeltem oder verwaistem Zeitpla
     expect(await completeTakeoverCheckout(repos, racing, session(), deps())).toBe('ignored');
     expect(schedules(requests)).toHaveLength(0);
     expect(cancels(requests).map((r) => r.path)).toEqual(['/v1/subscription_schedules/sub_sched_test_5/cancel']);
+    expect(await audits(repos)).toHaveLength(1);
+  });
+
+  test('M2: Plan geändert + offener Zeitplan aus abgestürztem Lauf → storniert, ignoriert', async () => {
+    const base = linkSentState();
+    const state: AppState = { ...base, takeovers: base.takeovers.map((t) => ({ ...t, status: 'plan_changed' as const })) };
+    const { repos, writer, requests } = await setup(state, { routes: liveSchedule('sub_sched_test_5').routes });
+    expect(await completeTakeoverCheckout(repos, writer, session(), deps())).toBe('ignored');
+    expect(cancels(requests).map((r) => r.path)).toEqual(['/v1/subscription_schedules/sub_sched_test_5/cancel']);
+    expect(schedules(requests)).toHaveLength(0);
+    expect(await audits(repos)).toHaveLength(1);
+  });
+
+  test('M2: Wiederholung nach Absturz, inzwischen überwiesen → angelegter Zeitplan storniert, Plan geändert', async () => {
+    const { repos, writer, requests } = await setup(transferredMeanwhile(), { routes: liveSchedule('sub_sched_test_5').routes });
+    expect(await completeTakeoverCheckout(repos, writer, session(), deps())).toBe('plan_changed');
+    expect(cancels(requests).map((r) => r.path)).toEqual(['/v1/subscription_schedules/sub_sched_test_5/cancel']);
+    expect(schedules(requests)).toHaveLength(0);
+    const s = await loadState(repos, T0);
+    expect(s.takeovers[0]).toMatchObject({ status: 'plan_changed', scheduleId: null });
     expect(await audits(repos)).toHaveLength(1);
   });
 

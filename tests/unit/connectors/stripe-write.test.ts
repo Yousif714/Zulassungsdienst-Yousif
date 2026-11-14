@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import { berlinLocalToUtc } from '@/domain/clock';
 import { fixtureFetch, type FixtureRequest } from '@/server/connectors/fixture-fetch';
-import { createStripeWriter, PLAN_PRODUCT_NAME, scheduleCancelIdempotencyKey, scheduleIdempotencyKey, scheduleParams } from '@/server/connectors/stripe-write';
+import { createStripeWriter, PLAN_PRODUCT_NAME, scheduleIdempotencyKey, scheduleParams } from '@/server/connectors/stripe-write';
 import { stripeWriteRoutes } from '../../fixtures/stripe-write';
 
 const unix = (iso: string, t = '07:00') => Math.floor(berlinLocalToUtc(iso, t).getTime() / 1000);
@@ -144,16 +144,34 @@ describe('createStripeWriter', () => {
     expect(await writer(routes, none).findSchedule('cus_test_1', 'tk9')).toBeNull();
     expect(none).toHaveLength(2);
   });
-  test('cancelSchedule: ohne Rechnung und Anteilsberechnung, mit Idempotency-Key', async () => {
+  test('cancelSchedule: ohne Rechnung und Anteilsberechnung, ohne Idempotency-Key (Stripe cached sonst auch 500 bis zu 24 h)', async () => {
     const requests: FixtureRequest[] = [];
-    await writer(undefined, requests).cancelSchedule('sub_sched_test_1', scheduleCancelIdempotencyKey('tk1'));
+    await writer(undefined, requests).cancelSchedule('sub_sched_test_1');
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ method: 'POST', path: '/v1/subscription_schedules/sub_sched_test_1/cancel', idempotencyKey: 'takeover:tk1:schedule-cancel' });
+    expect(requests[0]).toMatchObject({ method: 'POST', path: '/v1/subscription_schedules/sub_sched_test_1/cancel', idempotencyKey: null });
     expect(Object.fromEntries(new URLSearchParams(requests[0].body))).toEqual({ invoice_now: 'false', prorate: 'false' });
+  });
+  test('cancelSchedule: zweiter Versuch nach 500 geht ohne Key wirklich an Stripe', async () => {
+    const requests: FixtureRequest[] = [];
+    const status: Record<string, number> = { 'POST /v1/subscription_schedules/sub_sched_test_1/cancel': 500 };
+    const w = writer(undefined, requests, status);
+    await expect(w.cancelSchedule('sub_sched_test_1')).rejects.toThrow('HTTP 500');
+    delete status['POST /v1/subscription_schedules/sub_sched_test_1/cancel'];
+    await w.cancelSchedule('sub_sched_test_1');
+    expect(requests.map((r) => r.idempotencyKey)).toEqual([null, null]);
+  });
+  test.each([
+    ['schon storniert → Erfolg', 'canceled', true],
+    ['abgeschlossen → Erfolg', 'completed', true],
+    ['noch offen → Fehler', 'active', false],
+  ])('cancelSchedule 400: %s', async (_n, st, ok) => {
+    const routes = { ...stripeWriteRoutes, 'GET /v1/subscription_schedules/sub_sched_test_1': { id: 'sub_sched_test_1', status: st } };
+    const p = writer(routes, [], { 'POST /v1/subscription_schedules/sub_sched_test_1/cancel': 400 }).cancelSchedule('sub_sched_test_1');
+    if (ok) await expect(p).resolves.toBeUndefined();
+    else await expect(p).rejects.toThrow('HTTP 400');
   });
   test('Idempotency-Key des Zeitplans hängt nur an der Umstellung', () => {
     expect(scheduleIdempotencyKey('stripe-takeover-c1-1')).toBe('takeover:stripe-takeover-c1-1:schedule');
-    expect(scheduleCancelIdempotencyKey('stripe-takeover-c1-1')).toBe('takeover:stripe-takeover-c1-1:schedule-cancel');
   });
   test('Fehlermeldung enthält den Schlüssel nie', async () => {
     const err = await writer(undefined, [], { 'POST /v1/customers': 401 }).findOrCreateCustomer({ contractId: 'c1', name: 'x', email: null }, 'k').catch((e: Error) => e) as Error;

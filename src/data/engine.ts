@@ -418,7 +418,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     case 'takeoverScheduleCanceled': {
       const t = s.takeovers.find((x) => x.id === e.takeoverId);
       if (!t) return { state: s };
-      const why = t.status === 'withdrawn' ? 'Umstellung inzwischen zurückgezogen' : 'Umstellung nicht mehr offen';
+      const why = t.status === 'withdrawn' ? 'Umstellung inzwischen zurückgezogen' : t.status === 'plan_changed' ? 'Plan hat sich geändert' : 'Umstellung nicht mehr offen';
       return { state: s, audit: { actor: 'system', text: `Zeitplan storniert: ${why} (${contactName(s, t.contactId)}, Zeitplan ${e.scheduleId})`, actionId: t.actionId } };
     }
     case 'takeoverCustomerMismatch': {

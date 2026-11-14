@@ -3,11 +3,12 @@ import type { ActionProvider } from '@/domain/actions/machine';
 import { todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors/members';
 import { checkCompletion } from '@/domain/takeover/plan';
-import { scheduleCancelIdempotencyKey, scheduleIdempotencyKey, type StripeWriter } from './connectors/stripe-write';
+import { scheduleIdempotencyKey, type StripeWriter } from './connectors/stripe-write';
 import type { Repos } from './db/repository';
 import { dispatchEvents, loadState } from './state-service';
 
-const ENDED: ReadonlySet<string> = new Set(['withdrawn', 'aborted']);
+/** Umstellungen, die keinen offenen Zeitplan (mehr) haben dürfen. */
+const ENDED: ReadonlySet<string> = new Set(['withdrawn', 'aborted', 'plan_changed']);
 
 export type CheckoutSession = { id: string; mode: string; setup_intent: string | null; customer?: string | null; metadata?: Record<string, string> };
 
@@ -18,10 +19,11 @@ export type CheckoutSession = { id: string; mode: string; setup_intent: string |
  * Unmittelbar vor dem Anlegen wird der Stand frisch gelesen; danach muss die Umstellung `set_up` mit genau diesem Zeitplan
  * sein, sonst wird der Zeitplan storniert (Zurückziehen während des Laufs) → `ignored`.
  * Checkout-Sitzung mit anderem Stripe-Kunden → `ignored` + Audit.
- * Abweichend → „Plan geändert“, kein Zeitplan, Zahlungsmittel bleibt für die Neu-Freigabe.
+ * Abweichend → „Plan geändert“, kein Zeitplan, Zahlungsmittel bleibt für die Neu-Freigabe; ein Zeitplan aus einem abgestürzten
+ * früheren Lauf wird vorher storniert.
  * Nur aus `link_sent`: doppelt oder gleichzeitig → `ignored`, ohne Stripe-Aufruf.
- * Zurückgezogen/abgebrochen: noch offener Zeitplan der Umstellung (Storno scheiterte, früherer Lauf) wird storniert
- * (Key `takeover:<id>:schedule-cancel`, Audit), sonst nur `ignored`. Schon stornierte findet `findSchedule` nicht mehr.
+ * Zurückgezogen/abgebrochen/Plan geändert: noch offener Zeitplan der Umstellung (Storno scheiterte, früherer Lauf) wird storniert
+ * (ohne Idempotency-Key, Audit), sonst nur `ignored`. Schon stornierte findet `findSchedule` nicht mehr.
  * Stripe-Fehler (auch 409 bei gleichzeitigem Key) werden geworfen, damit Stripe das Ereignis wiederholt.
  */
 export async function completeTakeoverCheckout(
@@ -37,7 +39,7 @@ export async function completeTakeoverCheckout(
   if (!t || t.isDemo || !t.stripeCustomerId) return 'ignored';
   const ev = { at: () => deps.at, provider: deps.provider };
   const cancel = async (scheduleId: string) => {
-    await writer.cancelSchedule(scheduleId, scheduleCancelIdempotencyKey(takeoverId));
+    await writer.cancelSchedule(scheduleId);
     await dispatchEvents(repos, [{ type: 'takeoverScheduleCanceled', takeoverId, scheduleId }], ev);
     return 'ignored' as const;
   };
@@ -56,7 +58,13 @@ export async function completeTakeoverCheckout(
   const today = todayBerlin(deps.at);
   const check = checkCompletion(t.rates, memberView(s, t.contractId, today).status.openCents, today);
   if (!check.ok) {
-    await dispatchEvents(repos, [{ type: 'takeoverPlanChanged', takeoverId, paymentMethodId }], ev);
+    // Ein früherer Lauf kann den Zeitplan schon angelegt haben und vor „eingerichtet“ abgestürzt sein: der darf nicht abbuchen.
+    const stray = await writer.findSchedule(t.stripeCustomerId, takeoverId);
+    if (stray) await writer.cancelSchedule(stray);
+    await dispatchEvents(repos, [
+      { type: 'takeoverPlanChanged', takeoverId, paymentMethodId },
+      ...(stray ? [{ type: 'takeoverScheduleCanceled' as const, takeoverId, scheduleId: stray }] : []),
+    ], ev);
     return 'plan_changed';
   }
   await writer.setDefaultPaymentMethod(t.stripeCustomerId, paymentMethodId);
@@ -69,7 +77,8 @@ export async function completeTakeoverCheckout(
   }, scheduleIdempotencyKey(takeoverId)));
   const { state } = await dispatchEvents(repos, [{ type: 'takeoverSetUp', takeoverId, scheduleId, paymentMethodId }], ev);
   const after = state.takeovers.find((x) => x.id === takeoverId);
-  if (after?.status === 'set_up' && after.scheduleId === scheduleId) return 'set_up';
+  // Ein gleichzeitiger Lauf kann schon eingerichtet und der Import verknüpft haben (active): derselbe Zeitplan bleibt gültig.
+  if ((after?.status === 'set_up' || after?.status === 'active') && after.scheduleId === scheduleId) return 'set_up';
   return cancel(scheduleId);
 }
 

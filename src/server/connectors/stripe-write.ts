@@ -15,9 +15,6 @@ export interface ScheduleInput { customerId: string; paymentMethodId: string; pr
 /** Ein Zeitplan je Umstellung: Provider (Neu-Freigabe) und Webhook nutzen denselben Key, nie die Aktionsversion. */
 export const scheduleIdempotencyKey = (takeoverId: string): string => `takeover:${takeoverId}:schedule`;
 
-/** Storno eines eigenen Zeitplans (Umstellung inzwischen nicht mehr offen). */
-export const scheduleCancelIdempotencyKey = (takeoverId: string): string => `takeover:${takeoverId}:schedule-cancel`;
-
 /** Zeitpläne in diesem Status werden übernommen; canceled/released/completed nie. */
 const OPEN_SCHEDULE = new Set(['not_started', 'active']);
 
@@ -29,8 +26,11 @@ export interface StripeWriter {
   findCustomer(contractId: string): Promise<string | null>;
   /** Offener Zeitplan (not_started/active) des Kunden mit `metadata.takeoverId`, sonst null. Blättert über alle Seiten. */
   findSchedule(customerId: string, takeoverId: string): Promise<string | null>;
-  /** Zeitplan stornieren, ohne Schlussrechnung und ohne Anteilsberechnung. */
-  cancelSchedule(scheduleId: string, idemKey: string): Promise<void>;
+  /**
+   * Zeitplan stornieren, ohne Schlussrechnung und ohne Anteilsberechnung. Ohne Idempotency-Key: Stripe hielte sonst auch eine
+   * 500-Antwort bis zu 24 h fest. 400 bei schon beendetem Zeitplan gilt als Erfolg.
+   */
+  cancelSchedule(scheduleId: string): Promise<void>;
   findOrCreateCustomer(i: { contractId: string; name: string; email: string | null }, idemKey: string): Promise<string>;
   createSetupCheckout(i: { customerId: string; takeoverId: string; contractId: string; token: string; base: string }): Promise<{ id: string; url: string }>;
   setupIntentPaymentMethod(setupIntentId: string): Promise<string>;
@@ -99,8 +99,15 @@ export function createStripeWriter(o: { key: string; fetch: typeof fetch; sleep:
         after = need(data[data.length - 1].id, 'Zeitplan-ID');
       }
     },
-    async cancelSchedule(scheduleId, idemKey) {
-      await post(`/v1/subscription_schedules/${encodeURIComponent(scheduleId)}/cancel`, { invoice_now: false, prorate: false }, idemKey);
+    async cancelSchedule(scheduleId) {
+      const path = `/v1/subscription_schedules/${encodeURIComponent(scheduleId)}`;
+      try {
+        await post(`${path}/cancel`, { invoice_now: false, prorate: false });
+      } catch (e) {
+        if (!(e instanceof ConnectorError) || !e.message.includes('HTTP 400')) throw e;
+        const s = (await api.getJson(path)) as Obj;
+        if (OPEN_SCHEDULE.has(s.status as string)) throw e;
+      }
     },
     async findOrCreateCustomer(i, idemKey) {
       const found = await findCustomer(i.contractId);
