@@ -1,6 +1,6 @@
 # 2b-3 Umsetzungs-Ledger (Kopie für die nächste Session)
 
-Arbeitskopie liegt git-ignoriert unter `.superpowers/sdd/2026-11-13-phase2b3-stripe-umstellung/` und geht mit dem Container verloren. Diese Datei ist der Stand zum Weitermachen.
+Arbeitskopie liegt git-ignoriert unter `.superpowers/sdd/2026-11-13-phase2b3-stripe-umstellung/` und geht mit dem Container verloren. Diese Datei ist der Stand zum Weitermachen. In neuer Session: Workspace per sdd-workspace-Skript anlegen, diesen Inhalt (bis zur Trennlinie) als progress.md und den Teil nach der Trennlinie als preflight.md dort ablegen; global-constraints.md aus dem Plan (Abschnitte Global Constraints + Review Focus) neu extrahieren.
 
 # SDD ledger — plan: docs/superpowers/plans/2026-11-13-phase2b3-stripe-umstellung.md
 
@@ -62,6 +62,12 @@ Task 7: minor (deferred): Abo schon canceled beim ersten Sync wird nie verknüpf
 Carry → Task 8: zusätzlicher Hinweis „Stripe-Abo mit Vertrags-ID ohne passende Umstellung“ (Ruling Task 7 #3); runsViaStripe-Importzyklus beachten (Ruling Task 4).
 Task 8: dispatched (BASE 5169104, opus; B6, B11, Zyklus-Ruling, Zusatzhinweis verwaiste Abos)
 Task 8: implementer DONE_WITH_CONCERNS 6f44ecc (6 neue Hinweise inkl. takeover_subscription_orphan; Concerns: Demo zeigt 6 rate_upcoming-today-Hinweise → Bündelung in Task 9 entscheiden; Hinweise verlinken /nexus/umstellung (Task 13); Preisabweichung zeigt „bestätigt: unbekannt“). REVIEW NOCH OFFEN (Session-Übergabe 14.11.).
+Task 8: Review dispatched (opus) nach Session-Resume.
+Task 8: review → Needs fixes (Important: Rückbuchung nach Einrichtung (negativ, bank incoming) erzeugt falsche „Doppelzahlung“, takeover.ts:49-50).
+Task 8: minor (deferred): Abgleich-Prädikat doppelt (takeover.ts:124-126 vs link.ts:23-30); Text „bestätigt: unbekannt“ bei Plan-Abos; Tests fehlen: aufgeteilte Zahlung, Erinnerungen nach aborted; Demo-Briefing 6× rate_upcoming → Bündelung in Task 9 entscheiden.
+Task 8: fix round 1/5 (1 addressed, 0 open; commits 6f44ecc..07a3d15)
+Task 8: complete (commits 5169104..07a3d15, review clean after fix)
+NÄCHSTER SCHRITT: Task 9 (Brief per task-brief-Skript aus dem Plan erzeugen; Carry: Demo-Briefing-Bündelung der rate_upcoming-Hinweise entscheiden; B3 paymentLinkFor nur bei link_sent; B7 syncTakeoverDraft aus Task 6 wiederverwenden).
 
 ---
 
