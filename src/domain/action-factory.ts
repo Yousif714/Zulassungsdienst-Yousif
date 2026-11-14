@@ -1,5 +1,7 @@
 import type { MemberStatus } from './ledger/status';
-import type { Action, Contact, Installment, IsoDate, Job, MemberContract, Message } from './types';
+import type { TakeoverPlan } from './ledger/takeover';
+import { takeoverActionId } from './takeover/status';
+import type { Action, Contact, Installment, IsoDate, Job, MemberContract, Message, StripeTakeover } from './types';
 
 // Eine Erinnerung je Rückstandsstand: kommt eine neue überfällige Rate dazu, gibt es eine neue Aktion.
 export const reminderActionId = (contractId: string, oldestUnpaidDue: IsoDate | null): string =>
@@ -73,6 +75,37 @@ export function stripePlanAction(i: {
     company: 'nexus',
     title: `Stripe-Ratenplan für ${i.name}`,
     payload: { contractId: i.contract.id, contactId: i.contract.contactId, mode: i.mode, rates: i.rates },
+    version: 1,
+    status: 'draft',
+    createdAt: i.at.toISOString(),
+    isDemo: i.isDemo,
+  };
+}
+
+/**
+ * Umstellung eines Bestandsmitglieds auf Stripe (ein Versuch je Aktion).
+ * Kunde aus einem früheren Versuch wird weiterverwendet; das Zahlungsmittel nur nach „Plan geändert“ (dann ohne neuen Link).
+ */
+export function takeoverAction(i: {
+  contract: MemberContract; contact: Contact; mode: MemberContract['catchUpMode']; plan: TakeoverPlan; attempt: number; prior?: StripeTakeover; at: Date; isDemo: boolean;
+}): Action {
+  const payload: Record<string, unknown> = {
+    contractId: i.contract.id,
+    contactId: i.contact.id,
+    name: i.contact.name,
+    email: i.contact.emails?.[0] ?? null,
+    mode: i.mode,
+    rates: i.plan.rates,
+    openCents: i.plan.openCents,
+  };
+  if (i.prior?.stripeCustomerId) payload.stripeCustomerId = i.prior.stripeCustomerId;
+  if (i.prior?.status === 'plan_changed' && i.prior.paymentMethodId) payload.paymentMethodId = i.prior.paymentMethodId;
+  return {
+    id: takeoverActionId(i.contract.id, i.attempt),
+    type: 'stripe_takeover',
+    company: 'nexus',
+    title: `Umstellung auf Stripe: ${i.contact.name}`,
+    payload,
     version: 1,
     status: 'draft',
     createdAt: i.at.toISOString(),

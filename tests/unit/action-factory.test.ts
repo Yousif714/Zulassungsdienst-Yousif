@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { reminderAction, reminderActionId, replyAction, replyActionId } from '@/domain/action-factory';
+import { reminderAction, reminderActionId, replyAction, replyActionId, takeoverAction } from '@/domain/action-factory';
+import type { TakeoverPlan } from '@/domain/ledger/takeover';
 import { paymentLinkFor } from '@/domain/payment-link';
-import type { Contact, MemberContract, Message } from '@/domain/types';
+import type { Contact, MemberContract, Message, StripeTakeover } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
 
 const contract = { id: 'mc-kaya', contactId: 'c-kaya' } as MemberContract;
@@ -40,5 +41,36 @@ describe('Aktions-Fabrik', () => {
   });
   it('paymentLinkFor', () => {
     expect(paymentLinkFor('mc-kaya')).toBe('https://buy.stripe.com/demo/mc-kaya');
+  });
+
+  describe('takeoverAction', () => {
+    const plan: TakeoverPlan = { arrearsCents: 15000, futureCents: 60000, openCents: 75000, mode: 'first_rate',
+      rates: [{ no: 1, dueDate: '2026-12-01', amountCents: 45000 }, { no: 2, dueDate: '2027-01-01', amountCents: 30000 }] };
+    const mail = { ...contact, emails: ['ali.kaya@example.de'] } as Contact;
+    const prior = (status: StripeTakeover['status']): StripeTakeover => ({
+      id: '6f1c2b3a-0000-4000-8000-000000000001', contractId: 'mc-kaya', contactId: 'c-kaya', actionId: 'stripe-takeover-mc-kaya-1', actionVersion: 1, status,
+      token: 'a'.repeat(64), link: 'https://nexus.example.de/zahlung/x', mode: 'first_rate', rates: plan.rates, openCents: 75000,
+      stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1', scheduleId: null, subscriptionExternalId: null, isDemo: false, linkSentAt: '2026-11-10T09:00:00.000Z',
+    });
+
+    it('Payload ohne frühere Umstellung', () => {
+      expect(takeoverAction({ contract, contact: mail, mode: 'first_rate', plan, attempt: 1, at, isDemo: true })).toEqual({
+        id: 'stripe-takeover-mc-kaya-1', type: 'stripe_takeover', company: 'nexus', title: 'Umstellung auf Stripe: Ali Kaya',
+        payload: { contractId: 'mc-kaya', contactId: 'c-kaya', name: 'Ali Kaya', email: 'ali.kaya@example.de', mode: 'first_rate', rates: plan.rates, openCents: 75000 },
+        version: 1, status: 'draft', createdAt: at.toISOString(), isDemo: true,
+      });
+    });
+    it('ohne E-Mail → null', () => {
+      expect(takeoverAction({ contract, contact: { ...contact, emails: [] } as Contact, mode: 'spread', plan, attempt: 2, at, isDemo: false }).payload)
+        .toMatchObject({ email: null, mode: 'spread' });
+    });
+    it('paymentMethodId nur aus früherer Umstellung mit Plan geändert', () => {
+      const changed = takeoverAction({ contract, contact: mail, mode: 'first_rate', plan, attempt: 2, prior: prior('plan_changed'), at, isDemo: false });
+      expect(changed.id).toBe('stripe-takeover-mc-kaya-2');
+      expect(changed.payload).toMatchObject({ stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1' });
+      const withdrawn = takeoverAction({ contract, contact: mail, mode: 'first_rate', plan, attempt: 2, prior: prior('withdrawn'), at, isDemo: false });
+      expect(withdrawn.payload.stripeCustomerId).toBe('cus_test_1');
+      expect('paymentMethodId' in withdrawn.payload).toBe(false);
+    });
   });
 });
