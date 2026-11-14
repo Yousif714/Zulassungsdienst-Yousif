@@ -206,3 +206,4 @@ Erledigt im Final-Fix (14.11.): I1–I3, M1–M10 (Erinnerung trotz Stripe, Neu-
 - `takeoverRows` rechnet `memberView` je Zeile doppelt.
 - Testlücken: Stripe-Zahlung nach der Umstellung tilgt die Plan-Raten (Status grün, kein Rückstand); aufgeteilte Zahlung bei `double_payment`; Erinnerungen nach `aborted` laufen wieder; Executor/Reducer mit vorhandenen Auto-Entwürfen; 401-Test im Writer schwach; `webhook-stripe.test.ts` „gleichzeitig“ prüft `>= 1` statt der exakten Anzahl; E2E echter Modus (Fixture-Stripe) für „Plan geändert“ → Neu-Freigabe ohne Link.
 - `member_overdue` bei laufender Stripe-Abbuchung erscheint sofort ab Fälligkeit (nur `nextStep` „In Stripe prüfen“); ggf. erst X Tage nach Fälligkeit bzw. bei `past_due` melden.
+- Zurückziehen ist ab „eingerichtet“ nur in Stripe möglich (Zeitplan dort kündigen); kein Knopf in der App.
