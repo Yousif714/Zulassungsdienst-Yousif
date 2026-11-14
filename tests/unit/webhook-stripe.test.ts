@@ -167,13 +167,13 @@ describe('Route: checkout.session.completed (Umstellung)', () => {
     expect(schedules()).toHaveLength(0);
   });
 
-  test('Webhook nach Zurückziehen → ignoriert', async () => {
+  test('Webhook nach Zurückziehen ohne offenen Zeitplan → ignoriert, nur Suche', async () => {
     resetTestRepos();
     setTestStripeWriter(createStripeWriter({ key: 'sk_test_SECRET', fetch: fixtureFetch(stripeWriteRoutes, { requests, status }), sleep: async () => {}, now: () => 0 }));
     await seed(getRepos(), applyAt(linkSentState(), [{ type: 'withdrawTakeover', contractId: 'c1' }]));
     expect((await post(event())).status).toBe(200);
     expect((await state()).takeovers[0].status).toBe('withdrawn');
-    expect(requests).toEqual([]);
+    expect(requests.map((r) => `${r.method} ${r.path.split('?')[0]}`)).toEqual(['GET /v1/subscription_schedules']);
   });
 
   test.each([

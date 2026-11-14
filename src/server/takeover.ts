@@ -7,6 +7,8 @@ import { scheduleCancelIdempotencyKey, scheduleIdempotencyKey, type StripeWriter
 import type { Repos } from './db/repository';
 import { dispatchEvents, loadState } from './state-service';
 
+const ENDED: ReadonlySet<string> = new Set(['withdrawn', 'aborted']);
+
 export type CheckoutSession = { id: string; mode: string; setup_intent: string | null; customer?: string | null; metadata?: Record<string, string> };
 
 /**
@@ -17,7 +19,9 @@ export type CheckoutSession = { id: string; mode: string; setup_intent: string |
  * sein, sonst wird der Zeitplan storniert (Zurückziehen während des Laufs) → `ignored`.
  * Checkout-Sitzung mit anderem Stripe-Kunden → `ignored` + Audit.
  * Abweichend → „Plan geändert“, kein Zeitplan, Zahlungsmittel bleibt für die Neu-Freigabe.
- * Nur aus `link_sent`: doppelt, gleichzeitig oder nach „Zurückziehen“ → `ignored`, ohne Stripe-Aufruf.
+ * Nur aus `link_sent`: doppelt oder gleichzeitig → `ignored`, ohne Stripe-Aufruf.
+ * Zurückgezogen/abgebrochen: noch offener Zeitplan der Umstellung (Storno scheiterte, früherer Lauf) wird storniert
+ * (Key `takeover:<id>:schedule-cancel`, Audit), sonst nur `ignored`. Schon stornierte findet `findSchedule` nicht mehr.
  * Stripe-Fehler (auch 409 bei gleichzeitigem Key) werden geworfen, damit Stripe das Ereignis wiederholt.
  */
 export async function completeTakeoverCheckout(
@@ -30,8 +34,19 @@ export async function completeTakeoverCheckout(
   if (session.mode !== 'setup' || typeof takeoverId !== 'string' || !takeoverId || typeof session.setup_intent !== 'string' || !session.setup_intent) return 'ignored';
   const s = await loadState(repos, deps.at);
   const t = s.takeovers.find((x) => x.id === takeoverId);
-  if (!t || t.status !== 'link_sent' || t.isDemo || !t.stripeCustomerId) return 'ignored';
+  if (!t || t.isDemo || !t.stripeCustomerId) return 'ignored';
   const ev = { at: () => deps.at, provider: deps.provider };
+  const cancel = async (scheduleId: string) => {
+    await writer.cancelSchedule(scheduleId, scheduleCancelIdempotencyKey(takeoverId));
+    await dispatchEvents(repos, [{ type: 'takeoverScheduleCanceled', takeoverId, scheduleId }], ev);
+    return 'ignored' as const;
+  };
+  if (ENDED.has(t.status)) {
+    // Offener Zeitplan einer beendeten Umstellung (Storno scheiterte oder früherer Lauf) darf nicht abbuchen.
+    const open = await writer.findSchedule(t.stripeCustomerId, takeoverId);
+    return open ? cancel(open) : 'ignored';
+  }
+  if (t.status !== 'link_sent') return 'ignored';
   if (session.customer !== t.stripeCustomerId) {
     await dispatchEvents(repos, [{ type: 'takeoverCustomerMismatch', takeoverId, customerId: session.customer ?? null }], ev);
     return 'ignored';
@@ -48,16 +63,14 @@ export async function completeTakeoverCheckout(
   const productId = await writer.ensurePlanProduct();
   const existing = await writer.findSchedule(t.stripeCustomerId, takeoverId);
   const fresh = (await repos.state.load()).state.takeovers.find((x) => x.id === takeoverId);
-  if (fresh?.status !== 'link_sent') return 'ignored';
+  if (fresh?.status !== 'link_sent') return existing && fresh && ENDED.has(fresh.status) ? cancel(existing) : 'ignored';
   const scheduleId = existing ?? (await writer.createSchedule({
     customerId: t.stripeCustomerId, paymentMethodId, productId, phases: check.phases, contractId: t.contractId, takeoverId,
   }, scheduleIdempotencyKey(takeoverId)));
   const { state } = await dispatchEvents(repos, [{ type: 'takeoverSetUp', takeoverId, scheduleId, paymentMethodId }], ev);
   const after = state.takeovers.find((x) => x.id === takeoverId);
   if (after?.status === 'set_up' && after.scheduleId === scheduleId) return 'set_up';
-  await writer.cancelSchedule(scheduleId, scheduleCancelIdempotencyKey(takeoverId));
-  await dispatchEvents(repos, [{ type: 'takeoverScheduleCanceled', takeoverId, scheduleId }], ev);
-  return 'ignored';
+  return cancel(scheduleId);
 }
 
 /**

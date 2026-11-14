@@ -90,10 +90,10 @@ describe('completeTakeoverCheckout', () => {
     });
   });
 
-  test('nach Zurückziehen → ignoriert, kein Stripe-Aufruf, Status bleibt', async () => {
+  test('nach Zurückziehen ohne offenen Zeitplan → ignoriert, nur Suche, kein POST, Status bleibt', async () => {
     const { repos, writer, requests } = await setup(applyAt(linkSentState(), [{ type: 'withdrawTakeover', contractId: 'c1' }]));
     expect(await completeTakeoverCheckout(repos, writer, session(), deps())).toBe('ignored');
-    expect(requests).toEqual([]);
+    expect(requests.map((r) => `${r.method} ${r.path.split('?')[0]}`)).toEqual(['GET /v1/subscription_schedules']);
     expect((await loadState(repos, T0)).takeovers[0].status).toBe('withdrawn');
   });
 
@@ -210,6 +210,69 @@ describe('completeTakeoverCheckout: Schutz vor doppeltem oder verwaistem Zeitpla
     const s = await loadState(repos, T0);
     expect(s.takeovers[0]).toMatchObject({ status: 'set_up', scheduleId: 'sub_sched_test_9' });
     expect(s.audit[s.audit.length - 1].text).toBe('Zeitplan storniert: Umstellung nicht mehr offen (Erika Muster, Zeitplan sub_sched_test_1)');
+  });
+
+  /** Routen mit einem offenen Zeitplan, der nach erfolgreichem Storno auf `canceled` wechselt (wie bei Stripe). */
+  function liveSchedule(id: string, open = true) {
+    let st = open ? 'active' : null;
+    const routes: Record<string, unknown> = { ...stripeWriteRoutes };
+    Object.defineProperty(routes, 'GET /v1/subscription_schedules', { enumerable: true, get: () => ({ data: st ? [{ id, status: st, metadata: { takeoverId: TAKEOVER_ID } }] : [] }) });
+    Object.defineProperty(routes, `POST /v1/subscription_schedules/${id}/cancel`, { enumerable: true, get: () => { st = 'canceled'; return { id, status: st }; } });
+    return { routes, open: () => { st = 'active'; } };
+  }
+  const audits = async (repos: Repos) => (await loadState(repos, T0)).audit.filter((a) => a.text.startsWith('Zeitplan storniert'));
+  const CANCEL_KEY = `takeover:${TAKEOVER_ID}:schedule-cancel`;
+
+  test('Storno scheitert beim ersten Lauf → wirft; zweiter Lauf (zurückgezogen) storniert, Audit genau einmal', async () => {
+    const live = liveSchedule('sub_sched_test_1', false);
+    const { repos, writer, requests, status } = await setup(undefined, { routes: live.routes, status: { 'POST /v1/subscription_schedules/sub_sched_test_1/cancel': 500 } });
+    const racing: StripeWriter = { ...writer, createSchedule: async (i, k) => { const id = await writer.createSchedule(i, k); live.open(); await withdraw(repos); return id; } };
+    await expect(completeTakeoverCheckout(repos, racing, session(), deps())).rejects.toThrow('Stripe: HTTP 500');
+    expect(await audits(repos)).toHaveLength(0);
+    // Stripe wiederholt das Ereignis; der Zeitplan steht bei Stripe noch offen.
+    delete status['POST /v1/subscription_schedules/sub_sched_test_1/cancel'];
+    expect(await completeTakeoverCheckout(repos, writer, session(), deps())).toBe('ignored');
+    expect(cancels(requests).map((r) => [r.path, r.idempotencyKey])).toEqual([
+      ['/v1/subscription_schedules/sub_sched_test_1/cancel', CANCEL_KEY],
+      ['/v1/subscription_schedules/sub_sched_test_1/cancel', CANCEL_KEY],
+    ]);
+    expect(await audits(repos)).toEqual([expect.objectContaining({ actor: 'system', text: 'Zeitplan storniert: Umstellung inzwischen zurückgezogen (Erika Muster, Zeitplan sub_sched_test_1)' })]);
+    // Dritter Lauf: Zeitplan ist storniert → kein weiterer Storno, kein weiteres Audit.
+    expect(await completeTakeoverCheckout(repos, writer, session(), deps())).toBe('ignored');
+    expect(cancels(requests)).toHaveLength(2);
+    expect(await audits(repos)).toHaveLength(1);
+  });
+
+  test.each([
+    ['zurückgezogen', 'withdrawn'],
+    ['abgebrochen', 'aborted'],
+  ] as const)('%s + offener Zeitplan aus früherem Lauf → storniert, Audit, ignoriert', async (_n, st) => {
+    const base = linkSentState();
+    const state: AppState = { ...base, takeovers: base.takeovers.map((t) => ({ ...t, status: st })) };
+    const { repos, writer, requests } = await setup(state, { routes: liveSchedule('sub_sched_test_5').routes });
+    expect(await completeTakeoverCheckout(repos, writer, session(), deps())).toBe('ignored');
+    expect(cancels(requests).map((r) => [r.path, r.idempotencyKey])).toEqual([['/v1/subscription_schedules/sub_sched_test_5/cancel', CANCEL_KEY]]);
+    expect(schedules(requests)).toHaveLength(0);
+    expect((await audits(repos)).map((a) => a.text)).toEqual([expect.stringContaining('Zeitplan sub_sched_test_5')]);
+    expect((await loadState(repos, T0)).takeovers[0].status).toBe(st);
+  });
+
+  test('Zurückziehen zwischen Laden und Anlegen + offener Zeitplan aus früherem Lauf → storniert, ignoriert', async () => {
+    const { repos, writer, requests } = await setup(undefined, { routes: liveSchedule('sub_sched_test_5').routes });
+    const racing: StripeWriter = { ...writer, findSchedule: async (c, t) => { const r = await writer.findSchedule(c, t); await withdraw(repos); return r; } };
+    expect(await completeTakeoverCheckout(repos, racing, session(), deps())).toBe('ignored');
+    expect(schedules(requests)).toHaveLength(0);
+    expect(cancels(requests).map((r) => r.path)).toEqual(['/v1/subscription_schedules/sub_sched_test_5/cancel']);
+    expect(await audits(repos)).toHaveLength(1);
+  });
+
+  test('eingerichtet mit genau diesem Zeitplan → nichts storniert, kein Stripe-Aufruf', async () => {
+    const base = applyAt(linkSentState(), [{ type: 'takeoverSetUp', takeoverId: TAKEOVER_ID, scheduleId: 'sub_sched_test_5', paymentMethodId: 'pm_test_1' }]);
+    expect(base.takeovers[0].status).toBe('set_up');
+    const { repos, writer, requests } = await setup(base, { routes: liveSchedule('sub_sched_test_5').routes });
+    expect(await completeTakeoverCheckout(repos, writer, session(), deps())).toBe('ignored');
+    expect(requests).toEqual([]);
+    expect(await audits(repos)).toHaveLength(0);
   });
 
   test.each([
