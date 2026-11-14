@@ -19,6 +19,7 @@ export default defineConfig({
       OWNER_SETUP_TOKEN: 'e2e-setup-token',
       CRON_SECRET: 'e2e-cron',
       APP_ORIGIN: 'http://localhost:3100',
+      STRIPE_WEBHOOK_SECRET: 'whsec_e2e_nur_test',
     },
   },
   use: { baseURL: 'http://localhost:3100' },

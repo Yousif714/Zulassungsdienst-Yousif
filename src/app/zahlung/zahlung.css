@@ -1,0 +1,5 @@
+.pay-page { max-width: 28rem; margin: 3rem auto; padding: 0 1rem; font-family: system-ui, sans-serif; }
+.pay-page ul { padding-left: 1.2rem; }
+.pay-page button { padding: 0.75rem 1.25rem; font-size: 1rem; border-radius: 0.5rem; border: 0; background: #0a84ff; color: #fff; cursor: pointer; }
+.pay-page button:disabled { background: #8e8e93; cursor: not-allowed; }
+.pay-demo { font-size: 0.75rem; background: #ffd60a; color: #000; padding: 0.1rem 0.5rem; border-radius: 0.5rem; vertical-align: middle; }

@@ -14,29 +14,30 @@ import type { SyncDeps } from './sync';
 import { createActionProvider } from './action-provider';
 import { createStripeWriter, type StripeWriter } from './connectors/stripe-write';
 
-let repos: Repos | null = null;
+// Route-Handler und Seiten können als getrennte Bundles geladen werden: der Testzustand liegt daher auf globalThis.
+const slot = globalThis as unknown as { __nexusRegistry?: { repos: Repos | null; testWriter: StripeWriter | null | undefined } };
+const reg = (slot.__nexusRegistry ??= { repos: null, testWriter: undefined });
 const demo = new DemoProvider();
 /** Test-Überschreibung des Stripe-Schreibers; `undefined` = aus der Umgebung. */
-let testWriter: StripeWriter | null | undefined;
 
 /** Supabase im Betrieb, eine modulweite Memory-Instanz im Testmodus (NEXUS_TEST_MEMORY_DB=1). */
 export function getRepos(): Repos {
-  if (repos) return repos;
+  if (reg.repos) return reg.repos;
   const env = readEnv();
-  repos = env.testMemoryDb ? createMemoryRepos() : createSupabaseRepos(env.supabaseUrl!, env.supabaseServiceRoleKey!);
-  return repos;
+  reg.repos = env.testMemoryDb ? createMemoryRepos() : createSupabaseRepos(env.supabaseUrl!, env.supabaseServiceRoleKey!);
+  return reg.repos;
 }
 
 /** Nur im Testmodus: frische Memory-Datenbank. */
 export function resetTestRepos(): void {
   if (!readEnv().testMemoryDb) throw new Error('resetTestRepos nur im Testmodus');
-  repos = createMemoryRepos();
-  testWriter = undefined;
+  reg.repos = createMemoryRepos();
+  reg.testWriter = undefined;
 }
 
 /** Stripe-Schreibzugriff nur mit STRIPE_WRITE_KEY (oder Test-Überschreibung); sonst null → Umstellung als Demo. */
 export function getStripeWriter(): StripeWriter | null {
-  if (testWriter !== undefined) return testWriter;
+  if (reg.testWriter !== undefined) return reg.testWriter;
   const key = readEnv().stripeWriteKey;
   if (!key) return null;
   return createStripeWriter({ key, fetch: (...a) => fetch(...a), sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now: () => realNow().getTime() });
@@ -45,7 +46,7 @@ export function getStripeWriter(): StripeWriter | null {
 /** Nur im Testmodus: Stripe-Schreiber ersetzen (`null` = keiner). */
 export function setTestStripeWriter(w: StripeWriter | null): void {
   if (!readEnv().testMemoryDb) throw new Error('setTestStripeWriter nur im Testmodus');
-  testWriter = w;
+  reg.testWriter = w;
 }
 
 /** Phase 2a: nur der Demo-Assistent. */

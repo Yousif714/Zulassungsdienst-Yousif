@@ -1,9 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 
-import { AppShell } from '@/components/AppShell';
-import { ModeProvider } from '@/data/mode';
-import { AppStoreProvider } from '@/data/store';
+import { RootChrome } from '@/components/RootChrome';
 
 import './globals.css';
 import './motion.css';
@@ -39,11 +37,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="de">
       <body>
-        <ModeProvider>
-          <AppStoreProvider>
-            <AppShell>{children}</AppShell>
-          </AppStoreProvider>
-        </ModeProvider>
+        <RootChrome>{children}</RootChrome>
         {process.env.NODE_ENV === 'production' && (
           <Script id="sw-register" strategy="afterInteractive">{registerServiceWorker}</Script>
         )}
