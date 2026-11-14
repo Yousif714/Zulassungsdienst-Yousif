@@ -1,9 +1,17 @@
-import { berlinLocalToUtc, formatIsoDe } from '../clock';
+import { addDaysIso, berlinLocalToUtc, formatIsoDe } from '../clock';
 import { monthDate } from '../ledger/schedule';
 import type { Installment, IsoDate, StripeTakeover } from '../types';
 
-/** Eine Phase des Stripe-Zeitplans. Ende per Monatsdauer oder festem Datum; `trial` = Lücke ohne Abbuchung. */
+/**
+ * Eine Phase des Stripe-Zeitplans. Ende per Monatsdauer oder festem Datum; `trial` = Lücke ohne Abbuchung.
+ * Annahme des Phasenmodells: Der Provider setzt je Phase `billing_cycle_anchor: 'phase_start'` (nicht bei Lücken-Phasen)
+ * und `proration_behavior: 'none'`. Nur dann bucht jede Phase genau an ihrem Start ab und Datums-Phasen
+ * (kürzer als ein Monat) genau einmal.
+ */
 export type TakeoverPhase = { start: IsoDate | 'now'; end: { months: number } | { date: IsoDate }; amountCents: number; trial?: true };
+
+/** Höchstdauer der Sofort-Phase in Tagen (deutlich kürzer als jeder Monat). */
+const IMMEDIATE_PHASE_DAYS = 14;
 
 function plusMonths(start: IsoDate, months: number): IsoDate {
   const [y, m, d] = start.split('-').map(Number);
@@ -21,8 +29,18 @@ export function schedulePhases(rates: Installment[], today: IsoDate): TakeoverPh
   const out: TakeoverPhase[] = [];
 
   if (past.length > 0) {
+    // Sofort-Phase: Preis mit Monatsintervall ab „jetzt“. Sie muss kürzer als ein Abrechnungszeitraum sein,
+    // sonst bucht Stripe den Rückstand nach einem Monat erneut ab (Tag 31, Abschluss vor 07:00, Pausen).
+    // Darum festes Ende: min(nächste Fälligkeit, heute + 14 Tage); danach Lücke ohne Abbuchung bis zur Fälligkeit.
     const amountCents = past.reduce((x, r) => x + r.amountCents, 0);
-    out.push({ start: 'now', end: future.length > 0 ? { date: future[0].dueDate } : { months: 1 }, amountCents });
+    const cap = addDaysIso(today, IMMEDIATE_PHASE_DAYS);
+    const next = future[0];
+    if (next && next.dueDate <= cap) {
+      out.push({ start: 'now', end: { date: next.dueDate }, amountCents });
+    } else {
+      out.push({ start: 'now', end: { date: cap }, amountCents });
+      if (next) out.push({ start: cap, end: { date: next.dueDate }, amountCents: next.amountCents, trial: true });
+    }
   }
 
   const runs: { start: IsoDate; len: number; amountCents: number }[] = [];
