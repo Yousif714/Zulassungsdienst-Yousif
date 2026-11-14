@@ -173,13 +173,36 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 
 
 ## Offen aus 2b-3 Stripe-Umstellung (Task-Reviews, fürs Gesamtreview)
-- `withPlan` verliert einen Rest still, wenn `paidCents` größer als der Grundplan ist (Vertragskorrektur nach der Umstellung). Korrektur bei vorhandenem Plan sperren?
-- `checkAction`: `undefined` aus `lookup` zählt als gefunden, `null` wirft.
 - Echtbetrieb ohne Ergebnisdaten: Aktion steht auf „ausgeführt“ ohne Umstellung, sichtbar nur im Protokoll.
-- Eine fehlgeschlagene Umstellungs-Aktion blockiert eine neue, bis „Erneut versuchen“ gedrückt wird.
 - `endedAsAgreed` steht doppelt (`takeover/link.ts`, `detectors/subscriptions.ts`) → Helfer.
 - Reguläres Abo-Ende ohne `schedule`/`cancel_at` ergibt `endDate = null` und damit einen Fehlalarm. Im Stripe-Testmodus prüfen, ggf. `ended_at` nutzen.
 - Tag-31-Läufe erzeugen zusätzliche Lücken-Phasen (Beträge stimmen). Stripes Phasen-Obergrenze beachten.
 - Zurückziehen geht nur, bis der Zeitplan angelegt ist. Ein vor dem Start in Stripe gekündigter Zeitplan fällt der App nicht auf.
 
 - Umstellung (Task 13, M10): „Später“ bei Erinnerungen in `/nexus/umstellung` blendet nur lokal aus; nach dem Senden verschwindet das Sheet ohne sichtbare Bestätigung.
+
+## Offen aus 2b-3 (Gesamtreview)
+Erledigt im Final-Fix (14.11.): I1–I3, M1–M10 (Erinnerung trotz Stripe, Neu-Freigabe mit altem Plan, Vertrag mit Plan änderbar, Webhook-Ränder, Storno-Key cachte 500, `checkAction`, Lookup ohne Zeitplan, tote Link-Nachfragen, doppeltes Abo-Prädikat, Demo-Knopf/-Link im Echtbetrieb, Ende ohne Stripe-Enddatum).
+- Settings-Literal in `seed.ts` doppelt zu `DEFAULT_SETTINGS`; Migrationstest prüft nicht, dass vorhandene Einstellungswerte erhalten bleiben; Einstellungsformular lässt 0/Dezimal für die Erinnerungstage zu (Server lehnt ab).
+- `takeoverAction` bekommt `mode` getrennt, obwohl `plan.mode` ihn schon trägt.
+- Plural in Audit-Texten: „1 Umstellungen vorbereitet“, „Sammelfreigabe: 1 Aktionen“.
+- Abo-Ende nach der letzten bezahlten Rate, aber vor dem Planende (vom Mitglied gekündigt): Status „abgebrochen“ ist irreführend, obwohl nichts mehr offen ist (seit M10 nur noch, wenn doch etwas offen ist).
+- Umstellung bleibt dauerhaft „eingerichtet“, wenn das Abo beim ersten Abgleich schon gekündigt ist oder der Zeitplan vor dem Start storniert wurde: Hinweis „eingerichtet, aber kein Abo X Tage nach erstem Planstart“ (heute fängt nur `member_overdue` das auf).
+- Umstellung ohne `stripeCustomerId` (Altbestand/Fehler) wird nie verknüpft; Sperrgrund „Stripe-Lesezugang nicht verbunden“, wenn der Schreib-Schlüssel da ist, `stripe_nexus` aber nicht verbunden.
+- Preis-Hinweis bei Plan-Abos zeigt „bestätigt: unbekannt“; stattdessen die Plan-Preise nennen.
+- `double_payment` prüft ab `setUpAt`: Überweisung, die vor der Einrichtung gebucht, aber erst danach importiert wurde, bleibt ohne Hinweis (nur Guthaben im Ledger); ab Link-Versand prüfen.
+- `checkCompletion` vergleicht nur die Summe: gleiche Summe bei anderer Verteilung (Zahlung plus Vertragsänderung) wird mit alten Fälligkeiten eingerichtet.
+- Provider-Pfad: Phasen mit `o.now()`, `confirmedEndDate` mit `setUpAt` → um Mitternacht ein Tag Versatz möglich; Planende besser an der Umstellung speichern.
+- Provider-Pfad: Zurückziehen der alten „Plan geändert“-Umstellung während der Neu-Freigabe wird nicht gegengeprüft (neue Freigabe gilt trotzdem).
+- `ensureTakeoverDrafts` bricht offene Umstellungs-Entwürfe ab, sobald ein Sperrgrund kurz greift (z. B. Bank vorübergehend nicht verbunden); vorbereitete „Alle umstellen“ gehen still verloren.
+- Sammelfreigabe vieler Umstellungen läuft im selben Request nacheinander (je Kunde Suche + Anlage); bei Zeitlimit landen Reste in „Ausgang unklar“. Ausführung entkoppeln oder in Häppchen.
+- Demo-Umstellungen im Echtbetrieb (ohne Schreib-Schlüssel) liefern ihren Demo-Link in Erinnerungen und Link-Nachfragen (der Demo-Fallback ohne Umstellung ist seit M9 weg).
+- Demo-Briefing: 6 `rate_upcoming`-Hinweise und Entwürfe am selben Tag nicht gebündelt.
+- Stripe-Kundensuche ist nicht sofort konsistent (bis ~1 Min.): Zwei Versuche kurz nacheinander können zwei Kunden je Vertrag anlegen.
+- `scheduleParams` mit leeren Phasen wirft `TypeError` (heute durch `checkCompletion`/Sperrgrund ausgeschlossen); `encodeForm` lässt leere Arrays weg und schreibt `NaN`; Kundensuche entfernt Anführungszeichen still aus der Vertrags-ID.
+- `getActionProvider()` baut je Aufruf einen neuen Stripe-Schreiber (kein gemeinsamer Drosselzustand).
+- Spec 12 um `simulatedFor` (Ausführer je Aktion Demo/echt) ergänzen.
+- Zahlungsseite: `/zahlung/<ungültig>` antwortet 200 statt 404 (neutraler Inhalt, `noindex`); `rl:`-Zeilen in `job_runs` werden nie aufgeräumt, die Ratenbegrenzung schreibt bei einer Flut bis zu 20 Zeilen je abgewiesenem Aufruf; `x-forwarded-for` ist nur hinter Vercel verlässlich; jeder Seitenaufruf lädt den ganzen Stand.
+- `takeoverRows` rechnet `memberView` je Zeile doppelt.
+- Testlücken: Stripe-Zahlung nach der Umstellung tilgt die Plan-Raten (Status grün, kein Rückstand); aufgeteilte Zahlung bei `double_payment`; Erinnerungen nach `aborted` laufen wieder; Executor/Reducer mit vorhandenen Auto-Entwürfen; 401-Test im Writer schwach; `webhook-stripe.test.ts` „gleichzeitig“ prüft `>= 1` statt der exakten Anzahl; E2E echter Modus (Fixture-Stripe) für „Plan geändert“ → Neu-Freigabe ohne Link.
+- `member_overdue` bei laufender Stripe-Abbuchung erscheint sofort ab Fälligkeit (nur `nextStep` „In Stripe prüfen“); ggf. erst X Tage nach Fälligkeit bzw. bei `past_due` melden.
