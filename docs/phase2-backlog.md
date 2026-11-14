@@ -171,3 +171,13 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 - Testlücken: Überzahlung bei Verteilung (`invoiceIds`); Regel 1 mit `paidInLexware`-Treffer; umgekehrte Firmengrenze in `confirmPaymentMatch`; Kontext-NEXUS-Test nur `every`; CAMT-Rückbuchung = CSV-Schlüssel; mehrere `Stmt`; Rangfolge `expense` vs. `before_since`; Doppel-externalId im selben Event; E2E `toContainText('0')` zu schwach (`zulassung.spec.ts`); `briefing.test.ts` ggf. vakuum.
 - Prozess: Task 5 ohne TDD-Reihenfolge (RED nachträglich belegt).
 
+
+## Offen aus 2b-3 Stripe-Umstellung (Task-Reviews, fürs Gesamtreview)
+- `withPlan` verliert einen Rest still, wenn `paidCents` größer als der Grundplan ist (Vertragskorrektur nach der Umstellung). Korrektur bei vorhandenem Plan sperren?
+- `checkAction`: `undefined` aus `lookup` zählt als gefunden, `null` wirft.
+- Echtbetrieb ohne Ergebnisdaten: Aktion steht auf „ausgeführt“ ohne Umstellung, sichtbar nur im Protokoll.
+- Eine fehlgeschlagene Umstellungs-Aktion blockiert eine neue, bis „Erneut versuchen“ gedrückt wird.
+- `endedAsAgreed` steht doppelt (`takeover/link.ts`, `detectors/subscriptions.ts`) → Helfer.
+- Reguläres Abo-Ende ohne `schedule`/`cancel_at` ergibt `endDate = null` und damit einen Fehlalarm. Im Stripe-Testmodus prüfen, ggf. `ended_at` nutzen.
+- Tag-31-Läufe erzeugen zusätzliche Lücken-Phasen (Beträge stimmen). Stripes Phasen-Obergrenze beachten.
+- Zurückziehen geht nur, bis der Zeitplan angelegt ist. Ein vor dem Start in Stripe gekündigter Zeitplan fällt der App nicht auf.

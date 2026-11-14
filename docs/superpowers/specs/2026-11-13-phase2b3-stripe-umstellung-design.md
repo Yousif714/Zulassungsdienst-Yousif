@@ -100,3 +100,11 @@ Die Bestandsmitglieder haben in Lexware eine **einzige Gesamtrechnung** und übe
 - Gruppierung der Raten zu Abo-Phasen.
 - Texte der Nachrichten (Deutsch, kurz, du-Form wie bestehende Entwürfe).
 - Reihenfolge der Tasks.
+
+## 12. Entscheidungen während der Umsetzung (14.11.)
+- **Sofort-Phase für Überfälliges** endet bei min(nächste Fälligkeit 07:00 Berlin, heute + 14 Tage). Liegt die nächste Fälligkeit später, folgt eine Lücken-Phase (`trial`). Grund: Eine Monatsphase mit Anker „jetzt“ würde Stripe nach einem Monat erneut abbuchen (Tag 31, Abschluss vor 07:00, Lücken im Plan). Ohne künftige Rate endet der Plan heute + 14 Tage.
+- **Provider-Pflicht:** je Phase `billing_cycle_anchor: 'phase_start'` (nicht bei Lücken-Phasen) und `proration_behavior: 'none'`.
+- **Demo:** Ob eine Umstellung Demo ist, kommt nur aus dem Kontext (`isDemo` bzw. simulierter Ausführer), nie aus dem Ergebnis. Die Demo-Einrichtung wirkt nur in der Demo-App. Echtbetrieb ohne Ergebnisdaten → keine Umstellung, Protokoll „Umstellung ohne Ergebnisdaten – bitte prüfen“.
+- **Verknüpfen** nur, wenn `metadata.contractId` und Stripe-Kunde zur Umstellung passen, das Abo nicht gekündigt ist und an keiner anderen Umstellung hängt. Demo-Umstellungen verknüpfen nie echte Abos.
+- **Verwaiste Abos** (Vertrags-ID in Stripe, aber keine passende Umstellung) bekommen den Hinweis `takeover_subscription_orphan`.
+- **Umstellungs-ID = Aktions-ID** (auch in den Stripe-Metadaten). Pro Vertrag höchstens eine offene Umstellungs-Aktion (`openTakeoverAction`).
