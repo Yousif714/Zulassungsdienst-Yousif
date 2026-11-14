@@ -149,10 +149,9 @@ describe('createActionProvider: lookup (Prüfen bei unklarem Ausgang)', () => {
     expect(requests.map((r) => `${r.method} ${r.path}`)).toEqual(['GET /v1/subscription_schedules?customer=cus_test_1&limit=100']);
   });
 
-  test('Neu-Freigabe ohne Zeitplan → nur Kunde (Link bleibt, Webhook richtet ein)', async () => {
+  test('Neu-Freigabe ohne Zeitplan → nicht gefunden (fehlgeschlagen, „Erneut versuchen“ mit Planprüfung), kein neuer Link', async () => {
     const { provider } = setup();
-    expect(await provider.lookup('k', takeover({ stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1' })))
-      .toEqual({ output: { stripeCustomerId: 'cus_test_1', linkBase: LINK, paymentMethodId: 'pm_test_1' } });
+    expect(await provider.lookup('k', takeover({ stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1' }))).toBe(false);
   });
 
   test('ohne Schreiber: erst nach Demo-Ausführung gefunden', async () => {

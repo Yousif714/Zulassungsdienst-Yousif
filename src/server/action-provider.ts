@@ -53,8 +53,9 @@ export function createActionProvider(o: { writer: StripeWriter | null; linkBase:
       if (!stripeCustomerId) return false;
       const output: ActionOutput = { stripeCustomerId, linkBase };
       if (!p.paymentMethodId) return { output };
+      // Ohne Zeitplan ist die Neu-Freigabe nicht ausgeführt: „fehlgeschlagen“ statt eines neuen Links, den das Mitglied erneut nutzen müsste.
       const scheduleId = await w.findSchedule(stripeCustomerId, a.id);
-      return { output: { ...output, ...(scheduleId ? { scheduleId } : {}), paymentMethodId: p.paymentMethodId } };
+      return scheduleId ? { output: { ...output, scheduleId, paymentMethodId: p.paymentMethodId } } : false;
     },
   };
 }

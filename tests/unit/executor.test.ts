@@ -107,6 +107,20 @@ describe('Ausführer', () => {
     expect(p.executedCount('a-1:1')).toBe(1);
   });
 
+  test.each([
+    ['undefined', undefined, false],
+    ['null', null, false],
+    ['true', true, true],
+    ['Ergebnisdaten', { output: { x: '1' } }, true],
+  ])('Prüfen: Anbieter liefert %s', async (_n, looked, found) => {
+    const sink = makeSink(); await approved(sink);
+    await executeApproved(sink, new StubProvider('timeout'));
+    expect(status(sink)).toBe('uncertain');
+    const p: ActionProvider = { simulated: true, execute: async () => 'ok', lookup: async () => looked as never };
+    await checkAction(sink, p, 'a-1');
+    expect(status(sink)).toBe(found ? 'executed' : 'failed');
+  });
+
   test('Prüfen auf eine nicht-uncertain Aktion ändert nichts', async () => {
     const sink = makeSink(); await approved(sink);
     const p = new StubProvider('ok', true);

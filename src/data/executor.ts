@@ -61,8 +61,9 @@ export async function checkAction(sink: EventSink, provider: ActionProvider, id:
   const a = sink.current().actions.find((x) => x.id === id);
   if (!a || a.status !== 'uncertain') return;
   const looked = await provider.lookup(idempotencyKey(a), a);
-  const found = typeof looked === 'boolean' ? looked : true;
-  const output = typeof looked === 'object' ? looked.output : undefined;
+  // Nur `true` oder Ergebnisdaten gelten als gefunden; undefined/null (fehlerhafter Anbieter) nie.
+  const found = looked === true || (typeof looked === 'object' && looked !== null);
+  const output = typeof looked === 'object' && looked !== null ? looked.output : undefined;
   await sink.apply({ type: 'actionReconciled', id, found, ...(output ? { output } : {}), simulated: isSimulated(provider, a) });
 }
 
