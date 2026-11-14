@@ -133,7 +133,7 @@ export function deriveProposals(s: AppState): ContractProposal[] {
 
   const stripe = s.subscriptions
     .filter((x) => (isMembership(x.productName) || isMembership(x.invoiceLineText ?? '')) && x.status !== 'incomplete')
-    .filter((x) => x.contractId === null && !consumed.has(refKey({ connectionId: x.connectionId, externalId: x.externalId })))
+    .filter((x) => x.contractId === null && !x.metadataContractId && !consumed.has(refKey({ connectionId: x.connectionId, externalId: x.externalId })))
     .map(fromSubscription);
 
   const byContact = new Map<string, Invoice[]>();

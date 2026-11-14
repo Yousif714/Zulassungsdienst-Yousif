@@ -118,6 +118,7 @@ export function mapStripe(raw: StripeRaw): ImportBatch {
       endDate,
       installments: endDate ? billingPeriods(startDate, endDate) : (parseMembership(productName)?.months ?? null),
       status: mapStatus(s.status),
+      metadataContractId: typeof s.metadata?.contractId === 'string' && s.metadata.contractId ? s.metadata.contractId : null,
     };
   });
 

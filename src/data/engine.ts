@@ -25,6 +25,7 @@ import { formatEuro } from '@/domain/money';
 import { markTakeoverPlanChanged, recordTakeover, setUpTakeover, withdrawSentTakeover } from '@/domain/takeover/lifecycle';
 import { cancelTakeoverDraft, syncTakeoverDraft, takeoverCandidates } from '@/domain/takeover/prepare';
 import { currentTakeover } from '@/domain/takeover/status';
+import { syncTakeovers } from '@/domain/takeover/link';
 import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Company, Connection, ContractKind, Contact, Invoice, InvoiceReading, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
@@ -483,7 +484,12 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
         return next;
       });
       const { payments: p, invoices: i, subscriptions: a } = r.added;
-      const state = { ...r.state, connections };
+      const linked = syncTakeovers(r.state, todayBerlin(at), at);
+      const state = {
+        ...linked.state,
+        connections,
+        audit: [...linked.state.audit, ...linked.audit.map((text) => ({ at: at.toISOString(), actor: 'system' as const, text, isDemo: ctx.isDemo }))],
+      };
       return p + i + a > 0
         ? { state, audit: { actor: 'system', text: `Abgleich ${conn.label}: ${p} neue Zahlungen, ${i} Rechnungen, ${a} Abos` } }
         : { state };

@@ -47,3 +47,10 @@ test('nur EUR wird Zahlung', () => {
   expect(withRaw({ invoices: [...stripeRaw.invoices, usdInv] }).payments.some((p) => p.externalId === 'in_USD')).toBe(false);
   expect(withRaw({ refunds: [refund({ currency: 'usd' })] }).payments.some((p) => p.externalId === 're_X')).toBe(false);
 });
+
+test('metadata.contractId wird gelesen', () => {
+  const raw = { ...stripeRaw, subscriptions: [{ ...(stripeRaw.subscriptions[0] as object), id: 'sub_M', metadata: { contractId: 'c1' } }, { ...(stripeRaw.subscriptions[0] as object), id: 'sub_N' }] };
+  const m = mapStripe(raw);
+  expect(m.subscriptions.find((s) => s.externalId === 'sub_M')!.metadataContractId).toBe('c1');
+  expect(m.subscriptions.find((s) => s.externalId === 'sub_N')!.metadataContractId).toBeNull();
+});
