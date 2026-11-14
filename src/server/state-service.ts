@@ -196,7 +196,7 @@ export async function dispatchEvents(
     return { state: res.state, value: res.created };
   });
   const sink = serverSink(repos.state, r.state, ctx);
-  await executeApproved(sink, deps.provider);
+  await executeApproved(sink, deps.provider, undefined, deps.at);
   for (const e of events) if (e.type === 'checkAction') await checkAction(sink, deps.provider, e.id);
   return { state: sink.current(), created: r.value };
 }

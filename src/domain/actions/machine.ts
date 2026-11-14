@@ -53,6 +53,12 @@ export function cancelDraft(a: Action): Action {
   return { ...a, status: 'cancelled' };
 }
 
+/** Fehlgeschlagene Aktion endgültig aufgeben (z. B. Umstellung mit veraltetem Plan wird neu vorbereitet). */
+export function abandonFailed(a: Action): Action {
+  if (a.status !== 'failed') fail(a.status, 'cancelled');
+  return { ...a, status: 'cancelled' };
+}
+
 export function startExecution(a: Action): Action {
   if (a.status !== 'approved') fail(a.status, 'executing');
   return { ...a, status: 'executing' };

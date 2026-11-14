@@ -333,3 +333,65 @@ describe('createCheckoutForToken', () => {
     expect(requests).toEqual([]);
   });
 });
+
+describe('Neu-Freigabe mit veraltetem Plan (I2)', () => {
+  const SECOND = 'stripe-takeover-c1-2';
+  /** Plan geändert → Neu-Freigabe mit hinterlegtem Zahlungsmittel (Versuch 2). */
+  const replanned = () => applyAt(transferredMeanwhile(), [
+    { type: 'takeoverPlanChanged', takeoverId: TAKEOVER_ID, paymentMethodId: 'pm_test_1' },
+    { type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' },
+  ]);
+  /** Weitere Überweisung des Mitglieds nach der Freigabe. */
+  const paidAgain = (s: AppState): AppState => {
+    const p = tx({ id: 'p-c1-3', externalId: 'x-p-c1-3', bookedOn: '2026-11-13', amountCents: 20000 });
+    return { ...s, payments: [...s.payments, p], allocations: [...s.allocations, { paymentId: p.id, contractId: 'c1', amountCents: 20000, method: 'manual' }] };
+  };
+  const actionOf = (s: AppState, id: string) => s.actions.find((a) => a.id === id)!;
+
+  test('fehlgeschlagen → Bankzahlung → „Erneut versuchen“: kein Stripe-Aufruf, failed mit Grund; Neu-Vorbereitung legt frischen Versuch an', async () => {
+    const failed = applyAt(replanned(), [...executeEvents(SECOND, 1).slice(0, 2), { type: 'actionExecuted', id: SECOND, result: 'error', error: 'Stripe: HTTP 500' }]);
+    expect(actionOf(failed, SECOND).status).toBe('failed');
+    const { repos, writer, requests } = await setup(paidAgain(failed));
+    const provider = createActionProvider({ writer, linkBase: 'https://nexus.example.de', now: () => T0 });
+    await dispatchEvents(repos, [{ type: 'retryAction', id: SECOND }], { at: () => T0, provider });
+    expect(requests).toEqual([]);
+    const s1 = await loadState(repos, T0);
+    expect(actionOf(s1, SECOND)).toMatchObject({ status: 'failed', error: 'Plan hat sich geändert – neu vorbereiten' });
+    expect(s1.takeovers.find((t) => t.id === SECOND)).toBeUndefined();
+
+    await dispatchEvents(repos, [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }], { at: () => T0, provider });
+    const s2 = await loadState(repos, T0);
+    expect(actionOf(s2, SECOND).status).toBe('cancelled');
+    const third = actionOf(s2, 'stripe-takeover-c1-3');
+    expect(third.status).toBe('draft');
+    expect(third.payload.openCents).toBe(Number(actionOf(s1, SECOND).payload.openCents) - 20000);
+    expect(third.payload).toMatchObject({ paymentMethodId: 'pm_test_1', stripeCustomerId: 'cus_test_1' });
+  });
+
+  test('liegengebliebene freigegebene Aktion → später ausgeführt mit veraltetem Plan: kein Zeitplan, failed', async () => {
+    const approved = applyAt(replanned(), [executeEvents(SECOND, 1)[0]]);
+    expect(actionOf(approved, SECOND).status).toBe('approved');
+    const { repos, writer, requests } = await setup(paidAgain(approved));
+    const provider = createActionProvider({ writer, linkBase: 'https://nexus.example.de', now: () => T0 });
+    await dispatchEvents(repos, [], { at: () => T0, provider });
+    expect(schedules(requests)).toHaveLength(0);
+    expect(requests).toEqual([]);
+    expect(actionOf(await loadState(repos, T0), SECOND)).toMatchObject({ status: 'failed', error: 'Plan hat sich geändert – neu vorbereiten' });
+  });
+
+  test('fehlgeschlagen mit aktuellem Plan → Vorbereiten ändert nichts (Erneut versuchen bleibt der Weg)', () => {
+    const failed = applyAt(replanned(), [...executeEvents(SECOND, 1).slice(0, 2), { type: 'actionExecuted', id: SECOND, result: 'error', error: 'x' }]);
+    const s = applyAt(failed, [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }]);
+    expect(actionOf(s, SECOND).status).toBe('failed');
+    expect(s.actions.some((a) => a.id === 'stripe-takeover-c1-3')).toBe(false);
+  });
+
+  test('aktueller Plan → Neu-Freigabe legt Zeitplan an', async () => {
+    const approved = applyAt(replanned(), [executeEvents(SECOND, 1)[0]]);
+    const { repos, writer, requests } = await setup(approved);
+    const provider = createActionProvider({ writer, linkBase: 'https://nexus.example.de', now: () => T0 });
+    await dispatchEvents(repos, [], { at: () => T0, provider });
+    expect(schedules(requests)).toHaveLength(1);
+    expect((await loadState(repos, T0)).takeovers.find((t) => t.id === SECOND)?.status).toBe('set_up');
+  });
+});

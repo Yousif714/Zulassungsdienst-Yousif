@@ -1,5 +1,7 @@
 import { EXECUTE_TIMEOUT_MS, STALE_EXECUTING_MS, idempotencyKey, isSimulated, type ActionOutput, type ActionProvider, type ExecuteOutcome } from '@/domain/actions/machine';
+import { now } from '@/domain/clock';
 import type { StoreEvent } from '@/domain/events';
+import { TAKEOVER_PLAN_STALE, takeoverActionCurrent } from '@/domain/takeover/prepare';
 import type { AppState } from '@/domain/types';
 
 /**
@@ -34,14 +36,21 @@ async function runWithTimeout(run: () => Promise<ExecuteOutcome>, ms: number): P
   }
 }
 
-/** Führt jede freigegebene Aktion genau einmal aus (Schlüssel `aktion:version`). Bei Zeitüberschreitung: Ausgang unklar, nie automatisch erneut senden. */
-export async function executeApproved(sink: EventSink, provider: ActionProvider, timeoutMs = EXECUTE_TIMEOUT_MS): Promise<void> {
+/**
+ * Führt jede freigegebene Aktion genau einmal aus (Schlüssel `aktion:version`). Bei Zeitüberschreitung: Ausgang unklar, nie automatisch erneut senden.
+ * Umstellungen werden vorher gegen den aktuellen Stand geprüft: veralteter Plan → fehlgeschlagen, ohne Anbieter-Aufruf.
+ */
+export async function executeApproved(sink: EventSink, provider: ActionProvider, timeoutMs = EXECUTE_TIMEOUT_MS, at: () => Date = now): Promise<void> {
   for (const id of sink.current().actions.filter((a) => a.status === 'approved').map((a) => a.id)) {
     if (sink.current().actions.find((a) => a.id === id)?.status !== 'approved') continue;
     // Nur wer die Aktion selbst gestartet hat, führt aus: sonst könnten zwei Geräte dieselbe Freigabe doppelt senden.
     if (!(await claimStart(sink, id))) continue;
     const a = sink.current().actions.find((x) => x.id === id);
     if (!a || a.status !== 'executing') continue;
+    if (a.type === 'stripe_takeover' && !takeoverActionCurrent(sink.current(), a, at())) {
+      await sink.apply({ type: 'actionExecuted', id, result: 'error', error: TAKEOVER_PLAN_STALE, simulated: isSimulated(provider, a) });
+      continue;
+    }
     const { result, output, error } = await runWithTimeout(() => provider.execute(a, idempotencyKey(a)), timeoutMs);
     await sink.apply({ type: 'actionExecuted', id, result, ...(error ? { error } : {}), ...(output ? { output } : {}), simulated: isSimulated(provider, a) });
   }
