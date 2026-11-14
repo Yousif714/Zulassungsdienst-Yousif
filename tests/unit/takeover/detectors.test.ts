@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { runDetectors } from '@/domain/detectors';
 import { detectTakeover, takeoverRef, unusedLinks, upcomingRates } from '@/domain/detectors/takeover';
+import { detectMemberOverdue } from '@/domain/detectors/members';
+import { reminderBlockedReason } from '@/domain/takeover/status';
 import type { Action, AppState, Installment, Insight, MemberContract, Payment, StripeTakeover, Subscription } from '@/domain/types';
 import { base, stateWith } from '../helpers';
 
@@ -181,4 +183,23 @@ test('runDetectors enthält die Umstellungs-Hinweise', () => {
   const s = world();
   const fresh = { ...s, connections: s.connections.map((c) => ({ ...c, lastSuccessAt: new Date(now.getTime() - 60_000).toISOString() })) };
   expect(keys(runDetectors(fresh, now))).toContain('upcoming:c1:2026-12-01');
+});
+
+describe('Rückstand bei laufender Stripe-Abbuchung (I1)', () => {
+  test('member_overdue bei set_up → „In Stripe prüfen“ statt Erinnerung', () => {
+    const s = world({ contracts: [viaStripe], takeovers: [setUp] });
+    const i = detectMemberOverdue(s, at('2027-01-05T10:00:00Z')).find((x) => x.dedupeKey === 'overdue:c1')!;
+    expect(i.nextStep).toBe('In Stripe prüfen');
+    expect(i.body).toContain('Raten laufen über Stripe');
+  });
+  test('ohne Umstellung bleibt „Erinnerung vorbereiten“', () => {
+    const i = detectMemberOverdue(world(), at('2026-11-12T10:00:00Z')).find((x) => x.dedupeKey === 'overdue:c1')!;
+    expect(i.nextStep).toBe('Erinnerung vorbereiten');
+  });
+  test('reminderBlockedReason nur bei set_up/active', () => {
+    expect(reminderBlockedReason(world({ takeovers: [setUp] }), 'c1')).toBe('Raten laufen über Stripe – keine Erinnerung nötig.');
+    expect(reminderBlockedReason(world({ takeovers: [takeover({ status: 'active' })] }), 'c1')).not.toBeNull();
+    expect(reminderBlockedReason(world({ takeovers: [takeover()] }), 'c1')).toBeNull();
+    expect(reminderBlockedReason(world(), 'c1')).toBeNull();
+  });
 });

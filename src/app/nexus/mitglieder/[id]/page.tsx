@@ -21,7 +21,7 @@ import { contractSources, notConnected } from '@/domain/connections';
 import { memberView } from '@/domain/detectors';
 import { contractOnHold, sourceInvoiceOf } from '@/domain/ledger/contracts';
 import { formatEuro } from '@/domain/money';
-import { TAKEOVER_STATUS_LABEL, runsViaStripe, takeoverStatus } from '@/domain/takeover/status';
+import { TAKEOVER_STATUS_LABEL, reminderBlockedReason, runsViaStripe, takeoverStatus } from '@/domain/takeover/status';
 import type { Action, InstallmentState, IsoDate } from '@/domain/types';
 
 type Tone = 'freundlich' | 'bestimmt';
@@ -104,6 +104,7 @@ export default function MemberPage() {
 
   const tStatus = takeoverStatus(state, id);
   const viaStripe = runsViaStripe(state, id);
+  const noReminder = reminderBlockedReason(state, id);
   const showSheet = open || !!stored;
   const missing = notConnected(contractSources(contract), state.connections);
   const onHold = contractOnHold(state, contract);
@@ -136,9 +137,11 @@ export default function MemberPage() {
         </ol>
       </section>}
 
+      {noReminder && <p className="note-card" data-testid="reminder-via-stripe">{noReminder}</p>}
+
       {(status.arrearsCents > 0 || stored || contract.billing === 'legacy') && (
         <div className="member-actions">
-          {!missing && status.arrearsCents > 0 && !showSheet && (
+          {!missing && !noReminder && status.arrearsCents > 0 && !showSheet && (
             <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>Erinnerung vorbereiten</button>
           )}
           {contract.billing === 'legacy' && (

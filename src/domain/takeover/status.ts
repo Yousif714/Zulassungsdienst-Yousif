@@ -56,6 +56,11 @@ export function runsViaStripe(s: AppState, contractId: string): boolean {
   return st === 'set_up' || st === 'active';
 }
 
+/** Keine Zahlungserinnerung, solange die Raten über Stripe laufen (sonst droht Doppelzahlung); null = Erinnerung erlaubt. */
+export function reminderBlockedReason(s: AppState, contractId: string): string | null {
+  return runsViaStripe(s, contractId) ? 'Raten laufen über Stripe – keine Erinnerung nötig.' : null;
+}
+
 /** Grund, warum „Auf Stripe umstellen“ gesperrt ist; null = erlaubt. Ein offener Entwurf sperrt nicht. */
 export function takeoverBlockReason(s: AppState, contractId: string, today: IsoDate): string | null {
   const v = memberView(s, contractId, today);

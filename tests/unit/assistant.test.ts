@@ -222,3 +222,19 @@ describe('In-App-Kanal (angemeldeter Inhaber) und isDemo', () => {
     expect(draftLink(st, 'gibt-es-nicht')).toBeNull();
   });
 });
+
+describe('Erinnerung bei laufender Stripe-Abbuchung (I1)', () => {
+  test('„Erinnerung“ bei set_up mit Rückstand → keine Aktion, Hinweis auf Stripe', async () => {
+    const contract = s.contracts.find((c) => c.id === 'mc-kaya')!;
+    const takeover: AppState['takeovers'][number] = {
+      id: 'stripe-takeover-mc-kaya-1', contractId: contract.id, contactId: contract.contactId, actionId: 'stripe-takeover-mc-kaya-1', actionVersion: 1,
+      status: 'set_up', token: 'tok', link: 'https://app.example.de/zahlung/tok', mode: 'first_rate', rates: [], openCents: 0, stripeCustomerId: 'cus_test_1',
+      paymentMethodId: 'pm_test_1', scheduleId: 'sub_sched_test_1', subscriptionExternalId: null, isDemo: false, linkSentAt: '2026-11-05T08:00:00Z', setUpAt: '2026-11-06T08:00:00Z',
+    };
+    const st = { ...s, takeovers: [takeover] };
+    const r = await handleInbound(st, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(st, NOW), WA);
+    expect(r.events.some((e) => e.type === 'createAction')).toBe(false);
+    expect(r.reply!.text).toBe('Mehmet Kaya: Raten laufen über Stripe – keine Erinnerung nötig.');
+    expect(r.reply!.buttons).toBeUndefined();
+  });
+});

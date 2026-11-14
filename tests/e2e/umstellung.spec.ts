@@ -78,6 +78,9 @@ test('Umstellung im Demo-Modus: vorbereiten, freigeben, Link kopieren, einrichte
   await page.goto(`/nexus/mitglieder/${KAYA}`);
   await expect(page.getByText('läuft über Stripe')).toBeVisible();
   await expect(page.getByRole('link', { name: /Umstellung.*eingerichtet/ })).toBeVisible();
+  // Raten laufen über Stripe: keine Zahlungserinnerung (Doppelzahlung), stattdessen sichtbarer Grund.
+  await expect(page.getByRole('button', { name: 'Erinnerung vorbereiten' })).toHaveCount(0);
+  await expect(page.getByTestId('reminder-via-stripe')).toHaveText('Raten laufen über Stripe – keine Erinnerung nötig.');
 });
 
 test('Alle umstellen und Sammelfreigabe', async ({ page }) => {
