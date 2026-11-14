@@ -23,3 +23,21 @@ describe('TakeoverCard: Demo-Einrichtung (M8)', () => {
   test('Demo-App zeigt „Zahlungsmittel hinterlegt (Demo)“', () => expect(render('demo')).toContain('Zahlungsmittel hinterlegt (Demo)'));
   test('Echtbetrieb zeigt den Knopf auch bei Demo-Umstellung nicht', () => expect(render('real')).not.toContain('Zahlungsmittel hinterlegt (Demo)'));
 });
+
+describe('TakeoverCard: fehlgeschlagen mit veraltetem Plan (I2)', () => {
+  const failed = (error: string): AppState['actions'][number] => ({
+    id: 'stripe-takeover-c1-2', type: 'stripe_takeover', company: 'nexus', title: 'Umstellung auf Stripe: Erika Muster', version: 1, status: 'failed', error,
+    createdAt: '2026-11-13T09:00:00Z', isDemo: false, payload: { contractId: 'c1', mode: 'first_rate', rates: [], openCents: 0 },
+  });
+  const renderWith = (error: string) => {
+    store.state = stateWith({ contracts: [base], actions: [failed(error)] });
+    store.mode = 'real';
+    return renderToStaticMarkup(createElement(TakeoverCard, { contractId: 'c1', name: 'Erika Muster', mode: 'first_rate', blockReason: null }));
+  };
+  test('Plan geändert → „Neu vorbereiten“ statt „Erneut versuchen“', () => {
+    const html = renderWith('Plan hat sich geändert – neu vorbereiten');
+    expect(html).toContain('>Neu vorbereiten<');
+    expect(html).not.toContain('Erneut versuchen');
+  });
+  test('anderer Fehler → „Erneut versuchen“', () => expect(renderWith('Stripe: HTTP 500')).toContain('Erneut versuchen'));
+});

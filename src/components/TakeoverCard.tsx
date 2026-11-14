@@ -6,6 +6,7 @@ import { useAppStore } from '@/data/store';
 import { formatIsoDe } from '@/domain/clock';
 import { formatEuro } from '@/domain/money';
 import { currentTakeover, openTakeoverAction, takeoverStatus, TAKEOVER_STATUS_LABEL } from '@/domain/takeover/status';
+import { TAKEOVER_PLAN_STALE } from '@/domain/takeover/prepare';
 import { shareText } from '@/domain/takeover/texts';
 import type { Installment, MemberContract } from '@/domain/types';
 
@@ -90,7 +91,9 @@ export function TakeoverCard({ contractId, name, mode, blockReason }: { contract
           {running && <ListRow key="running" role="status" title="Link wird erstellt …" />}
           {failed && (
             <ListRow key="failed" role="status" leading={<IconWarning />} title={open.status === 'failed' ? `Fehlgeschlagen${open.error ? `: ${open.error}` : ''}` : 'Ausgang unklar'}
-              accessory={open.status === 'failed'
+              accessory={open.status === 'failed' && open.error === TAKEOVER_PLAN_STALE
+                ? <button type="button" className="btn btn-secondary btn-small" onClick={prepare}>Neu vorbereiten</button>
+                : open.status === 'failed'
                 ? <button type="button" className="btn btn-secondary btn-small" onClick={() => dispatch({ type: 'retryAction', id: open.id })}>Erneut versuchen</button>
                 : <button type="button" className="btn btn-secondary btn-small" onClick={() => dispatch({ type: 'checkAction', id: open.id })}>Prüfen</button>} />
           )}
