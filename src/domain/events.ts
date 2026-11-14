@@ -1,7 +1,7 @@
 import type { ImportBatch, ImportedPayment } from './import/batch';
 import type { ContractDraft } from './import/contract-draft';
 import type { PortalListEntry } from './import/portal-list';
-import type { Action, AssistantMessage, Call, Connection, ConnectionId, InvoiceReading, IsoDate, Job, Settings } from './types';
+import type { Action, AssistantMessage, Call, Connection, ConnectionId, InvoiceReading, IsoDate, Job, MemberContract, Settings } from './types';
 import type { ActionOutput } from './actions/machine';
 
 /** Neue Lesung vom Server; `error` gesetzt = Fehlversuch. Ergebnis und Vertrag bestimmt der Reducer. */
@@ -57,4 +57,17 @@ export type StoreEvent =
   | { type: 'ignorePortalMember'; externalId: string }
   /** „Wieder einblenden“: macht „Kein zahlendes Mitglied“ rückgängig (idempotent). */
   | { type: 'unignorePortalMember'; externalId: string }
+  /** Umstellung auf Stripe: Entwurf anlegen bzw. als neue Version fortschreiben (Raten rechnet der Reducer aus dem Stand). */
+  | { type: 'prepareTakeover'; contractId: string; mode: MemberContract['catchUpMode'] }
+  /** „Alle umstellen“: je Mitgliedschaft ohne Sperrgrund und ohne offene Umstellung, Modus aus dem Vertrag. */
+  | { type: 'prepareAllTakeovers' }
+  | { type: 'withdrawTakeover'; contractId: string }
+  /** Sammelfreigabe (nur App), 1–100 Einträge. */
+  | { type: 'approveActions'; items: { id: string; version: number }[] }
+  /** „Zahlungsmittel hinterlegt (Demo)“: nur für Demo-Umstellungen. */
+  | { type: 'simulateTakeoverSetUp'; contractId: string }
+  /** Nur Server (Webhook): Zahlungsmittel hinterlegt, Zeitplan angelegt. */
+  | { type: 'takeoverSetUp'; takeoverId: string; scheduleId: string; paymentMethodId: string }
+  /** Nur Server (Webhook): Plan weicht ab, kein Zeitplan. */
+  | { type: 'takeoverPlanChanged'; takeoverId: string; paymentMethodId: string }
   | { type: 'resetDemo' };
