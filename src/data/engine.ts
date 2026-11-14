@@ -620,8 +620,9 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
         // Plan einer beendeten Umstellung passt nicht mehr zum neuen Gesamtbetrag: weg damit, der Vertrag gilt wieder ganz.
         const contracts = s.contracts.map((x) => {
           if (x.id !== c.id) return x;
-          const { plan: _plan, ...rest } = x;
-          return { ...rest, totalCents, installments, installmentCents, dueDay, startDate, catchUpMode, readBy };
+          const next: MemberContract = { ...x, totalCents, installments, installmentCents, dueDay, startDate, catchUpMode, readBy };
+          delete next.plan;
+          return next;
         });
         return owner({ state: { ...s, contracts }, text: `Ratenplan korrigiert: Rechnung ${c.readBy.invoiceNumber}, ${installments} × ${formatEuro(installmentCents)}` });
       }
