@@ -1,7 +1,7 @@
 import type { MemberStatus } from './ledger/status';
 import type { TakeoverPlan } from './ledger/takeover';
 import { takeoverActionId } from './takeover/status';
-import type { Action, Contact, Installment, IsoDate, Job, MemberContract, Message, StripeTakeover } from './types';
+import type { Action, Contact, IsoDate, Job, MemberContract, Message, StripeTakeover } from './types';
 
 // Eine Erinnerung je Rückstandsstand: kommt eine neue überfällige Rate dazu, gibt es eine neue Aktion.
 export const reminderActionId = (contractId: string, oldestUnpaidDue: IsoDate | null): string =>
@@ -94,25 +94,6 @@ export function jobInvoiceDraftAction(i: {
     company: 'zulassung',
     title: `Rechnungsentwurf für ${i.contactName}`,
     payload: { jobId: i.job.id, contactId: i.job.contactId, amountCents: i.restCents, text: `${i.job.service} ${i.plate ?? ''}`.trim() },
-    version: 1,
-    status: 'draft',
-    createdAt: i.at.toISOString(),
-    isDemo: i.isDemo,
-  };
-}
-
-// Ein Stripe-Plan pro Vertrag.
-export const stripePlanActionId = (contractId: string): string => `stripe-plan-${contractId}`;
-
-export function stripePlanAction(i: {
-  contract: MemberContract; name: string; mode: MemberContract['catchUpMode']; rates: Installment[]; at: Date; isDemo: boolean;
-}): Action {
-  return {
-    id: stripePlanActionId(i.contract.id),
-    type: 'create_invoice_draft',
-    company: 'nexus',
-    title: `Stripe-Ratenplan für ${i.name}`,
-    payload: { contractId: i.contract.id, contactId: i.contract.contactId, mode: i.mode, rates: i.rates },
     version: 1,
     status: 'draft',
     createdAt: i.at.toISOString(),

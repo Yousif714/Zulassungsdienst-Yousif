@@ -21,6 +21,7 @@ import { contractSources, notConnected } from '@/domain/connections';
 import { memberView } from '@/domain/detectors';
 import { contractOnHold, sourceInvoiceOf } from '@/domain/ledger/contracts';
 import { formatEuro } from '@/domain/money';
+import { TAKEOVER_STATUS_LABEL, runsViaStripe, takeoverStatus } from '@/domain/takeover/status';
 import type { Action, InstallmentState, IsoDate } from '@/domain/types';
 
 type Tone = 'freundlich' | 'bestimmt';
@@ -101,6 +102,8 @@ export default function MemberPage() {
     dispatch({ type: 'editAction', id: a.id, payload: { ...a.payload, text } });
   };
 
+  const tStatus = takeoverStatus(state, id);
+  const viaStripe = runsViaStripe(state, id);
   const showSheet = open || !!stored;
   const missing = notConnected(contractSources(contract), state.connections);
   const onHold = contractOnHold(state, contract);
@@ -157,6 +160,14 @@ export default function MemberPage() {
             <div className="action-sheet action-sheet-loading" role="status">Entwurf wird vorbereitet …</div>
           )}
         </div>
+      )}
+
+      {(tStatus || contract.billing === 'legacy') && (
+        <ListGroup title="Umstellung auf Stripe" testId="takeover-link">
+          <ListRow key="takeover" href={`/nexus/mitglieder/${id}/uebernahme`} testId="takeover-row"
+            title={`Umstellung: ${tStatus ? TAKEOVER_STATUS_LABEL[tStatus] : 'nicht gestartet'}`}
+            value={viaStripe ? <span className="chip">läuft über Stripe</span> : undefined} />
+        </ListGroup>
       )}
 
       <ListGroup title="Raten" testId="installments">

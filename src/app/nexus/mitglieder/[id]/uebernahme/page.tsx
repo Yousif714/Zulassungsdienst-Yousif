@@ -11,14 +11,15 @@ import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
 import { CATCH_UP_OPTIONS } from '@/components/ProposalCard';
 import { Segmented } from '@/components/Segmented';
+import { TakeoverCard } from '@/components/TakeoverCard';
 import { useAppStore } from '@/data/store';
-import { stripePlanAction, stripePlanActionId } from '@/domain/action-factory';
 import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
 import { contractSources, notConnected } from '@/domain/connections';
 import { memberView } from '@/domain/detectors';
 import { planTakeover } from '@/domain/ledger/takeover';
+import { currentTakeover, openTakeoverAction, takeoverBlockReason } from '@/domain/takeover/status';
 import { formatEuro } from '@/domain/money';
-import type { Installment, MemberContract } from '@/domain/types';
+import type { MemberContract } from '@/domain/types';
 
 type Mode = MemberContract['catchUpMode'];
 
@@ -45,10 +46,7 @@ export default function TakeoverPage() {
   const { contact, states } = memberView(state, id, today);
   const name = contact?.name ?? 'Unbekannt';
   const plan = planTakeover(states, today, mode);
-  // Ein Stripe-Plan pro Vertrag: ein vorhandener Entwurf bleibt maßgeblich, egal welcher Modus gerade gewählt ist.
-  const actionId = stripePlanActionId(id);
-  const prepared = state.actions.find((a) => a.id === actionId);
-  const preparedPlan = prepared?.payload as { mode: Mode; rates: Installment[] } | undefined;
+  const draft = openTakeoverAction(state, id);
   const history = state.allocations
     .filter((a) => a.contractId === id)
     .flatMap((a) => {
@@ -59,9 +57,10 @@ export default function TakeoverPage() {
 
   const missing = notConnected(contractSources(contract), state.connections);
 
-  const prepare = () => {
-    const action = stripePlanAction({ contract, name, mode, rates: plan.rates, at, isDemo: appMode === 'demo' });
-    dispatch({ type: 'createAction', action });
+  // Ein offener Entwurf folgt dem gewählten Modus (neue Version, Raten rechnet der Reducer).
+  const changeMode = (m: Mode) => {
+    setMode(m);
+    if (draft?.status === 'draft') dispatch({ type: 'prepareTakeover', contractId: id, mode: m });
   };
 
   return (
@@ -102,7 +101,7 @@ export default function TakeoverPage() {
 
       <section className="list-group" aria-labelledby="mode-title">
         <h2 id="mode-title" className="list-group-title">Rückstand</h2>
-        <Segmented name="catch-up" legend="Wie wird der Rückstand nachgezahlt?" value={mode} onChange={setMode} options={MODE_OPTIONS} />
+        <Segmented name="catch-up" legend="Wie wird der Rückstand nachgezahlt?" value={mode} onChange={changeMode} options={MODE_OPTIONS} />
       </section>
 
       <ListGroup title="Neue Raten" testId="rate-preview">
@@ -121,21 +120,8 @@ export default function TakeoverPage() {
         </span>
       </p>
 
-      {contract.billing === 'legacy' && (prepared || plan.rates.length > 0) && (
-        <div className="member-actions">
-          <button type="button" className="btn btn-primary" onClick={prepare} disabled={!!prepared}>Stripe-Plan vorbereiten (Demo)</button>
-          <div role="status" className="confirm-line" data-testid="plan-status">
-            {prepared && preparedPlan && (
-              <>
-                Entwurf angelegt: {prepared.title} · {MODE_OPTIONS.find((o) => o.value === preparedPlan.mode)?.label} ·{' '}
-                {preparedPlan.rates.map((r, i) => (
-                  <Fragment key={r.no}>{i > 0 && ' · '}<span className="amount">{formatEuro(r.amountCents)}</span></Fragment>
-                ))}{' '}
-                <DemoBadge />
-              </>
-            )}
-          </div>
-        </div>
+      {(contract.billing === 'legacy' || currentTakeover(state, id)) && (
+        <TakeoverCard contractId={id} name={name} mode={mode} blockReason={takeoverBlockReason(state, id, today)} />
       )}
         </>
       )}

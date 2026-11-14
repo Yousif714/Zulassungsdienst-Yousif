@@ -11,6 +11,7 @@ import { formatIsoDe, now, todayBerlin } from '@/domain/clock';
 import { areaStale } from '@/domain/freshness';
 import { nexusReceivables } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
+import { runsViaStripe } from '@/domain/takeover/status';
 
 export default function OffenPage() {
   const { state } = useAppStore();
@@ -35,7 +36,7 @@ export default function OffenPage() {
             {items.length === 0 && <ListRow title="Nichts offen." />}
             {items.map((r) => (
               <ListRow key={r.key} testId={`receivable-${r.key}`} href={r.kind === 'contract' ? `/nexus/mitglieder/${r.id}` : undefined}
-                leading={<TrafficDot traffic={r.traffic} />} title={r.name}
+                leading={<TrafficDot traffic={r.traffic} />} title={<>{r.name}{r.kind === 'contract' && runsViaStripe(state, r.id) && <> <span className="chip">läuft über Stripe</span></>}</>}
                 subtitle={`${r.source} · ${r.label} · ${r.daysOverdue > 0 ? `fällig seit ${formatIsoDe(r.dueDate)}` : `fällig am ${formatIsoDe(r.dueDate)}`}`}
                 value={<span className="amount">{formatEuro(r.amountCents)}</span>} />
             ))}

@@ -1,9 +1,11 @@
 import { createHmac } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 
+import { createDemoState } from '@/data/seed';
 import { linkSentState } from '../fixtures/takeover-state';
 import { stripeWriteRoutes } from '../fixtures/stripe-write';
 
+const KAYA = createDemoState().contracts.find((c) => c.contactId === 'm-kaya')!.id;
 const SECRET = 'whsec_e2e_nur_test';
 const randomIp = () => `198.51.100.${Math.floor(Math.random() * 250) + 1}`;
 
@@ -53,4 +55,60 @@ test('Fixture-Stripe: Plan sehen, weiter zu Stripe, Webhook richtet ein', async 
 test('GET weiter legt keine Sitzung an', async ({ request }) => {
   const res = await request.get(`/zahlung/${'0'.repeat(64)}/weiter`, { headers: { 'x-forwarded-for': randomIp() } });
   expect(res.status()).toBe(405);
+});
+
+// Demo-Teil: reiner Browser-Stand (localStorage), kein Server-Zustand; Demo-Uhr 12.11.2026.
+test('Umstellung im Demo-Modus: vorbereiten, freigeben, Link kopieren, einrichten', async ({ page }) => {
+  await page.goto(`/nexus/mitglieder/${KAYA}/uebernahme?reset=1`);
+  await page.getByRole('button', { name: 'Auf Stripe umstellen' }).click();
+  const chip = page.getByTestId('takeover-status');
+  await expect(chip).toHaveText('vorbereitet');
+  await page.getByRole('button', { name: 'Freigeben' }).click();
+  await expect(chip).toHaveText('Link verschickt');
+  const share = page.getByRole('textbox', { name: 'Nachricht an das Mitglied' });
+  await expect(share).toHaveValue(/\/zahlung\/demo-/);
+  await expect(share).toHaveValue(/^Hallo Mehmet, [\s\S]*Dauerauftrag/);
+  await expect(share).toHaveValue(/http:\/\/localhost:3100\/zahlung\/demo-/);
+  await page.getByRole('button', { name: 'Kopieren' }).click();
+  await expect(page.getByText('Kopiert', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('/zahlung/demo-');
+  await page.getByRole('button', { name: 'Zahlungsmittel hinterlegt (Demo)' }).click();
+  await expect(chip).toHaveText('eingerichtet');
+  await expect(page.getByText('Raten laufen über Stripe')).toBeVisible();
+  await page.goto(`/nexus/mitglieder/${KAYA}`);
+  await expect(page.getByText('läuft über Stripe')).toBeVisible();
+  await expect(page.getByRole('link', { name: /Umstellung: eingerichtet/ })).toBeVisible();
+});
+
+test('Alle umstellen und Sammelfreigabe', async ({ page }) => {
+  await page.goto('/nexus/umstellung?reset=1');
+  const all = page.getByRole('button', { name: /^Alle umstellen \(\d+\)$/ });
+  const n = Number(/\((\d+)\)/.exec((await all.textContent()) ?? '')![1]);
+  expect(n).toBeGreaterThan(0);
+  await all.click();
+  await expect(page.getByTestId('takeover-rows').getByText('vorbereitet', { exact: true })).toHaveCount(n);
+  await page.getByRole('button', { name: `Alle freigeben (${n})`, exact: true }).first().click();
+  await expect(page.getByTestId('takeover-rows').getByText('Link verschickt', { exact: true })).toHaveCount(n);
+  await expect(page.getByTestId('takeover-rows').getByText('vorbereitet', { exact: true })).toHaveCount(0);
+});
+
+test('Zurückziehen macht den Link ungültig', async ({ page }) => {
+  await page.goto(`/nexus/mitglieder/${KAYA}/uebernahme?reset=1`);
+  await page.getByRole('button', { name: 'Auf Stripe umstellen' }).click();
+  await page.getByRole('button', { name: 'Freigeben' }).click();
+  await expect(page.getByTestId('takeover-status')).toHaveText('Link verschickt');
+  await page.getByRole('button', { name: 'Zurückziehen' }).click();
+  await expect(page.getByTestId('takeover-status')).toHaveText('zurückgezogen');
+  await expect(page.getByRole('textbox', { name: 'Nachricht an das Mitglied' })).toHaveCount(0);
+});
+
+test('Einstellungen: Erinnerungstage', async ({ page }) => {
+  await page.goto('/einstellungen?reset=1');
+  const days = page.getByLabel('Erinnerung vor Fälligkeit (Tage)');
+  await expect(days).toHaveValue('3');
+  await days.fill('5');
+  await days.blur();
+  await page.reload();
+  await expect(page.getByLabel('Erinnerung vor Fälligkeit (Tage)')).toHaveValue('5');
+  await expect(page.getByLabel('Hinweis, wenn Link ungenutzt (Tage)')).toHaveValue('7');
 });

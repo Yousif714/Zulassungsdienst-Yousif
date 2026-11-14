@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { demoAI } from '@/ai/demo-ai';
 import { createDemoState } from '@/data/seed';
 import { refresh } from '@/data/engine';
-import { jobInvoiceDraftAction, reminderAction, replyAction, stripePlanAction } from '@/domain/action-factory';
+import { jobInvoiceDraftAction, reminderAction, replyAction } from '@/domain/action-factory';
 import { todayBerlin } from '@/domain/clock';
 import { memberView } from '@/domain/detectors';
 import type { StoreEvent } from '@/domain/events';
-import { planTakeover } from '@/domain/ledger/takeover';
 import { isClientEvent } from '@/server/state-service';
 import { NOW_0930 as NOW } from './helpers';
 
@@ -28,7 +27,7 @@ describe('UI-Ereignisse im Echtmodus bestehen isClientEvent', () => {
     ['Antwort anlegen', { type: 'createAction', action: replyAction({ lastIn, contact, threadId: lastIn.threadId, text: 'Ja.', at: NOW, isDemo: false }) }],
     ['Erinnerung anlegen', { type: 'createAction', action: reminderAction({ contract, contact: view.contact!, status: view.status, text: 'Hallo', at: NOW, isDemo: false }) }],
     ['Rechnungsentwurf Auftrag', { type: 'createAction', action: jobInvoiceDraftAction({ job, contactName: 'Autohaus', plate: 'K-AB 1', restCents: 5000, at: NOW, isDemo: false }) }],
-    ['Stripe-Ratenplan', { type: 'createAction', action: stripePlanAction({ contract, name: 'X', mode: 'first_rate', rates: planTakeover(view.states, today, 'first_rate').rates, at: NOW, isDemo: false }) }],
+    ['Umstellung vorbereiten', { type: 'prepareTakeover', contractId: contract.id, mode: 'first_rate' }],
     ['Freigeben', { type: 'approveAction', id: 'reply-1', version: 1, via: 'app' }],
     ['Ändern', { type: 'editAction', id: 'reply-1', payload: { text: 'Neu' } }],
     ['Erneut versuchen', { type: 'retryAction', id: 'reply-1' }],

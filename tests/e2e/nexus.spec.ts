@@ -126,18 +126,15 @@ test('Folie bearbeiten: Fokus bleibt beim Wechsel vom Titel zum Text', async ({ 
   await expect(title).toHaveValue(/ neu$/);
 });
 
-test('Übernahme: nur ein Stripe-Plan pro Vertrag, auch nach Moduswechsel', async ({ page }) => {
+test('Übernahme: nur eine offene Umstellung pro Vertrag, Moduswechsel schreibt den Entwurf fort', async ({ page }) => {
   await page.goto(`/nexus/mitglieder/${KAYA}/uebernahme?reset=1`);
-  const prepare = page.getByRole('button', { name: 'Stripe-Plan vorbereiten (Demo)' });
+  const prepare = page.getByRole('button', { name: 'Auf Stripe umstellen' });
   await prepare.click();
-  const status = page.getByTestId('plan-status');
-  await expect(status).toContainText('Entwurf angelegt');
+  await expect(page.getByTestId('takeover-status')).toHaveText('vorbereitet');
   await page.getByRole('radio', { name: /verteilen/i }).check();
-  await expect(prepare).toBeDisabled();
-  await expect(status).toContainText('Mit erster Rate nachzahlen');
-  await expect(status).toContainText([formatEuro(45000), formatEuro(30000)].join(' · '));
-  const plans = (await storedActions(page)).filter((a) => a.type === 'create_invoice_draft');
-  expect(plans.map((a) => a.id)).toEqual([`stripe-plan-${KAYA}`]);
+  await expect(page.getByTestId('takeover-plan')).toContainText([formatEuro(37500), formatEuro(37500)].join(' · '));
+  const takeovers = (await storedActions(page)).filter((a) => a.type === 'stripe_takeover');
+  expect(takeovers.map((a) => a.id)).toEqual([`stripe-takeover-${KAYA}-1`]);
 });
 
 test('Erinnerung: eigene Aktion je Rückstandsstand', async ({ page }) => {
@@ -176,7 +173,7 @@ test('Bank nicht verbunden: Übernahme-Seite zeigt keinen Rückstand und keinen 
   await expect(page.getByTestId('bank-missing')).toBeVisible();
   await expect(page.getByTestId('arrears')).toHaveCount(0);
   await expect(page.getByTestId('rate-preview')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Stripe-Plan vorbereiten/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Auf Stripe umstellen' })).toHaveCount(0);
 });
 
 test('NEXUS → Offen: Summe oben, sortiert nach Überfälligkeit', async ({ page }) => {
