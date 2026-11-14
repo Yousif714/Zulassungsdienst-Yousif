@@ -223,6 +223,12 @@ describe('Zustands-Dienst', () => {
     expect(ok({ briefingsEnabled: 'ja' })).toBe(false);
     expect(ok({ ownerPhone: 491701234567 })).toBe(false);
     expect(ok({ unbekannt: 1 })).toBe(false);
+    expect(ok({ takeoverReminderDays: 5 })).toBe(true);
+    expect(ok({ takeoverReminderDays: 0 })).toBe(false);
+    expect(ok({ takeoverReminderDays: 15 })).toBe(false);
+    expect(ok({ takeoverReminderDays: 2.5 })).toBe(false);
+    expect(ok({ takeoverLinkNudgeDays: 30 })).toBe(true);
+    expect(ok({ takeoverLinkNudgeDays: 31 })).toBe(false);
     expect(ok([])).toBe(false);
   });
 

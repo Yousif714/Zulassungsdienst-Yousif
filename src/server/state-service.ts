@@ -26,7 +26,8 @@ const isVersion = (v: unknown) => Number.isInteger(v) && (v as number) >= 1;
 /** Prüft gegen alle Werte eines String-Unions; `Record<T, true>` erzwingt zur Compile-Zeit Vollständigkeit. */
 const oneOf = <T extends string>(all: Record<T, true>) => (v: unknown): v is T => typeof v === 'string' && Object.hasOwn(all, v);
 
-const isActionType = oneOf<ActionType>({ send_whatsapp: true, send_email: true, send_reminder: true, create_invoice_draft: true, create_calendar_event: true, mark_invoice_settled: true, link_invoice_to_job: true, confirm_payment_match: true });
+// stripe_takeover entsteht nur im Server-Reducer, nie als Client-Entwurf.
+const isActionType = oneOf<Exclude<ActionType, 'stripe_takeover'>>({ send_whatsapp: true, send_email: true, send_reminder: true, create_invoice_draft: true, create_calendar_event: true, mark_invoice_settled: true, link_invoice_to_job: true, confirm_payment_match: true });
 const isCompany = oneOf<Company>({ nexus: true, zulassung: true });
 const isJobStatus = oneOf<Job['status']>({ open: true, waiting_customer: true, done: true, invoiced: true, paid: true });
 const isSlidesStatus = oneOf<Call['slidesStatus']>({ todo: true, draft: true, reviewed: true, copied: true });
@@ -37,6 +38,8 @@ const SETTINGS: { [K in keyof Settings]: (v: unknown) => boolean } = {
   briefingsEnabled: (v) => typeof v === 'boolean',
   ownerPhone: (v) => typeof v === 'string', // Nummernformat prüft die Engine (validPhone)
   suppressedCoachKeys: (v) => Array.isArray(v) && v.every((k) => typeof k === 'string'),
+  takeoverReminderDays: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 14,
+  takeoverLinkNudgeDays: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 30,
 };
 const isSettingsPatch = (p: unknown) => isObj(p) && Object.entries(p).every(([k, v]) => Object.hasOwn(SETTINGS, k) && SETTINGS[k as keyof Settings](v));
 

@@ -551,6 +551,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     case 'updateSettings': {
       const LABEL: Record<keyof Settings, string> = {
         replyThresholdHours: 'Antwortzeit-Schwelle', briefingsEnabled: 'Briefings', ownerPhone: 'Inhaber-Nummer', suppressedCoachKeys: 'Coach-Tipps',
+        takeoverReminderDays: 'Erinnerung vor Rate (Tage)', takeoverLinkNudgeDays: 'Link-Nachfrage (Tage)',
       };
       const patch = { ...e.patch };
       // Ohne gültige Inhaber-Nummer könnte ein leerer Absender als Inhaber gelten: alte Nummer behalten.

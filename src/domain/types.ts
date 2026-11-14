@@ -9,7 +9,9 @@ export interface PortalMember { id: string; connectionId: 'portal_nexus'; extern
 export interface Contact { id: string; company: Company; kind: 'member'|'private'|'dealer'; name: string; phones: string[]; emails: string[]; externalRefs?: ExternalRef[]; contactPersons?: string[] }
 export type ContractKind = 'membership' | 'ticket' | 'other';
 /** kind fehlt = Mitgliedschaft (alte Daten). readBy = von Claude aus einer Rechnung gelesen. */
-export interface MemberContract { id: string; contactId: string; totalCents: number; installments: number; installmentCents: number; dueDay: number; startDate: IsoDate; billing: 'legacy'|'stripe'; specialTerms?: string; catchUpMode: 'first_rate'|'spread'; origin?: ExternalRef[]; kind?: ContractKind; readBy?: { invoiceId: string; invoiceNumber: string; quote: string; confirmed: boolean } }
+export interface MemberContract { id: string; contactId: string; totalCents: number; installments: number; installmentCents: number; dueDay: number; startDate: IsoDate; billing: 'legacy'|'stripe'; specialTerms?: string; catchUpMode: 'first_rate'|'spread'; origin?: ExternalRef[]; kind?: ContractKind; readBy?: { invoiceId: string; invoiceNumber: string; quote: string; confirmed: boolean };
+  /** Restplan nach Umstellung auf Stripe: bereits bezahlter Teil und die Raten, die Stripe einzieht. */
+  plan?: { takeoverId: string; paidCents: number; rates: Installment[] } }
 /** Strukturierte Lesung einer Rechnung durch Claude (Beträge in Cent). */
 export interface InvoiceReadResult { hasPlan: boolean; kind: ContractKind; installments: number | null; installmentCents: number | null; firstDueDate: IsoDate | null; dueDay: number | null; quote: string; certain: boolean; note: string | null }
 export interface InvoiceReading { id: string; invoiceId: string; sourceUpdatedAt: string; readAt: string; model: string; result: InvoiceReadResult | null; outcome: 'applied'|'proposal'|'none'|'error'; error?: string; contractId?: string; inputTokens: number; outputTokens: number; costMicroCents: number }
@@ -33,13 +35,13 @@ export interface Call { id: string; series: string; startsAt: string; topic: str
 export interface ContentItem { id: string; title: string; stage: 'idea'|'raw'|'edit'|'approval'|'published'; due?: IsoDate }
 export interface Vehicle { id: string; contactId: string; vin: string; plate: string; model: string }
 export interface Job { id: string; vehicleId: string; contactId: string; service: string; location: 'bottrop'|'essen'|'online'|'onsite'; priceCents: number; status: 'open'|'waiting_customer'|'done'|'invoiced'|'paid'; doneAt: string | null; invoiceIds: string[]; notes?: string }
-export type InsightType = 'reply_waiting'|'member_overdue'|'unmatched_payment'|'stripe_paid_lexware_open'|'double_invoice'|'job_not_invoiced'|'invoice_overdue'|'call_slides_missing'|'commitment_broken'|'stale_source'|'coach_quick_reply'|'coach_due_day'|'coach_onsite_surcharge'|'coach_invoice_delay'|'subscription_changed'|'portal_no_invoice'|'portal_ab_no_invoice'|'contract_read_review'|'read_invoice_changed';
+export type InsightType = 'reply_waiting'|'member_overdue'|'unmatched_payment'|'stripe_paid_lexware_open'|'double_invoice'|'job_not_invoiced'|'invoice_overdue'|'call_slides_missing'|'commitment_broken'|'stale_source'|'coach_quick_reply'|'coach_due_day'|'coach_onsite_surcharge'|'coach_invoice_delay'|'subscription_changed'|'portal_no_invoice'|'portal_ab_no_invoice'|'contract_read_review'|'read_invoice_changed'|'rate_upcoming'|'takeover_link_unused'|'takeover_plan_changed'|'double_payment';
 export interface Ref { kind: 'member'|'message'|'thread'|'invoice'|'job'|'call'|'payment'|'connection'; id: string; href: string; label: string }
 export interface Insight { dedupeKey: string; type: InsightType; company: Company | null; priority: 'now'|'today'|'info'; title: string; body: string; amountCents?: number; refs: Ref[]; nextStep: string; needsSources: ConnectionId[] }
 export interface StoredInsight extends Insight { status: 'open'|'done'|'snoozed'|'dismissed'|'stale'; createdAt: string; resolvedAt?: string }
-export interface Settings { replyThresholdHours: number; briefingsEnabled: boolean; ownerPhone: string; suppressedCoachKeys: string[] }
+export interface Settings { replyThresholdHours: number; briefingsEnabled: boolean; ownerPhone: string; suppressedCoachKeys: string[]; takeoverReminderDays: number; takeoverLinkNudgeDays: number }
 
-export type ActionType = 'send_whatsapp'|'send_email'|'send_reminder'|'create_invoice_draft'|'create_calendar_event'|'mark_invoice_settled'|'link_invoice_to_job'|'confirm_payment_match';
+export type ActionType = 'send_whatsapp'|'send_email'|'send_reminder'|'create_invoice_draft'|'create_calendar_event'|'mark_invoice_settled'|'link_invoice_to_job'|'confirm_payment_match'|'stripe_takeover';
 export type ActionStatus = 'draft'|'approved'|'executing'|'executed'|'failed'|'uncertain'|'cancelled';
 export interface Action { id: string; type: ActionType; company: Company | null; title: string; payload: Record<string, unknown>; version: number; status: ActionStatus; createdAt: string; approvedVia?: 'app'|'whatsapp'|'auto'; approvedAt?: string; executedAt?: string; executingSince?: string; error?: string; isDemo: boolean; insightKey?: string }
 export interface AuditEntry { at: string; actor: 'owner'|'assistant'|'system'; text: string; actionId?: string; isDemo: boolean }
@@ -56,5 +58,17 @@ export interface Subscription {
   status: 'active' | 'past_due' | 'unpaid' | 'canceled' | 'incomplete' | 'trialing' | 'other';
   disputes: string[];
   contractId: string | null; confirmedPriceCents: number | null; confirmedEndDate: IsoDate | null;
+  metadataContractId?: string | null; // Vertrags-ID aus den Stripe-Metadaten (fehlt bei alten Daten = null)
 }
-export interface AppState { connections: Connection[]; contacts: Contact[]; contracts: MemberContract[]; exceptions: Record<string, ContractException[]>; payments: Payment[]; allocations: Allocation[]; ibanLinks: IbanLink[]; invoices: Invoice[]; messages: Message[]; commitments: Commitment[]; events: CalendarEvent[]; calls: Call[]; content: ContentItem[]; vehicles: Vehicle[]; jobs: Job[]; insights: StoredInsight[]; actions: Action[]; audit: AuditEntry[]; assistantChat: AssistantMessage[]; subscriptions: Subscription[]; dismissedProposals: string[]; portalMembers: PortalMember[]; ignoredPortalMembers: string[]; orderConfirmations: OrderConfirmation[]; invoiceReadings: InvoiceReading[]; settings: Settings }
+
+/** `prepared` wird nicht gespeichert, sondern aus der offenen Aktion `stripe_takeover` abgeleitet. */
+export type TakeoverStatus = 'prepared'|'link_sent'|'set_up'|'active'|'plan_changed'|'withdrawn'|'aborted';
+/** Umstellung eines Bestandsmitglieds auf einen Stripe-Zeitplan. `id` = ID der freigebenden Aktion (auch in den Stripe-Metadaten). */
+export interface StripeTakeover {
+  id: string; contractId: string; contactId: string; actionId: string; actionVersion: number;
+  status: Exclude<TakeoverStatus, 'prepared'>;
+  token: string; link: string; mode: MemberContract['catchUpMode']; rates: Installment[]; openCents: number;
+  stripeCustomerId: string | null; paymentMethodId: string | null; scheduleId: string | null; subscriptionExternalId: string | null;
+  isDemo: boolean; linkSentAt: string; setUpAt?: string; activeAt?: string; endedAt?: string;
+}
+export interface AppState { connections: Connection[]; contacts: Contact[]; contracts: MemberContract[]; exceptions: Record<string, ContractException[]>; payments: Payment[]; allocations: Allocation[]; ibanLinks: IbanLink[]; invoices: Invoice[]; messages: Message[]; commitments: Commitment[]; events: CalendarEvent[]; calls: Call[]; content: ContentItem[]; vehicles: Vehicle[]; jobs: Job[]; insights: StoredInsight[]; actions: Action[]; audit: AuditEntry[]; assistantChat: AssistantMessage[]; subscriptions: Subscription[]; dismissedProposals: string[]; portalMembers: PortalMember[]; ignoredPortalMembers: string[]; orderConfirmations: OrderConfirmation[]; invoiceReadings: InvoiceReading[]; takeovers: StripeTakeover[]; settings: Settings }

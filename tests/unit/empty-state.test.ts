@@ -17,6 +17,8 @@ describe('leerer Startzustand', () => {
     const e = createEmptyState();
     expect(e.connections.length).toBe(13);
     expect(e.invoiceReadings).toEqual([]);
+    expect(e.takeovers).toEqual([]);
+    expect(e.settings).toMatchObject({ takeoverReminderDays: 3, takeoverLinkNudgeDays: 7 });
     expect(e.connections.find((c) => c.id === 'claude_invoices')).toMatchObject({ status: 'missing', company: 'nexus', label: 'Claude (Rechnungen lesen)' });
     expect(e.connections.find((c) => c.id === 'portal_nexus')).toMatchObject({ company: 'nexus', label: 'NEXUS-Portal', status: 'missing' });
     expect(e.portalMembers).toEqual([]);
@@ -25,7 +27,7 @@ describe('leerer Startzustand', () => {
     expect(e.connections.every((c) => c.status === 'missing' && c.lastSuccessAt === null)).toBe(true);
     expect(e.contacts).toEqual([]);
     expect(e.exceptions).toEqual({});
-    expect(e.settings).toEqual({ replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '', suppressedCoachKeys: [] });
+    expect(e.settings).toEqual({ replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '', suppressedCoachKeys: [], takeoverReminderDays: 3, takeoverLinkNudgeDays: 7 });
   });
   test('refresh wirft nicht und erzeugt keine Geld-Hinweise', () => {
     const r = refresh(createEmptyState(), NOW, false);
