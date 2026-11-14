@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { applyEvent, type EngineContext } from '@/data/engine';
 import { memberView } from '@/domain/detectors';
 import type { NewInvoiceReading } from '@/domain/events';
@@ -118,4 +118,39 @@ test('Final-Review I3: verworfener Textsuche-Vorschlag → Claude legt keinen Ve
   const a = applyEvent(s, { type: 'invoicesRead', readings: [lesung({ result: okResult({ kind: 'membership' }) })] }, ctx());
   expect(a.state.contracts).toHaveLength(0);
   expect(a.state.invoiceReadings.at(-1)?.outcome).toBe('none');
+});
+
+describe('Vertrag mit Umstellungs-Plan (I3)', () => {
+  const draft = { totalCents: 60000, installments: 5, installmentCents: 12000, dueDay: 1, startDate: '2026-11-01', catchUpMode: 'first_rate' as const };
+  const rates = [{ no: 1, dueDate: '2026-12-15' as const, amountCents: 30000 }];
+  function withTakeover(status: 'set_up' | 'active' | 'aborted'): { s: AppState; id: string } {
+    const a = applyEvent(s0(), { type: 'invoicesRead', readings: [lesung({ result: okResult({ kind: 'membership' }) })] }, ctx());
+    const id = a.created[0];
+    const s: AppState = {
+      ...a.state,
+      contracts: a.state.contracts.map((c) => (c.id === id ? { ...c, billing: status === 'aborted' ? 'legacy' : 'stripe', readBy: { ...c.readBy!, confirmed: true }, plan: { takeoverId: 'stripe-takeover-x-1', paidCents: 30000, rates } } : c)),
+      takeovers: [{
+        id: 'stripe-takeover-x-1', contractId: id, contactId: 'm-x', actionId: 'stripe-takeover-x-1', actionVersion: 1, status, token: 't', link: 'https://nexus.example.de/zahlung/t',
+        mode: 'first_rate', rates, openCents: 30000, stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1', scheduleId: 'sub_sched_test_1', subscriptionExternalId: null,
+        isDemo: false, linkSentAt: '2026-11-01T08:00:00Z', setUpAt: '2026-11-02T08:00:00Z',
+      }],
+    };
+    return { s, id };
+  }
+  test.each(['set_up', 'active'] as const)('%s: Korrigieren und Löschen abgewiesen, Stand unverändert, Audit', (status) => {
+    const { s, id } = withTakeover(status);
+    for (const e of [{ type: 'correctContract' as const, contractId: id, draft }, { type: 'deleteReadContract' as const, contractId: id }]) {
+      const r = applyEvent(s, e, ctx());
+      expect(r.state.contracts).toEqual(s.contracts);
+      expect(r.state.allocations).toEqual(s.allocations);
+      expect(r.state.audit.at(-1)?.text).toBe('Vertrag läuft über Stripe – erst Zeitplan in Stripe beenden.');
+    }
+  });
+  test('abgebrochen mit Plan: Korrektur entfernt den Plan', () => {
+    const { s, id } = withTakeover('aborted');
+    const r = applyEvent(s, { type: 'correctContract', contractId: id, draft }, ctx());
+    const c = r.state.contracts.find((x) => x.id === id)!;
+    expect(c.plan).toBeUndefined();
+    expect(c).toMatchObject({ installments: 5, installmentCents: 12000 });
+  });
 });

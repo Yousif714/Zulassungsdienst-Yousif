@@ -2,7 +2,7 @@ import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export type StripeSignatureResult =
-  | { ok: true; event: { id: string; type: string } }
+  | { ok: true; event: { id: string; type: string; object: Record<string, unknown> | null } }
   | { ok: false; reason: 'missing' | 'format' | 'timestamp' | 'signature' };
 
 /** Ereignisse, nach denen der Stripe-Abgleich sofort läuft. */
@@ -44,7 +44,10 @@ export function verifyStripeSignature(rawBody: string, header: string | null, se
   } catch {
     return { ok: false, reason: 'format' };
   }
-  const { id, type } = (ev ?? {}) as { id?: unknown; type?: unknown };
+  const { id, type, data } = (ev ?? {}) as { id?: unknown; type?: unknown; data?: { object?: unknown } };
   if (typeof id !== 'string' || !id || typeof type !== 'string' || !type) return { ok: false, reason: 'format' };
-  return { ok: true, event: { id, type } };
+  const obj = data?.object;
+  // `data.object` (z. B. die Checkout-Sitzung) – nur ein einfaches Objekt, sonst null.
+  const object = typeof obj === 'object' && obj !== null && !Array.isArray(obj) ? (obj as Record<string, unknown>) : null;
+  return { ok: true, event: { id, type, object } };
 }

@@ -1,15 +1,22 @@
 import { daysBetween, formatIsoDe, todayBerlin } from '../clock';
 import { formatEuro } from '../money';
 import type { AppState, ConnectionId, Insight, Invoice } from '../types';
-import { invoiceOpenCents } from '../ledger/receivables';
+import { coveringContract, invoiceOpenCents } from '../ledger/receivables';
+import { runsViaStripe } from '../takeover/status';
 import { invoiceRef, paymentRef, receivableRef } from './refs';
 
 const isOpen = (i: Invoice) => i.status === 'open' || i.status === 'overdue';
 
+/** Lexware-Gesamtrechnung eines Vertrags, dessen Raten über Stripe laufen: Hinweise dazu schweigen. */
+function coveredViaStripe(s: AppState, inv: Invoice): boolean {
+  const contractId = coveringContract(s, inv);
+  return contractId !== null && runsViaStripe(s, contractId);
+}
+
 export function detectStripePaidLexwareOpen(s: AppState): Insight[] {
   const out: Insight[] = [];
   for (const inv of s.invoices) {
-    if (inv.source !== 'lexware' || !isOpen(inv) || inv.settledByPaymentId) continue;
+    if (inv.source !== 'lexware' || !isOpen(inv) || inv.settledByPaymentId || coveredViaStripe(s, inv)) continue;
     const pay = s.payments.find((p) => p.source === 'stripe' && p.reference === inv.number);
     if (!pay) continue;
     out.push({
@@ -57,7 +64,7 @@ export function detectInvoiceOverdue(s: AppState, now: Date): Insight[] {
   const groups = new Map<string, { inv: Invoice; open: number }[]>();
   for (const i of s.invoices) {
     const open = invoiceOpenCents(s, i);
-    if (!isOpen(i) || open <= 0 || i.dueDate >= today) continue;
+    if (!isOpen(i) || open <= 0 || i.dueDate >= today) continue; // abgedeckte Mitgliedsrechnungen (auch über Stripe) haben open = 0
     const k = i.company === 'nexus' ? 'nexus' : (i.contactId ?? 'unbekannt');
     groups.set(k, [...(groups.get(k) ?? []), { inv: i, open }]);
   }

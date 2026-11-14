@@ -188,10 +188,10 @@ describe('Zustands-Dienst', () => {
   });
 
   test('isClientEvent: nur erlaubte Ereignisse mit Grundform', () => {
-    expect(CLIENT_EVENTS.size).toBe(25);
+    expect(CLIENT_EVENTS.size).toBe(30);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);
     expect(isClientEvent({ type: 'dismissInsight', key: 'reply:m-1' })).toBe(true);
-    for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {
+    for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'takeoverSetUp', 'takeoverPlanChanged', 'takeoverScheduleCanceled', 'takeoverCustomerMismatch', 'unbekannt']) {
       expect(isClientEvent({ type, id: 'a-1', result: 'ok', found: true }), type).toBe(false);
     }
     for (const v of [null, undefined, 'approveAction', 42, [], [{ type: 'approveAction' }]]) expect(isClientEvent(v)).toBe(false);
@@ -223,6 +223,12 @@ describe('Zustands-Dienst', () => {
     expect(ok({ briefingsEnabled: 'ja' })).toBe(false);
     expect(ok({ ownerPhone: 491701234567 })).toBe(false);
     expect(ok({ unbekannt: 1 })).toBe(false);
+    expect(ok({ takeoverReminderDays: 5 })).toBe(true);
+    expect(ok({ takeoverReminderDays: 0 })).toBe(false);
+    expect(ok({ takeoverReminderDays: 15 })).toBe(false);
+    expect(ok({ takeoverReminderDays: 2.5 })).toBe(false);
+    expect(ok({ takeoverLinkNudgeDays: 30 })).toBe(true);
+    expect(ok({ takeoverLinkNudgeDays: 31 })).toBe(false);
     expect(ok([])).toBe(false);
   });
 
@@ -250,6 +256,33 @@ describe('Zustands-Dienst', () => {
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'whatsapp', buttonIssuedAt: NOW.toISOString() })).toBe(false);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app', buttonIssuedAt: NOW.toISOString() })).toBe(false);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 0, via: 'app' })).toBe(false);
+  });
+
+  test('createAction mit stripe_takeover wird vom Server abgelehnt', () => {
+    expect(isClientEvent({ type: 'createAction', action: draft() })).toBe(true);
+    expect(isClientEvent({ type: 'createAction', action: { ...draft(), type: 'stripe_takeover' } })).toBe(false);
+  });
+
+  test('Umstellungs-Ereignisse: Client-Form geprüft, Einrichtung nur vom Server', () => {
+    expect(isClientEvent({ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' })).toBe(true);
+    expect(isClientEvent({ type: 'prepareTakeover', contractId: 'c1', mode: 'spread' })).toBe(true);
+    expect(isClientEvent({ type: 'prepareTakeover', contractId: 'c1', mode: 'alles' })).toBe(false);
+    expect(isClientEvent({ type: 'prepareTakeover', contractId: '', mode: 'spread' })).toBe(false);
+    expect(isClientEvent({ type: 'prepareAllTakeovers' })).toBe(true);
+    expect(isClientEvent({ type: 'withdrawTakeover', contractId: 'c1' })).toBe(true);
+    expect(isClientEvent({ type: 'withdrawTakeover' })).toBe(false);
+    expect(isClientEvent({ type: 'simulateTakeoverSetUp', contractId: 'c1' })).toBe(true);
+    expect(isClientEvent({ type: 'simulateTakeoverSetUp' })).toBe(false);
+    const items = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `a-${i}`, version: 1 }));
+    expect(isClientEvent({ type: 'approveActions', items: items(1) })).toBe(true);
+    expect(isClientEvent({ type: 'approveActions', items: items(100) })).toBe(true);
+    expect(isClientEvent({ type: 'approveActions', items: items(101) })).toBe(false);
+    expect(isClientEvent({ type: 'approveActions', items: [] })).toBe(false);
+    expect(isClientEvent({ type: 'approveActions', items: [{ id: 'a-1', version: 0 }] })).toBe(false);
+    expect(isClientEvent({ type: 'approveActions', items: [{ id: '', version: 1 }] })).toBe(false);
+    expect(isClientEvent({ type: 'approveActions', items: 'a-1' })).toBe(false);
+    expect(isClientEvent({ type: 'takeoverSetUp', takeoverId: 't', scheduleId: 'sub_sched_test_1', paymentMethodId: 'pm_test_1' })).toBe(false);
+    expect(isClientEvent({ type: 'takeoverPlanChanged', takeoverId: 't', paymentMethodId: 'pm_test_1' })).toBe(false);
   });
 
   test('setJobStatus und setSlides: Werte aus den Aufzählungen, Folien mit Form', () => {

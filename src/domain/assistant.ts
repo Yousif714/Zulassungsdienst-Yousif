@@ -8,6 +8,7 @@ import { memberView } from './detectors';
 import type { InboundChannel, StoreEvent } from './events';
 import { normalizePhone, validPhone } from './matching/messages';
 import { paymentLinkFor } from './payment-link';
+import { reminderBlockedReason } from './takeover/status';
 import type { Action, AppState, AssistantMessage, Contact, IsoDate, MemberContract } from './types';
 
 type Button = NonNullable<AssistantMessage['buttons']>[number];
@@ -69,6 +70,10 @@ export async function handleInbound(
     const { contract, contact } = member;
     const status = memberView(s, contract.id, todayBerlin(now)).status;
     if (status.arrearsCents === 0) return deliver(s, [inbound], `${contact.name} hat keinen Rückstand – keine Erinnerung nötig.`, now);
+    const viaStripe = reminderBlockedReason(s, contract.id);
+    if (viaStripe) {
+      return deliver(s, [inbound], `${contact.name}: ${viaStripe}`, now, { links: [{ label: contact.name, href: `/nexus/mitglieder/${contract.id}` }] });
+    }
     const id = reminderActionId(contract.id, status.oldestUnpaidDue);
     const stored = s.actions.find((a) => a.id === id);
     if (stored && stored.status !== 'draft') {
@@ -78,7 +83,7 @@ export async function handleInbound(
     }
     const action: Action = stored ?? reminderAction({
       contract, contact, status, at: now, isDemo: opts.isDemo,
-      text: await ai.draftReminder({ contact, status, tone: 'freundlich', paymentLink: paymentLinkFor(contract.id) }),
+      text: await ai.draftReminder({ contact, status, tone: 'freundlich', paymentLink: paymentLinkFor(s, contract.id, opts.isDemo) }),
     });
     const buttons: Button[] = (['Senden', 'Ändern', 'Später'] as const).map((label) => ({ label, actionId: id, version: action.version, issuedAt: now.toISOString() }));
     const events: StoreEvent[] = stored ? [inbound] : [inbound, { type: 'createAction', action }];

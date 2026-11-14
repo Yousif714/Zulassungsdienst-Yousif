@@ -101,10 +101,13 @@ export const demoAI: AIProvider = {
 
   async draftReminder({ contact, status, tone, paymentLink }) {
     const amount = formatEuro(status.arrearsCents);
+    // Ohne gültigen Link (Echtbetrieb ohne Umstellung) kein Link-Satz.
     if (tone === 'freundlich') {
-      return `Hallo ${contact.name},\n\nkleine Erinnerung: Bei Ihrem NEXUS-Zugang ist noch ein Betrag von ${amount} offen. Falls sich das mit Ihrer Zahlung überschnitten hat, sehen Sie es uns bitte nach. Hier können Sie bequem bezahlen:\n${paymentLink}\n\nHerzliche Grüße\nNEXUS`;
+      const pay = paymentLink ? ` Hier können Sie bequem bezahlen:\n${paymentLink}` : '';
+      return `Hallo ${contact.name},\n\nkleine Erinnerung: Bei Ihrem NEXUS-Zugang ist noch ein Betrag von ${amount} offen. Falls sich das mit Ihrer Zahlung überschnitten hat, sehen Sie es uns bitte nach.${pay}\n\nHerzliche Grüße\nNEXUS`;
     }
-    return `Hallo ${contact.name},\n\nauf Ihrem NEXUS-Konto besteht ein Rückstand von ${amount}. Bitte begleichen Sie den Betrag bis spätestens in 3 Tagen über diesen Link:\n${paymentLink}\n\nMelden Sie sich bei Fragen umgehend bei uns.\n\nGrüße\nNEXUS`;
+    const pay = paymentLink ? ` über diesen Link:\n${paymentLink}` : '.';
+    return `Hallo ${contact.name},\n\nauf Ihrem NEXUS-Konto besteht ein Rückstand von ${amount}. Bitte begleichen Sie den Betrag bis spätestens in 3 Tagen${pay}\n\nMelden Sie sich bei Fragen umgehend bei uns.\n\nGrüße\nNEXUS`;
   },
 
   async slidesFor(call: Call) {

@@ -18,6 +18,8 @@ export const CLIENT_EVENTS: ReadonlySet<StoreEvent['type']> = new Set<StoreEvent
   'confirmPaymentMatch', 'dismissPayment', 'settleInvoice', 'linkInvoiceToJob', 'setJobStatus', 'createAction', 'editAction', 'approveAction',
   'retryAction', 'checkAction', 'dismissInsight', 'snoozeInsight', 'suppressCoach', 'setSlides', 'updateSettings',
   'confirmProposal', 'dismissProposal', 'confirmReadContract', 'correctContract', 'deleteReadContract', 'importPortalList', 'importBankStatement', 'createPortalContract', 'ignorePortalMember', 'unignorePortalMember',
+  // Umstellung auf Stripe; takeoverSetUp/takeoverPlanChanged kommen nur vom Webhook.
+  'prepareTakeover', 'prepareAllTakeovers', 'withdrawTakeover', 'approveActions', 'simulateTakeoverSetUp',
 ]);
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -26,7 +28,8 @@ const isVersion = (v: unknown) => Number.isInteger(v) && (v as number) >= 1;
 /** Prüft gegen alle Werte eines String-Unions; `Record<T, true>` erzwingt zur Compile-Zeit Vollständigkeit. */
 const oneOf = <T extends string>(all: Record<T, true>) => (v: unknown): v is T => typeof v === 'string' && Object.hasOwn(all, v);
 
-const isActionType = oneOf<ActionType>({ send_whatsapp: true, send_email: true, send_reminder: true, create_invoice_draft: true, create_calendar_event: true, mark_invoice_settled: true, link_invoice_to_job: true, confirm_payment_match: true });
+// stripe_takeover entsteht nur im Server-Reducer, nie als Client-Entwurf.
+const isActionType = oneOf<Exclude<ActionType, 'stripe_takeover'>>({ send_whatsapp: true, send_email: true, send_reminder: true, create_invoice_draft: true, create_calendar_event: true, mark_invoice_settled: true, link_invoice_to_job: true, confirm_payment_match: true });
 const isCompany = oneOf<Company>({ nexus: true, zulassung: true });
 const isJobStatus = oneOf<Job['status']>({ open: true, waiting_customer: true, done: true, invoiced: true, paid: true });
 const isSlidesStatus = oneOf<Call['slidesStatus']>({ todo: true, draft: true, reviewed: true, copied: true });
@@ -37,6 +40,8 @@ const SETTINGS: { [K in keyof Settings]: (v: unknown) => boolean } = {
   briefingsEnabled: (v) => typeof v === 'boolean',
   ownerPhone: (v) => typeof v === 'string', // Nummernformat prüft die Engine (validPhone)
   suppressedCoachKeys: (v) => Array.isArray(v) && v.every((k) => typeof k === 'string'),
+  takeoverReminderDays: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 14,
+  takeoverLinkNudgeDays: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 30,
 };
 const isSettingsPatch = (p: unknown) => isObj(p) && Object.entries(p).every(([k, v]) => Object.hasOwn(SETTINGS, k) && SETTINGS[k as keyof Settings](v));
 
@@ -86,6 +91,9 @@ const isSparkassePayment = (x: unknown) =>
 /** Sammelzahlung: 1–50 eindeutige Rechnungs-IDs. */
 const isInvoiceIds = (v: unknown) => Array.isArray(v) && v.length >= 1 && v.length <= 50 && v.every(isStr) && new Set(v).size === v.length;
 
+/** Sammelfreigabe: 1–100 Einträge mit ID und Version. */
+const isApproveItems = (v: unknown) => Array.isArray(v) && v.length >= 1 && v.length <= 100 && v.every((x) => isObj(x) && isStr(x.id) && isVersion(x.version));
+
 /** Pflichtfelder je erlaubtem Ereignis (Grundform; die Fachregeln prüft die Engine). */
 const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
   confirmPaymentMatch: (e) => isStr(e.paymentId) && [isStr(e.contractId), isStr(e.invoiceId), e.invoiceIds !== undefined].filter(Boolean).length === 1
@@ -115,6 +123,11 @@ const SHAPE: Record<string, (e: Record<string, unknown>) => boolean> = {
   ignorePortalMember: (e) => isStr(e.externalId),
   unignorePortalMember: (e) => isStr(e.externalId),
   importBankStatement: (e) => e.connectionId === 'bank_sparkasse' && Array.isArray(e.payments) && e.payments.length <= 5000 && e.payments.every(isSparkassePayment) && isBookingDate(e.statementTo),
+  prepareTakeover: (e) => isStr(e.contractId) && isCatchUp(e.mode),
+  prepareAllTakeovers: () => true,
+  withdrawTakeover: (e) => isStr(e.contractId),
+  approveActions: (e) => isApproveItems(e.items),
+  simulateTakeoverSetUp: (e) => isStr(e.contractId),
   importPortalList: (e) => Array.isArray(e.entries) && e.entries.length >= 1 && e.entries.length <= 2000 && e.entries.every(isPortalEntry),
 };
 
@@ -183,7 +196,7 @@ export async function dispatchEvents(
     return { state: res.state, value: res.created };
   });
   const sink = serverSink(repos.state, r.state, ctx);
-  await executeApproved(sink, deps.provider);
+  await executeApproved(sink, deps.provider, undefined, deps.at);
   for (const e of events) if (e.type === 'checkAction') await checkAction(sink, deps.provider, e.id);
   return { state: sink.current(), created: r.value };
 }

@@ -168,3 +168,52 @@ describe('Kundenseite Zulassung', () => {
     expect(partlyAllocatedPayments(s, 'nexus')).toEqual([]);
   });
 });
+
+describe('Umstellungs-Selektoren', () => {
+  const T = '2026-11-13';
+  test('takeoverRows: Status und Sperrgrund je Vertrag', async () => {
+    const { paidState, applyAt, linkSentState } = await import('../fixtures/takeover-state');
+    const { takeoverRows } = await import('@/data/selectors');
+    // Bank verbunden, nichts vorbereitet: kein Status, kein Sperrgrund, Rest 750 €.
+    const fresh = paidState();
+    expect(takeoverRows(fresh, T)).toEqual([{ contractId: 'c1', name: 'Erika Muster', status: null, blockReason: null, openCents: 75000 }]);
+    // Vorbereitet: Status 'prepared'.
+    const prepared = applyAt(fresh, [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }]);
+    expect(takeoverRows(prepared, T).map((r) => [r.status, r.blockReason])).toEqual([['prepared', null]]);
+    // Link verschickt: gesperrt mit Grund.
+    expect(takeoverRows(linkSentState(), T).map((r) => [r.status, r.blockReason])).toEqual([['link_sent', 'Umstellung läuft bereits.']]);
+    // Bank nicht verbunden: Sperrgrund.
+    const noBank = { ...fresh, connections: fresh.connections.map((c) => (c.id === 'bank_qonto' ? { ...c, status: 'missing' as const, lastSuccessAt: null } : c)) };
+    expect(takeoverRows(noBank, T)[0].blockReason).toMatch(/^Bank nicht verbunden: /);
+  });
+
+  test('switchableTakeovers: wie „Alle umstellen“, auch nach Zurückziehen', async () => {
+    const { paidState, applyAt } = await import('../fixtures/takeover-state');
+    const { switchableTakeovers } = await import('@/data/selectors');
+    const at = new Date('2026-11-13T10:00:00+01:00');
+    const fresh = paidState();
+    expect(switchableTakeovers(fresh, at)).toBe(1);
+    const prepared = applyAt(fresh, [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }]);
+    expect(switchableTakeovers(prepared, at)).toBe(0);
+    const withdrawn = applyAt(prepared, [{ type: 'withdrawTakeover', contractId: 'c1' }]);
+    expect(switchableTakeovers(withdrawn, at)).toBe(1);
+  });
+
+  test('openTakeoverDrafts und openUpcomingReminders', async () => {
+    const { paidState, applyAt } = await import('../fixtures/takeover-state');
+    const { openTakeoverDrafts, openUpcomingReminders } = await import('@/data/selectors');
+    const prepared = applyAt(paidState(), [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }]);
+    expect(openTakeoverDrafts(prepared).map((a) => a.id)).toEqual(['stripe-takeover-c1-1']);
+    expect(openUpcomingReminders(prepared)).toEqual([]);
+    const mk = (id: string, type: 'send_reminder' | 'send_email', status: 'draft' | 'executed') => ({ ...prepared.actions[0], id, type, status });
+    const withDrafts = { ...prepared, actions: [
+      ...prepared.actions,
+      mk('upcoming-c1-2026-12-01', 'send_reminder', 'draft'),
+      mk('link-nudge-t1', 'send_reminder', 'draft'),
+      mk('upcoming-c1-2026-11-01', 'send_reminder', 'executed'),
+      mk('reminder-c1-2026-11-01', 'send_reminder', 'draft'),
+    ] };
+    expect(openUpcomingReminders(withDrafts).map((a) => a.id)).toEqual(['upcoming-c1-2026-12-01', 'link-nudge-t1']);
+    expect(openTakeoverDrafts({ ...withDrafts, actions: withDrafts.actions.map((a) => (a.id === 'stripe-takeover-c1-1' ? { ...a, status: 'approved' as const } : a)) })).toEqual([]);
+  });
+});

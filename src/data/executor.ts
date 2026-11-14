@@ -1,5 +1,7 @@
-import { EXECUTE_TIMEOUT_MS, STALE_EXECUTING_MS, idempotencyKey, type ActionProvider } from '@/domain/actions/machine';
+import { EXECUTE_TIMEOUT_MS, STALE_EXECUTING_MS, idempotencyKey, isSimulated, type ActionOutput, type ActionProvider, type ExecuteOutcome } from '@/domain/actions/machine';
+import { now } from '@/domain/clock';
 import type { StoreEvent } from '@/domain/events';
+import { TAKEOVER_PLAN_STALE, takeoverActionCurrent } from '@/domain/takeover/prepare';
 import type { AppState } from '@/domain/types';
 
 /**
@@ -20,11 +22,13 @@ async function claimStart(sink: EventSink, id: string): Promise<boolean> {
   return sink.current().actions.find((x) => x.id === id)?.status === 'executing';
 }
 
-async function runWithTimeout(run: () => Promise<'ok' | 'error' | 'timeout'>, ms: number): Promise<{ result: 'ok' | 'error' | 'timeout'; error?: string }> {
+async function runWithTimeout(run: () => Promise<ExecuteOutcome>, ms: number): Promise<{ result: 'ok' | 'error' | 'timeout'; output?: ActionOutput; error?: string }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const limit = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), ms); });
   try {
-    return { result: await Promise.race([run(), limit]) };
+    const outcome = await Promise.race([run(), limit]);
+    if (typeof outcome === 'string') return { result: outcome };
+    return { result: outcome.result, output: outcome.output };
   } catch (err) {
     return { result: 'error', error: err instanceof Error ? err.message : String(err) };
   } finally {
@@ -32,16 +36,23 @@ async function runWithTimeout(run: () => Promise<'ok' | 'error' | 'timeout'>, ms
   }
 }
 
-/** Führt jede freigegebene Aktion genau einmal aus (Schlüssel `aktion:version`). Bei Zeitüberschreitung: Ausgang unklar, nie automatisch erneut senden. */
-export async function executeApproved(sink: EventSink, provider: ActionProvider, timeoutMs = EXECUTE_TIMEOUT_MS): Promise<void> {
+/**
+ * Führt jede freigegebene Aktion genau einmal aus (Schlüssel `aktion:version`). Bei Zeitüberschreitung: Ausgang unklar, nie automatisch erneut senden.
+ * Umstellungen werden vorher gegen den aktuellen Stand geprüft: veralteter Plan → fehlgeschlagen, ohne Anbieter-Aufruf.
+ */
+export async function executeApproved(sink: EventSink, provider: ActionProvider, timeoutMs = EXECUTE_TIMEOUT_MS, at: () => Date = now): Promise<void> {
   for (const id of sink.current().actions.filter((a) => a.status === 'approved').map((a) => a.id)) {
     if (sink.current().actions.find((a) => a.id === id)?.status !== 'approved') continue;
     // Nur wer die Aktion selbst gestartet hat, führt aus: sonst könnten zwei Geräte dieselbe Freigabe doppelt senden.
     if (!(await claimStart(sink, id))) continue;
     const a = sink.current().actions.find((x) => x.id === id);
     if (!a || a.status !== 'executing') continue;
-    const { result, error } = await runWithTimeout(() => provider.execute(a, idempotencyKey(a)), timeoutMs);
-    await sink.apply({ type: 'actionExecuted', id, result, ...(error ? { error } : {}), simulated: provider.simulated });
+    if (a.type === 'stripe_takeover' && !takeoverActionCurrent(sink.current(), a, at())) {
+      await sink.apply({ type: 'actionExecuted', id, result: 'error', error: TAKEOVER_PLAN_STALE, simulated: isSimulated(provider, a) });
+      continue;
+    }
+    const { result, output, error } = await runWithTimeout(() => provider.execute(a, idempotencyKey(a)), timeoutMs);
+    await sink.apply({ type: 'actionExecuted', id, result, ...(error ? { error } : {}), ...(output ? { output } : {}), simulated: isSimulated(provider, a) });
   }
 }
 
@@ -49,8 +60,11 @@ export async function executeApproved(sink: EventSink, provider: ActionProvider,
 export async function checkAction(sink: EventSink, provider: ActionProvider, id: string): Promise<void> {
   const a = sink.current().actions.find((x) => x.id === id);
   if (!a || a.status !== 'uncertain') return;
-  const found = await provider.lookup(idempotencyKey(a));
-  await sink.apply({ type: 'actionReconciled', id, found, simulated: provider.simulated });
+  const looked = await provider.lookup(idempotencyKey(a), a);
+  // Nur `true` oder Ergebnisdaten gelten als gefunden; undefined/null (fehlerhafter Anbieter) nie.
+  const found = looked === true || (typeof looked === 'object' && looked !== null);
+  const output = typeof looked === 'object' && looked !== null ? looked.output : undefined;
+  await sink.apply({ type: 'actionReconciled', id, found, ...(output ? { output } : {}), simulated: isSimulated(provider, a) });
 }
 
 /** Eine Ausführung, die zu lange „executing“ ist (z. B. Seite geschlossen), wird zu „Ausgang unklar“. */

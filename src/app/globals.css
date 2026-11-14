@@ -1831,3 +1831,10 @@ a.task-body:active {
   color: var(--label-2);
   font-size: 13px;
 }
+
+/* Umstellung auf Stripe */
+.takeover-card { margin: 0 0 8px; }
+.takeover-buttons { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.takeover-share { padding: 4px 16px 0; }
+.takeover-share .member-actions { margin: 10px 0 0; }
+.takeover-share .confirm-line { margin: 8px 0 12px; }

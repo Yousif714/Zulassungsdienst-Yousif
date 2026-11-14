@@ -10,9 +10,11 @@ import { customerOpenInvoices, invoiceOpenCents, invoicePaidCents, paymentRestCe
 import { formatEuro } from '@/domain/money';
 import { portalViews, type PortalView } from '@/domain/portal';
 import { monthForecast } from '@/domain/ledger/forecast';
-import type { AppState, Company, Invoice, IsoDate, MemberContract, Payment, StoredInsight } from '@/domain/types';
+import type { Action, AppState, Company, Invoice, IsoDate, MemberContract, Payment, StoredInsight, TakeoverStatus } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
-import { contractKindLabel, contractOnHold } from '@/domain/ledger/contracts';
+import { contractKindLabel, contractOnHold, isMembershipContract } from '@/domain/ledger/contracts';
+import { takeoverCandidates } from '@/domain/takeover/prepare';
+import { currentTakeover, openTakeoverAction, takeoverBlockReason, takeoverStatus } from '@/domain/takeover/status';
 
 export const openInsights = (s: AppState): StoredInsight[] => s.insights.filter((i) => i.status === 'open');
 
@@ -179,3 +181,29 @@ export function partlyAllocatedPayments(s: AppState, company: Company): { paymen
     .map((payment) => ({ payment, restCents: paymentRestCents(s, payment) }))
     .filter((x) => x.restCents > 0);
 }
+
+export type TakeoverRow = { contractId: string; name: string; status: TakeoverStatus | null; blockReason: string | null; openCents: number };
+
+/** Mitgliedschaften, die per Überweisung laufen oder eine Umstellung haben, nach Name. */
+export function takeoverRows(s: AppState, today: IsoDate): TakeoverRow[] {
+  return s.contracts
+    .filter((c) => isMembershipContract(c) && (c.billing === 'legacy' || currentTakeover(s, c.id) || openTakeoverAction(s, c.id)))
+    .map((c) => ({
+      contractId: c.id,
+      name: memberView(s, c.id, today).contact?.name ?? 'Unbekannt',
+      status: takeoverStatus(s, c.id),
+      blockReason: takeoverBlockReason(s, c.id, today),
+      openCents: memberView(s, c.id, today).status.openCents,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+}
+
+/** Anzahl der Verträge, die „Alle umstellen“ erfasst (gleiche Auswahl wie der Reducer). */
+export const switchableTakeovers = (s: AppState, at: Date): number => takeoverCandidates(s, at).length;
+
+/** Umstellungen, die noch auf die Freigabe warten. */
+export const openTakeoverDrafts = (s: AppState): Action[] => s.actions.filter((a) => a.type === 'stripe_takeover' && a.status === 'draft');
+
+/** Erinnerungen vor Fälligkeit und Link-Nachfragen, die noch auf die Freigabe warten. */
+export const openUpcomingReminders = (s: AppState): Action[] =>
+  s.actions.filter((a) => a.type === 'send_reminder' && a.status === 'draft' && (a.id.startsWith('upcoming-') || a.id.startsWith('link-nudge-')));

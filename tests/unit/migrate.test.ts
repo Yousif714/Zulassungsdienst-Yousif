@@ -78,3 +78,15 @@ test('Katalog: Qonto und Sparkasse', () => {
   expect(contractSources(base)).toEqual(['bank_qonto']);
 });
 test('normalizeIban', () => expect(normalizeIban(' de89 3704\t0044 0532 0130 00 ')).toBe(IBAN_KAYA));
+
+describe('Umstellung auf Stripe: Zustand', () => {
+  test('alte Stände bekommen Umstellungs-Einstellungen und takeovers', () => {
+    const old = { ...stateWith({}), settings: { replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '', suppressedCoachKeys: [] } } as unknown as AppState;
+    delete (old as Partial<AppState>).takeovers;
+    const m = migrateState(old);
+    expect(m.settings.takeoverReminderDays).toBe(3);
+    expect(m.settings.takeoverLinkNudgeDays).toBe(7);
+    expect(m.takeovers).toEqual([]);
+    expect(migrateState(m)).toBe(m);
+  });
+});

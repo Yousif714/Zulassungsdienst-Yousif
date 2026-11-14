@@ -50,8 +50,8 @@ export function stateWith(p: Partial<AppState> = {}): AppState {
   return {
     connections: ALL_IDS.map((id) => conn({ id, label: id })),
     contacts, contracts: [], exceptions: {}, payments: [], allocations: [], ibanLinks: [], invoices: [], messages: [], commitments: [],
-    events: [], calls: [], content: [], vehicles, jobs: [], insights: [], actions: [], audit: [], assistantChat: [], subscriptions: [], dismissedProposals: [], portalMembers: [], ignoredPortalMembers: [], orderConfirmations: [], invoiceReadings: [],
-    settings: { replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '', suppressedCoachKeys: [] },
+    events: [], calls: [], content: [], vehicles, jobs: [], insights: [], actions: [], audit: [], assistantChat: [], subscriptions: [], dismissedProposals: [], portalMembers: [], ignoredPortalMembers: [], orderConfirmations: [], invoiceReadings: [], takeovers: [],
+    settings: { replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '', suppressedCoachKeys: [], takeoverReminderDays: 3, takeoverLinkNudgeDays: 7 },
     ...p,
   };
 }

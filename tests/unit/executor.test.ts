@@ -8,7 +8,8 @@ import type { StoreEvent } from '@/domain/events';
 import type { Action } from '@/domain/types';
 import { NOW_0930 as NOW } from './helpers';
 
-const base = refresh(createDemoState(), NOW);
+// Ohne automatisch angelegte Erinnerungsentwürfe: die Tests prüfen nur ihre eigenen Aktionen.
+const base = { ...refresh(createDemoState(), NOW), actions: [] as Action[] };
 const action = (p: Partial<Action> = {}): Action => ({
   id: 'a-1', type: 'send_whatsapp', company: 'zulassung', title: 'Antwort an Autohaus Schmidt',
   payload: { contactId: 'd-schmidt', threadId: 't-schmidt', channel: 'whatsapp', text: 'Ja, der Golf ist ab 14 Uhr fertig.' },
@@ -106,6 +107,20 @@ describe('Ausführer', () => {
     expect(p.executedCount('a-1:1')).toBe(1);
   });
 
+  test.each([
+    ['undefined', undefined, false],
+    ['null', null, false],
+    ['true', true, true],
+    ['Ergebnisdaten', { output: { x: '1' } }, true],
+  ])('Prüfen: Anbieter liefert %s', async (_n, looked, found) => {
+    const sink = makeSink(); await approved(sink);
+    await executeApproved(sink, new StubProvider('timeout'));
+    expect(status(sink)).toBe('uncertain');
+    const p: ActionProvider = { simulated: true, execute: async () => 'ok', lookup: async () => looked as never };
+    await checkAction(sink, p, 'a-1');
+    expect(status(sink)).toBe(found ? 'executed' : 'failed');
+  });
+
   test('Prüfen auf eine nicht-uncertain Aktion ändert nichts', async () => {
     const sink = makeSink(); await approved(sink);
     const p = new StubProvider('ok', true);
@@ -161,5 +176,58 @@ describe('Ausführer', () => {
     await approved(sink, action({ type: 'link_invoice_to_job', payload: { jobId: 'j-mueller-1', invoiceId: 'i-z-311' } }));
     await executeApproved(sink, new DemoProvider());
     expect(sink.current().jobs.find((j) => j.id === 'j-mueller-1')!.invoiceIds).toContain('i-z-311');
+  });
+});
+
+describe('Ergebnisdaten (output) des Anbieters', () => {
+  test('output des Anbieters landet im Ereignis actionExecuted', async () => {
+    const provider: ActionProvider = {
+      simulated: false,
+      execute: async () => ({ result: 'ok' as const, output: { stripeCustomerId: 'cus_test_1' } }),
+      lookup: async () => false,
+    };
+    const sink = makeSink();
+    await approved(sink);
+    await executeApproved(sink, provider);
+    const ev = sink.events.find((e) => e.type === 'actionExecuted');
+    expect(ev).toMatchObject({ type: 'actionExecuted', id: 'a-1', result: 'ok', output: { stripeCustomerId: 'cus_test_1' } });
+    expect(status(sink)).toBe('executed');
+  });
+
+  test('einfaches Ergebnis ohne output bleibt unverändert (kein output-Feld)', async () => {
+    const sink = makeSink();
+    await approved(sink);
+    await executeApproved(sink, new DemoProvider());
+    const ev = sink.events.find((e) => e.type === 'actionExecuted') as Record<string, unknown>;
+    expect(ev.result).toBe('ok');
+    expect('output' in ev).toBe(false);
+  });
+
+  test('checkAction reicht output aus lookup weiter und übergibt die Aktion', async () => {
+    let seen: Action | undefined;
+    const provider: ActionProvider = {
+      simulated: false,
+      execute: async () => 'timeout',
+      lookup: async (_key, a) => { seen = a; return { output: { stripeScheduleId: 'sub_sched_test_1' } }; },
+    };
+    const sink = makeSink();
+    await approved(sink);
+    await executeApproved(sink, provider);
+    expect(status(sink)).toBe('uncertain');
+    await checkAction(sink, provider, 'a-1');
+    expect(seen?.id).toBe('a-1');
+    expect(sink.events.find((e) => e.type === 'actionReconciled')).toMatchObject({ found: true, output: { stripeScheduleId: 'sub_sched_test_1' } });
+    expect(status(sink)).toBe('executed');
+  });
+
+  test('checkAction mit lookup false: found false, kein output', async () => {
+    const provider: ActionProvider = { simulated: false, execute: async () => 'timeout', lookup: async () => false };
+    const sink = makeSink();
+    await approved(sink);
+    await executeApproved(sink, provider);
+    await checkAction(sink, provider, 'a-1');
+    const ev = sink.events.find((e) => e.type === 'actionReconciled') as Record<string, unknown>;
+    expect(ev.found).toBe(false);
+    expect('output' in ev).toBe(false);
   });
 });

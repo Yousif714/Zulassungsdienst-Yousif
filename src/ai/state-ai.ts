@@ -11,7 +11,8 @@ export type Tone = 'freundlich' | 'bestimmt';
  * KI-Aufrufe über Kennungen statt fertiger Eingaben: dieselbe Auflösung (Unterhaltung, Mitglied, Call) für den
  * lokalen Demo-Client und die Server Actions.
  */
-export function stateAI(ai: AIProvider, s: AppState, at: Date) {
+/** `isDemo`: Demo-Modus (nur dann Demo-Zahlungslink in Erinnerungen). */
+export function stateAI(ai: AIProvider, s: AppState, at: Date, isDemo: boolean) {
   return {
     answer: (q: string): Promise<ChatAnswer> => ai.answer(q, { now: at, tools: createStateTools(s, at) }),
     draftReply(threadId: string): Promise<string> {
@@ -24,7 +25,7 @@ export function stateAI(ai: AIProvider, s: AppState, at: Date) {
       if (!s.contracts.some((c) => c.id === contractId)) throw new Error('Mitglied nicht gefunden');
       const { contact, status } = memberView(s, contractId, todayBerlin(at));
       if (!contact) throw new Error('Mitglied ohne Kontakt');
-      return ai.draftReminder({ contact, status, tone, paymentLink: paymentLinkFor(contractId) });
+      return ai.draftReminder({ contact, status, tone, paymentLink: paymentLinkFor(s, contractId, isDemo) });
     },
     slidesFor(callId: string): Promise<Call['slides']> {
       const call = s.calls.find((c) => c.id === callId);

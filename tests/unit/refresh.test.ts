@@ -94,3 +94,17 @@ describe('pullBlocked', () => {
   });
   it('Eingabefelder blockieren', () => expect(pullBlocked(node({ tag: 'TEXTAREA' }))).toBe(true));
 });
+
+describe('refresh (Engine): Erinnerungsentwürfe', () => {
+  it('refresh legt Erinnerungsentwürfe an', async () => {
+    const { refresh } = await import('@/data/engine');
+    const { base, stateWith } = await import('./helpers');
+    const lena = { id: 'm-lena', company: 'nexus' as const, kind: 'member' as const, name: 'Lena Kaya', phones: [], emails: ['lena@example.de'] };
+    const s = stateWith({ contacts: [lena], contracts: [{ ...base, id: 'c1', contactId: 'm-lena' }] });
+    const r = refresh(s, new Date('2026-11-28T08:00:00Z'), false);
+    const a = r.actions.find((x) => x.id === 'upcoming-c1-2026-12-01')!;
+    expect(a).toMatchObject({ type: 'send_reminder', status: 'draft' });
+    expect(a.payload.text).toBe('Hallo Lena, kurze Erinnerung: Am 01.12.2026 ist deine NEXUS-Rate über 300,00 € fällig.');
+    expect(refresh(r, new Date('2026-11-28T09:00:00Z'), false).actions.filter((x) => x.id === a.id)).toHaveLength(1);
+  });
+});

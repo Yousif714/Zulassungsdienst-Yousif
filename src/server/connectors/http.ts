@@ -32,34 +32,37 @@ export function createApiClient(o: {
   headers?: Record<string, string>;
   /** Vollständiger Authorization-Wert (z. B. Qonto `login:secret`); Standard `Bearer ${key}`. */
   authorization?: string;
-}): { getJson(pathAndQuery: string): Promise<unknown> } {
+}): { getJson(pathAndQuery: string): Promise<unknown>; postForm(path: string, body: string, idempotencyKey?: string): Promise<unknown> } {
   let lastAt: number | null = null;
   // Alles, was nie in einer Meldung landen darf: ganzer Wert und (bei `login:secret`) beide Teile.
   const secrets = [...new Set([o.key, o.authorization ?? '', ...o.key.split(':'), ...(o.authorization ?? '').split(':')])].filter((k) => k.length >= 3).sort((a, b) => b.length - a.length);
 
-  async function send(pathAndQuery: string): Promise<Response> {
+  async function send(pathAndQuery: string, post?: { body: string; idempotencyKey?: string }): Promise<Response> {
     if (lastAt !== null && o.minIntervalMs > 0) {
       const wait = o.minIntervalMs - (o.now() - lastAt);
       if (wait > 0) await o.sleep(wait);
     }
     lastAt = o.now();
     try {
-      return await o.fetch(`${o.baseUrl}${pathAndQuery}`, { headers: { accept: 'application/json', ...o.headers, authorization: o.authorization ?? `Bearer ${o.key}` } });
+      const headers = {
+        accept: 'application/json', ...o.headers, authorization: o.authorization ?? `Bearer ${o.key}`,
+        ...(post ? { 'content-type': 'application/x-www-form-urlencoded', ...(post.idempotencyKey ? { 'idempotency-key': post.idempotencyKey } : {}) } : {}),
+      };
+      return await o.fetch(`${o.baseUrl}${pathAndQuery}`, post ? { method: 'POST', headers, body: post.body } : { headers });
     } catch {
       throw new ConnectorError(`${o.label}: keine Verbindung`); // Originalfehler kann den Schlüssel enthalten
     }
   }
 
-  return {
-    async getJson(pathAndQuery) {
+  async function request(pathAndQuery: string, post?: { body: string; idempotencyKey?: string }): Promise<unknown> {
       const path = pathAndQuery.split('?')[0];
-      let res = await send(pathAndQuery);
+      let res = await send(pathAndQuery, post);
       for (let attempt = 0; res.status === 429; attempt++) {
         if (attempt >= MAX_RETRIES) throw new RateLimited(`${o.label}: gedrosselt bei ${path}`);
         const h = res.headers.get('retry-after');
         const s = h ? Number(h) : NaN;
         await o.sleep(Number.isFinite(s) && s > 0 ? Math.min(s * 1000, MAX_RETRY_WAIT_MS) : 1000 * 2 ** attempt);
-        res = await send(pathAndQuery);
+        res = await send(pathAndQuery, post); // gleicher Body und gleicher Idempotency-Key
       }
       if (!res.ok) {
         const hint = res.status === 401 || res.status === 403 ? ' (Schlüssel prüfen)' : res.status === 400 ? await reason(res, secrets) : '';
@@ -70,6 +73,10 @@ export function createApiClient(o: {
       } catch {
         throw new ConnectorError(`${o.label}: ungültige Antwort bei ${path}`);
       }
-    },
+  }
+
+  return {
+    getJson: (pathAndQuery) => request(pathAndQuery),
+    postForm: (path, body, idempotencyKey) => request(path, { body, idempotencyKey }),
   };
 }

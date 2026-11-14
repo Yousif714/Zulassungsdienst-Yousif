@@ -15,6 +15,7 @@ describe('readEnv', () => {
     expect(readEnv(FULL)).toEqual({
       supabaseUrl: FULL.SUPABASE_URL, supabaseServiceRoleKey: FULL.SUPABASE_SERVICE_ROLE_KEY, sessionSecret: FULL.SESSION_SECRET,
       ownerSetupToken: 'setup', cronSecret: 'cron', appOrigin: 'https://nexus.example', testMemoryDb: false,
+      paymentLinkBaseUrl: 'https://nexus.example',
     });
   });
 
@@ -59,4 +60,11 @@ test('ANTHROPIC_API_KEY optional', () => {
   expect(readEnv(FULL).anthropicApiKey).toBeUndefined();
   expect(readEnv({ ...FULL, ANTHROPIC_API_KEY: ' ' }).anthropicApiKey).toBeUndefined();
   expect(readEnv({ ...FULL, ANTHROPIC_API_KEY: 'sk-ant-x' }).anthropicApiKey).toBe('sk-ant-x');
+});
+
+test('STRIPE_WRITE_KEY optional, PAYMENT_LINK_BASE_URL fällt auf APP_ORIGIN zurück', () => {
+  const a = readEnv(FULL);
+  expect([a.stripeWriteKey, a.paymentLinkBaseUrl]).toEqual([undefined, 'https://nexus.example']);
+  const b = readEnv({ ...FULL, STRIPE_WRITE_KEY: 'sk_x', PAYMENT_LINK_BASE_URL: 'https://pay.example' });
+  expect([b.stripeWriteKey, b.paymentLinkBaseUrl]).toEqual(['sk_x', 'https://pay.example']);
 });

@@ -1,12 +1,12 @@
 import type { Action } from '../types';
-import type { ActionProvider } from './machine';
+import type { ActionProvider, ExecuteOutcome } from './machine';
 
 /** Merkt sich ausgeführte Schlüssel, führt nie extern aus. */
 export class DemoProvider implements ActionProvider {
   readonly simulated = true;
   private done = new Map<string, number>();
 
-  async execute(_a: Action, key: string): Promise<'ok' | 'error' | 'timeout'> {
+  async execute(_a: Action, key: string): Promise<ExecuteOutcome> {
     if (!this.done.has(key)) this.done.set(key, 1);
     return 'ok';
   }

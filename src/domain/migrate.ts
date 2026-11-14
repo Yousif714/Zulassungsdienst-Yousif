@@ -1,5 +1,6 @@
 import { CONNECTION_CATALOG } from './connections';
 import { normalizeIban } from './matching/payments';
+import { DEFAULT_SETTINGS } from './settings';
 import type { AppState, Connection, ConnectionId } from './types';
 
 // 'bank' ist nicht mehr im Typ ConnectionId, deshalb lose verglichen.
@@ -49,7 +50,16 @@ export function migrateState(s: AppState): AppState {
     insights = insights.map((i) => ({ ...i, needsSources: (i.needsSources ?? []).map((id) => (isLegacy(id) ? NEW_ID : id)) }));
   }
 
-  return changed ? { ...s, connections, payments, ibanLinks, insights } : s;
+  let settings = s.settings;
+  if ((Object.keys(DEFAULT_SETTINGS) as (keyof typeof DEFAULT_SETTINGS)[]).some((k) => settings[k] === undefined)) {
+    changed = true;
+    settings = { ...DEFAULT_SETTINGS, ...settings };
+  }
+
+  const takeovers = s.takeovers ?? [];
+  if (s.takeovers === undefined) changed = true;
+
+  return changed ? { ...s, connections, payments, ibanLinks, insights, settings, takeovers } : s;
 }
 
 /** Jede Katalog-Verbindung existiert immer (neu hinzugekommene fehlen in alten Ständen); fehlende starten als „missing“. */

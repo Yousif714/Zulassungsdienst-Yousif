@@ -67,7 +67,7 @@ test('Final-Review I7: „Schick Erika die Erinnerung“ nimmt den Vertrag mit R
   const { demoAI } = await import('@/ai/demo-ai');
   const { createStateTools } = await import('@/ai/tools');
   const paidTicket: MemberContract = { ...kT, startDate: '2027-01-01' }; // erste Rate erst 2027: kein Rückstand
-  const st = stateWith({ contacts: [erika], contracts: [paidTicket, kM], settings: { replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '+491510000000', suppressedCoachKeys: [] } });
+  const st = stateWith({ contacts: [erika], contracts: [paidTicket, kM], settings: { replyThresholdHours: 2, briefingsEnabled: true, ownerPhone: '+491510000000', suppressedCoachKeys: [], takeoverReminderDays: 3, takeoverLinkNudgeDays: 7 } });
   const r = await handleInbound(st, '+491510000000', 'Schick Erika die Erinnerung', NOW_0930, demoAI, createStateTools(st, NOW_0930), { channel: 'whatsapp', isDemo: false });
   expect(r.reply?.text ?? '').not.toContain('keinen Rückstand');
   const created = r.events.find((e) => e.type === 'createAction');

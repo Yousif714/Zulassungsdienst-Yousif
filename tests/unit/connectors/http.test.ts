@@ -153,4 +153,29 @@ describe('createApiClient authorization', () => {
     const err = await createApiClient({ ...base, label: 'Qonto', key: 'LOGINX:SECRETY', authorization: 'LOGINX:SECRETY', fetch: spyFetch([], [bad]) }).getJson('/v2/a').catch((e: Error) => e) as Error;
     expect(err.message).toBe('Qonto: HTTP 400 bei /v2/a (bad *** and ***)');
   });
+
+  describe('postForm', () => {
+    test('Methode, Content-Type, Idempotency-Key, Schlüssel nie im Fehlertext', async () => {
+      const calls: Request[] = [];
+      const ok = createApiClient({ ...base, label: 'Stripe', baseUrl: 'https://api.stripe.com', fetch: spyFetch(calls, [{ id: 'x_1' }]) });
+      expect(await ok.postForm('/v1/customers', 'name=A', 'idem-1')).toEqual({ id: 'x_1' });
+      expect(calls[0].method).toBe('POST');
+      expect(calls[0].headers.get('content-type')).toBe('application/x-www-form-urlencoded');
+      expect(calls[0].headers.get('idempotency-key')).toBe('idem-1');
+      expect(calls[0].headers.get('authorization')).toBe('Bearer SECRET');
+      expect(await calls[0].text()).toBe('name=A');
+
+      const bad = Response.json({ error: { message: 'Invalid key SECRET' } }, { status: 400 });
+      const api = createApiClient({ ...base, label: 'Stripe', baseUrl: 'https://api.stripe.com', fetch: spyFetch([], [bad]) });
+      const err = await api.postForm('/v1/customers', 'name=A').catch((e: Error) => e) as Error;
+      expect(err.message).toBe('Stripe: HTTP 400 bei /v1/customers (Invalid key ***)');
+    });
+    test('wiederholt 429 mit demselben Idempotency-Key und Body', async () => {
+      const calls: Request[] = [];
+      const api = createApiClient({ ...base, label: 'Stripe', baseUrl: 'https://api.stripe.com', fetch: spyFetch(calls, [new Response('{}', { status: 429 }), { id: 'x_2' }]) });
+      expect(await api.postForm('/v1/customers', 'name=A', 'idem-2')).toEqual({ id: 'x_2' });
+      expect(calls.map((c) => c.headers.get('idempotency-key'))).toEqual(['idem-2', 'idem-2']);
+      expect(await Promise.all(calls.map((c) => c.text()))).toEqual(['name=A', 'name=A']);
+    });
+  });
 });

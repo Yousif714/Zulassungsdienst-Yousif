@@ -1,7 +1,9 @@
 import { todayBerlin } from '../clock';
 import { formatEuro } from '../money';
-import type { AppState, Insight, Subscription } from '../types';
+import type { AppState, Insight, IsoDate, MemberContract, Subscription } from '../types';
 import { subscriptionOf } from '../matching/stripe';
+import { planPrices } from '../takeover/plan';
+import { currentTakeover, runsViaStripe } from '../takeover/status';
 import { memberRef } from './refs';
 
 /** Hinweise auf Änderungen an Stripe-Abos mit bestätigtem Vertrag. Der Vertrag selbst bleibt unverändert. */
@@ -32,7 +34,7 @@ export function detectSubscriptionChanges(s: AppState, now: Date): Insight[] {
     const endedAsAgreed = sub.endDate !== null && sub.endDate === sub.confirmedEndDate && sub.endDate <= today;
     if (sub.status === 'canceled' && !endedAsAgreed) add('canceled', `${name}: Abo in Stripe gekündigt`, `Das Stripe-Abo wurde gekündigt. ${note}`);
     if (sub.endDate !== sub.confirmedEndDate) add('end', `${name}: Enddatum des Abos geändert`, `Enddatum in Stripe: ${sub.endDate ?? 'keines'} (bestätigt: ${sub.confirmedEndDate ?? 'keines'}). ${note}`);
-    if (sub.priceCents !== sub.confirmedPriceCents) add('price', `${name}: Preis des Abos geändert`, `Preis in Stripe: ${money(sub.priceCents)} (bestätigt: ${money(sub.confirmedPriceCents)}). ${note}`);
+    if (!priceAsAgreed(s, sub, contract, today)) add('price', `${name}: Preis des Abos geändert`, `Preis in Stripe: ${money(sub.priceCents)} (bestätigt: ${money(sub.confirmedPriceCents)}). ${note}`);
     if (sub.status === 'past_due' || sub.status === 'unpaid') add('past_due', `${name}: Stripe-Zahlung fehlgeschlagen`, `Das Abo steht auf „${sub.status}“. ${note}`);
     if (sub.disputes.length > 0) add('dispute', `${name}: Chargeback in Stripe`, `${sub.disputes.length} Streitfall/Streitfälle zum Abo. ${note}`);
 
@@ -42,6 +44,18 @@ export function detectSubscriptionChanges(s: AppState, now: Date): Insight[] {
     }
   }
   return out;
+}
+
+/** Preis wie bestätigt; bei einem Vertrag mit Umstellungs-Plan (über Stripe oder abgebrochen) zählt jeder Preis des Plans. */
+function priceAsAgreed(s: AppState, sub: Subscription, contract: MemberContract, today: IsoDate): boolean {
+  if (sub.priceCents === sub.confirmedPriceCents) return true;
+  if (!contract.plan || sub.priceCents === null) return false;
+  const t = currentTakeover(s, contract.id);
+  if (!runsViaStripe(s, contract.id) && t?.status !== 'aborted') return false;
+  // Phasen so, wie sie beim Einrichten angelegt wurden (Überfälliges ist dort zur Sofort-Phase zusammengefasst).
+  const setUpAt = s.takeovers.find((x) => x.id === contract.plan?.takeoverId)?.setUpAt;
+  const setUpDay = setUpAt ? todayBerlin(new Date(setUpAt)) : today;
+  return planPrices(contract.plan.rates, setUpDay).includes(sub.priceCents);
 }
 
 const money = (c: Subscription['priceCents']) => (c === null ? 'unbekannt' : formatEuro(c));

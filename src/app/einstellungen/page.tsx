@@ -92,6 +92,13 @@ export default function EinstellungenPage() {
     } else el.value = settings.ownerPhone;
   };
 
+  const commitDays = (key: 'takeoverReminderDays' | 'takeoverLinkNudgeDays', max: number, raw: string, el: HTMLInputElement) => {
+    const n = Number(raw);
+    if (Number.isInteger(n) && n >= 1 && n <= max) {
+      if (n !== settings[key]) dispatch({ type: 'updateSettings', patch: { [key]: n } });
+    } else el.value = String(settings[key]);
+  };
+
   return (
     <>
       <PageHeader title="Einstellungen" />
@@ -108,6 +115,17 @@ export default function EinstellungenPage() {
           subtitle={<span className="wrap-text">{"Ab dann gilt eine Kundennachricht als wartend"}</span>}
           accessory={<input id="set-threshold" key={settings.replyThresholdHours} className="settings-input settings-number" type="number" inputMode="numeric"
             min={1} max={72} defaultValue={settings.replyThresholdHours} onBlur={(e) => commitThreshold(e.target.value, e.target)} />} />
+      </ListGroup>
+
+      <ListGroup title="Umstellung auf Stripe">
+        <ListRow key="reminder-days" title={<label className="wrap-text" htmlFor="set-reminder-days">Erinnerung vor Fälligkeit (Tage)</label>}
+          subtitle={<span className="wrap-text">{"So viele Tage vor der Rate entsteht ein Erinnerungsentwurf"}</span>}
+          accessory={<input id="set-reminder-days" key={settings.takeoverReminderDays} className="settings-input settings-number" type="number" inputMode="numeric"
+            min={1} max={14} defaultValue={settings.takeoverReminderDays} onBlur={(e) => commitDays('takeoverReminderDays', 14, e.target.value, e.target)} />} />
+        <ListRow key="nudge-days" title={<label className="wrap-text" htmlFor="set-nudge-days">Hinweis, wenn Link ungenutzt (Tage)</label>}
+          subtitle={<span className="wrap-text">{"Nach so vielen Tagen ohne Einrichtung erscheint ein Hinweis"}</span>}
+          accessory={<input id="set-nudge-days" key={settings.takeoverLinkNudgeDays} className="settings-input settings-number" type="number" inputMode="numeric"
+            min={1} max={30} defaultValue={settings.takeoverLinkNudgeDays} onBlur={(e) => commitDays('takeoverLinkNudgeDays', 30, e.target.value, e.target)} />} />
       </ListGroup>
 
       <ListGroup title="Assistent">

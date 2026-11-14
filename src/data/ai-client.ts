@@ -36,7 +36,7 @@ export function useAI(): AIClient {
         },
       };
     }
-    const local = () => stateAI(demoAI, state, now());
+    const local = () => stateAI(demoAI, state, now(), true);
     return {
       answer: (q) => local().answer(q),
       draftReply: (id) => local().draftReply(id),

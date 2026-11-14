@@ -7,6 +7,7 @@ import { formatEuro } from '../money';
 import type { AppState, ConnectionId, Contact, Insight, InstallmentState, Installment, IsoDate, MemberContract } from '../types';
 import { memberRef } from './refs';
 import { contractOnHold } from '../ledger/contracts';
+import { reminderBlockedReason, runsViaStripe } from '../takeover/status';
 
 export function memberView(
   s: AppState,
@@ -46,22 +47,25 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
     if (!v.contact || v.status.traffic === 'green') continue;
     const name = v.contact.name;
     const arrears = v.status.arrearsCents;
-    if (!notConnected(contractSources(c), s.connections)) {
+    // Raten über Stripe: kein Teil des Sammelhinweises „Erinnerungen vorbereiten“
+    if (!notConnected(contractSources(c), s.connections) && !runsViaStripe(s, c.id)) {
       sum += arrears;
       overdueContacts.add(c.contactId);
       contractSources(c).forEach((x) => sources.add(x));
       summaryRefs.push(memberRef(c.id, name));
     }
+    // Raten laufen über Stripe: Abbuchung kann unterwegs sein, eine Erinnerung führte zur Doppelzahlung.
+    const viaStripe = reminderBlockedReason(s, c.id);
     out.push({
       dedupeKey: `overdue:${c.id}`,
       type: 'member_overdue',
       company: 'nexus',
       priority: 'info',
       title: `${name} ist im Rückstand`,
-      body: `Rückstand ${formatEuro(arrears)}, seit ${v.status.daysOverdue} Tagen überfällig.`,
+      body: `Rückstand ${formatEuro(arrears)}, seit ${v.status.daysOverdue} Tagen überfällig.${viaStripe ? ` ${viaStripe}` : ''}`,
       amountCents: arrears,
       refs: [memberRef(c.id, name)],
-      nextStep: 'Erinnerung vorbereiten',
+      nextStep: viaStripe ? 'In Stripe prüfen' : 'Erinnerung vorbereiten',
       needsSources: contractSources(c),
     });
   }

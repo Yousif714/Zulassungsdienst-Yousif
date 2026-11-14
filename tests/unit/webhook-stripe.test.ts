@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { verifyStripeSignature } from '@/server/connectors/stripe-signature';
 
 const syncSpy = vi.hoisted(() => vi.fn(async () => ({})));
@@ -7,7 +7,13 @@ vi.mock('@/server/sync', () => ({ syncConnections: syncSpy }));
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), connection: async () => {} }));
 
 import { POST } from '@/app/api/webhooks/stripe/route';
-import { resetTestRepos } from '@/server/registry';
+import { fixtureFetch, type FixtureRequest } from '@/server/connectors/fixture-fetch';
+import { createStripeWriter } from '@/server/connectors/stripe-write';
+import { getRepos, resetTestRepos, setTestStripeWriter } from '@/server/registry';
+import { loadState } from '@/server/state-service';
+import { stripeWriteRoutes } from '../fixtures/stripe-write';
+import { tx } from './helpers';
+import { applyAt, linkSentState, seed, T0, TAKEOVER_ID } from './takeover/setup';
 
 const SECRET = 'whsec_test';
 const sign = (body: string, t: number, secret = SECRET) => `t=${t},v1=${createHmac('sha256', secret).update(`${t}.${body}`).digest('hex')}`;
@@ -17,7 +23,13 @@ const req = (body: string, sig: string | null) =>
   new Request('http://localhost/api/webhooks/stripe', { method: 'POST', body, headers: sig ? { 'stripe-signature': sig } : {} });
 
 describe('verifyStripeSignature', () => {
-  test('gültige Signatur', () => expect(verifyStripeSignature(BODY, sign(BODY, 1000), SECRET, 1010)).toEqual({ ok: true, event: { id: 'evt_1', type: 'invoice.paid' } }));
+  test('gültige Signatur', () => expect(verifyStripeSignature(BODY, sign(BODY, 1000), SECRET, 1010)).toEqual({ ok: true, event: { id: 'evt_1', type: 'invoice.paid', object: {} } }));
+  test('liefert data.object mit', () => {
+    const b = JSON.stringify({ id: 'evt_3', type: 'checkout.session.completed', data: { object: { id: 'cs_test_1', mode: 'setup' } } });
+    expect(verifyStripeSignature(b, sign(b, 1000), SECRET, 1000)).toEqual({ ok: true, event: { id: 'evt_3', type: 'checkout.session.completed', object: { id: 'cs_test_1', mode: 'setup' } } });
+    const n = JSON.stringify({ id: 'evt_4', type: 'customer.created' });
+    expect(verifyStripeSignature(n, sign(n, 1000), SECRET, 1000)).toEqual({ ok: true, event: { id: 'evt_4', type: 'customer.created', object: null } });
+  });
   test('falsches Geheimnis', () => expect(verifyStripeSignature(BODY, sign(BODY, 1000, 'other'), SECRET, 1010)).toEqual({ ok: false, reason: 'signature' }));
   test('veränderter Body', () => expect(verifyStripeSignature(BODY + ' ', sign(BODY, 1000), SECRET, 1010).ok).toBe(false));
   test('Zeit außerhalb der Toleranz', () => expect(verifyStripeSignature(BODY, sign(BODY, 1000), SECRET, 1000 + 301)).toEqual({ ok: false, reason: 'timestamp' }));
@@ -92,4 +104,108 @@ describe('Route', () => {
   });
   test('maxDuration 60 s', async () => expect((await import('@/app/api/webhooks/stripe/route')).maxDuration).toBe(60));
   test('Antwort enthält nie das Geheimnis', async () => expect(await (await POST(req(BODY, 'x'))).text()).not.toContain(SECRET));
+});
+
+describe('Route: checkout.session.completed (Umstellung)', () => {
+  const KEY = `takeover:${TAKEOVER_ID}:schedule`;
+  const event = (id = 'evt_cs_1', metadata: Record<string, string> = { takeoverId: TAKEOVER_ID, contractId: 'c1' }) => JSON.stringify({
+    id, type: 'checkout.session.completed',
+    data: { object: { id: 'cs_test_1', object: 'checkout.session', mode: 'setup', setup_intent: 'seti_test_1', customer: 'cus_test_1', metadata } },
+  });
+  const post = (body: string) => POST(req(body, sign(body, nowSec())));
+  let requests: FixtureRequest[];
+  let status: Record<string, number>;
+  const schedules = () => requests.filter((r) => r.method === 'POST' && r.path === '/v1/subscription_schedules');
+  const state = () => loadState(getRepos(), T0);
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ now: T0, toFake: ['Date'] });
+    vi.stubEnv('NEXUS_TEST_MEMORY_DB', '1');
+    vi.stubEnv('SESSION_SECRET', 's'.repeat(40));
+    vi.stubEnv('OWNER_SETUP_TOKEN', 'setup-token-123');
+    vi.stubEnv('CRON_SECRET', 'c'.repeat(20));
+    vi.stubEnv('APP_ORIGIN', 'https://nexus.example.de');
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', SECRET);
+    resetTestRepos();
+    requests = [];
+    status = {};
+    setTestStripeWriter(createStripeWriter({ key: 'sk_test_SECRET', fetch: fixtureFetch(stripeWriteRoutes, { requests, status }), sleep: async () => {}, now: () => 0 }));
+    await seed(getRepos(), linkSentState());
+  });
+  afterEach(() => vi.useRealTimers());
+
+  test('Webhook: gleicher Plan → eingerichtet, Zeitplan genau einmal', async () => {
+    expect((await post(event())).status).toBe(200);
+    expect(await (await post(event())).json()).toEqual({ duplicate: true });
+    const s = await state();
+    expect(s.takeovers[0]).toMatchObject({ status: 'set_up', scheduleId: 'sub_sched_test_1', paymentMethodId: 'pm_test_1' });
+    expect(s.contracts[0].billing).toBe('stripe');
+    expect(schedules().map((r) => r.idempotencyKey)).toEqual([KEY]);
+    expect(syncSpy).not.toHaveBeenCalled();
+  });
+
+  test('gleichzeitige Zustellung mit verschiedenen Ereignis-IDs → höchstens ein Zeitplan-Key, einmal eingerichtet', async () => {
+    const rs = await Promise.all([post(event('evt_cs_a')), post(event('evt_cs_b'))]);
+    expect(rs.map((r) => r.status)).toEqual([200, 200]);
+    const s = await state();
+    expect(s.takeovers[0].status).toBe('set_up');
+    expect(schedules().length).toBeGreaterThanOrEqual(1);
+    expect(schedules().every((r) => r.idempotencyKey === KEY)).toBe(true);
+    expect(s.audit.filter((a) => a.text.startsWith('Umstellung eingerichtet')).length).toBe(1);
+  });
+
+  test('Webhook: inzwischen überwiesen → Plan geändert, kein Zeitplan, Zahlungsmittel gespeichert', async () => {
+    const s0 = linkSentState();
+    const p = tx({ id: 'p-c1-2', externalId: 'x-p-c1-2', bookedOn: '2026-11-12', amountCents: 10000 });
+    resetTestRepos();
+    setTestStripeWriter(createStripeWriter({ key: 'sk_test_SECRET', fetch: fixtureFetch(stripeWriteRoutes, { requests, status }), sleep: async () => {}, now: () => 0 }));
+    await seed(getRepos(), { ...s0, payments: [...s0.payments, p], allocations: [...s0.allocations, { paymentId: p.id, contractId: 'c1', amountCents: 10000, method: 'manual' }] });
+    expect((await post(event())).status).toBe(200);
+    const s = await state();
+    expect(s.takeovers[0]).toMatchObject({ status: 'plan_changed', paymentMethodId: 'pm_test_1', scheduleId: null });
+    expect(schedules()).toHaveLength(0);
+  });
+
+  test('Webhook nach Zurückziehen ohne offenen Zeitplan → ignoriert, nur Suche', async () => {
+    resetTestRepos();
+    setTestStripeWriter(createStripeWriter({ key: 'sk_test_SECRET', fetch: fixtureFetch(stripeWriteRoutes, { requests, status }), sleep: async () => {}, now: () => 0 }));
+    await seed(getRepos(), applyAt(linkSentState(), [{ type: 'withdrawTakeover', contractId: 'c1' }]));
+    expect((await post(event())).status).toBe(200);
+    expect((await state()).takeovers[0].status).toBe('withdrawn');
+    expect(requests.map((r) => `${r.method} ${r.path.split('?')[0]}`)).toEqual(['GET /v1/subscription_schedules']);
+  });
+
+  test.each([
+    ['Stripe-Fehler', 500],
+    ['gleichzeitiger Key in Benutzung (409)', 409],
+  ])('Webhook: %s beim Zeitplan → 500, Ereignis nicht als erledigt beansprucht', async (_n, code) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    status['POST /v1/subscription_schedules'] = code;
+    const res = await post(event());
+    expect(res.status).toBe(500);
+    expect(await res.text()).not.toContain('SECRET');
+    expect((await state()).takeovers[0].status).toBe('link_sent');
+    expect(spy).toHaveBeenCalledWith('Stripe-Webhook: Umstellung fehlgeschlagen:', 'ConnectorError');
+    delete status['POST /v1/subscription_schedules'];
+    const again = await post(event());
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ received: true });
+    expect((await state()).takeovers[0].status).toBe('set_up');
+    expect(schedules().map((r) => r.idempotencyKey)).toEqual([KEY, KEY]);
+    spy.mockRestore();
+  });
+
+  test('Webhook ohne Schreib-Schlüssel ändert nichts', async () => {
+    setTestStripeWriter(null);
+    expect((await post(event())).status).toBe(200);
+    expect((await state()).takeovers[0]).toMatchObject({ status: 'link_sent', scheduleId: null });
+    expect(requests).toEqual([]);
+  });
+
+  test('Checkout ohne takeoverId → keine Stripe-Aufrufe, 200', async () => {
+    expect((await post(event('evt_cs_x', {}))).status).toBe(200);
+    expect(requests).toEqual([]);
+    expect((await state()).takeovers[0].status).toBe('link_sent');
+  });
 });

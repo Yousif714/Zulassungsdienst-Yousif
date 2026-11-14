@@ -6,8 +6,8 @@ import type { AppState } from '@/domain/types';
 /** `ord` = Position im AppState-Array; die Persistenz muss danach sortieren (kein impliziter Tabellenreihenfolge-Vertrag). */
 export type Row = { id: string; ord: number; data: unknown; connection_id?: string | null; external_id?: string | null; dedupe_key?: string };
 
-type ArrayKey = 'connections' | 'contacts' | 'contracts' | 'payments' | 'invoices' | 'messages' | 'commitments' | 'events' | 'calls' | 'content' | 'vehicles' | 'jobs' | 'actions' | 'subscriptions' | 'portalMembers' | 'orderConfirmations' | 'invoiceReadings';
-const SIMPLE: ArrayKey[] = ['connections', 'contacts', 'contracts', 'payments', 'invoices', 'messages', 'commitments', 'events', 'calls', 'content', 'vehicles', 'jobs', 'actions', 'subscriptions', 'portalMembers', 'orderConfirmations', 'invoiceReadings'];
+type ArrayKey = 'connections' | 'contacts' | 'contracts' | 'payments' | 'invoices' | 'messages' | 'commitments' | 'events' | 'calls' | 'content' | 'vehicles' | 'jobs' | 'actions' | 'subscriptions' | 'portalMembers' | 'orderConfirmations' | 'invoiceReadings' | 'takeovers';
+const SIMPLE: ArrayKey[] = ['connections', 'contacts', 'contracts', 'payments', 'invoices', 'messages', 'commitments', 'events', 'calls', 'content', 'vehicles', 'jobs', 'actions', 'subscriptions', 'portalMembers', 'orderConfirmations', 'invoiceReadings', 'takeovers'];
 
 /** AppState-Schlüssel → Tabelle (job_runs läuft ausschließlich über claimJobRun). */
 export const TABLES = {
@@ -19,6 +19,7 @@ export const TABLES = {
   portalMembers: 'portal_members', ignoredPortalMembers: 'ignored_portal_members',
   orderConfirmations: 'order_confirmations',
   invoiceReadings: 'invoice_readings',
+  takeovers: 'stripe_takeovers',
 } as const;
 export type TableName = (typeof TABLES)[keyof typeof TABLES];
 /** Tabellen mit Schlüsselspalten connection_id/external_id (eindeutig je Quelle). */

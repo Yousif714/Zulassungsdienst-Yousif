@@ -6,10 +6,13 @@ import { createDemoState } from '@/data/seed';
 import { reducer, refresh, type StoreEvent } from '@/data/store';
 import { draftLink, handleButton, handleInbound } from '@/domain/assistant';
 import type { AppState } from '@/domain/types';
-import { NOW_0930 as NOW, drain } from './helpers';
+import { NOW_0930 as NOW, drain, stateWith } from './helpers';
 
 const apply = (st: AppState, events: StoreEvent[]) => events.reduce(reducer, st);
-const s = refresh(createDemoState(), NOW);
+// Ohne automatisch angelegte Erinnerungsentwürfe: die Tests prüfen nur ihre eigenen Aktionen.
+const s: AppState = { ...refresh(createDemoState(), NOW), actions: [] };
+/** Aktionen ohne die automatisch angelegten Erinnerungsentwürfe (`refresh`). */
+const own = (st: AppState) => st.actions.filter((a) => !a.id.startsWith('upcoming-') && !a.id.startsWith('link-nudge-'));
 const OWNER = '+491510000000';
 /** WhatsApp-Kanal im Demo-Modus: Absender wird gegen die Inhaber-Nummer geprüft. */
 const WA = { channel: 'whatsapp', isDemo: true } as const;
@@ -33,7 +36,7 @@ describe('handleInbound', () => {
     expect(st.assistantChat[0]).toMatchObject({ direction: 'ignored', from: '+4917099999' });
     expect(st.assistantChat[0].text).toContain('ignoriert');
     expect(st.audit.at(-1)!.text).toContain('ignoriert');
-    expect(st.actions).toHaveLength(0);
+    expect(own(st)).toHaveLength(0);
   });
 
   test('Erinnerung ohne Rückstand: keine Aktion, kurze Antwort', async () => {
@@ -41,7 +44,7 @@ describe('handleInbound', () => {
     expect(r.reply!.text).toBe('Anna Schulz hat keinen Rückstand – keine Erinnerung nötig.');
     expect(r.reply!.buttons).toBeUndefined();
     expect(r.events.some((e) => e.type === 'createAction')).toBe(false);
-    expect(apply(s, r.events).actions).toHaveLength(0);
+    expect(own(apply(s, r.events))).toHaveLength(0);
   });
 
   test('Inhaber mit anderer Schreibweise der Nummer wird erkannt', async () => {
@@ -52,12 +55,12 @@ describe('handleInbound', () => {
   test('Erinnerung: Entwurf mit Task-14-Id, Payload, Knöpfe mit Version und Zeit', async () => {
     const r = await handleInbound(s, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(s, NOW), WA);
     const st = apply(s, r.events);
-    const a = st.actions.find((x) => x.type === 'send_reminder')!;
+    const a = own(st).find((x) => x.type === 'send_reminder')!;
     expect(a.id).toBe('reminder-mc-kaya-2026-11-01');
     expect(a.status).toBe('draft');
     const kaya = s.contacts.find((c) => c.id === 'm-kaya')!;
     const status = (await import('@/domain/detectors')).memberView(s, 'mc-kaya', '2026-11-12').status;
-    const text = await demoAI.draftReminder({ contact: kaya, status, tone: 'freundlich', paymentLink: paymentLinkFor('mc-kaya') });
+    const text = await demoAI.draftReminder({ contact: kaya, status, tone: 'freundlich', paymentLink: paymentLinkFor(stateWith(), 'mc-kaya', true) });
     expect(a.payload).toEqual({ threadId: 't-m-kaya', channel: 'whatsapp', contactId: 'm-kaya', text });
     expect(r.reply!.text).toContain(text);
     expect(r.reply!.buttons).toEqual(['Senden', 'Ändern', 'Später'].map((label) => ({ label, actionId: a.id, version: 1, issuedAt: NOW.toISOString() })));
@@ -217,5 +220,21 @@ describe('In-App-Kanal (angemeldeter Inhaber) und isDemo', () => {
     expect(draftLink(st, id)).toEqual({ label: 'Entwurf öffnen', href: '/nexus/mitglieder/mc-kaya' });
     expect(handleButton(st, r.reply!.buttons![1], NOW).reply.links).toEqual([draftLink(st, id)]);
     expect(draftLink(st, 'gibt-es-nicht')).toBeNull();
+  });
+});
+
+describe('Erinnerung bei laufender Stripe-Abbuchung (I1)', () => {
+  test('„Erinnerung“ bei set_up mit Rückstand → keine Aktion, Hinweis auf Stripe', async () => {
+    const contract = s.contracts.find((c) => c.id === 'mc-kaya')!;
+    const takeover: AppState['takeovers'][number] = {
+      id: 'stripe-takeover-mc-kaya-1', contractId: contract.id, contactId: contract.contactId, actionId: 'stripe-takeover-mc-kaya-1', actionVersion: 1,
+      status: 'set_up', token: 'tok', link: 'https://app.example.de/zahlung/tok', mode: 'first_rate', rates: [], openCents: 0, stripeCustomerId: 'cus_test_1',
+      paymentMethodId: 'pm_test_1', scheduleId: 'sub_sched_test_1', subscriptionExternalId: null, isDemo: false, linkSentAt: '2026-11-05T08:00:00Z', setUpAt: '2026-11-06T08:00:00Z',
+    };
+    const st = { ...s, takeovers: [takeover] };
+    const r = await handleInbound(st, OWNER, 'Schick Kaya die Erinnerung', NOW, demoAI, createStateTools(st, NOW), WA);
+    expect(r.events.some((e) => e.type === 'createAction')).toBe(false);
+    expect(r.reply!.text).toBe('Mehmet Kaya: Raten laufen über Stripe – keine Erinnerung nötig.');
+    expect(r.reply!.buttons).toBeUndefined();
   });
 });

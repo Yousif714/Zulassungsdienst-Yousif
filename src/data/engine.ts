@@ -1,4 +1,4 @@
-import { REJECT_REASON_DE, approve, editDraft, finishExecution, reconcileUncertain, retry, startExecution } from '@/domain/actions/machine';
+import { REJECT_REASON_DE, approve, editDraft, finishExecution, reconcileUncertain, retry, startExecution, type ActionOutput } from '@/domain/actions/machine';
 import { handleButton } from '@/domain/assistant';
 import { jobBilling } from '@/domain/billing';
 import { LEXWARE_OF } from '@/domain/connections';
@@ -22,6 +22,11 @@ import { deriveProposals, findContactFor, type ContractProposal } from '@/domain
 import { portalProposal, portalViews } from '@/domain/portal';
 import { coveringContract, invoiceAllocatableCents, splitPaymentOverInvoices } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
+import { markTakeoverPlanChanged, recordTakeover, setUpTakeover, withdrawSentTakeover } from '@/domain/takeover/lifecycle';
+import { ensureTakeoverDrafts } from '@/domain/takeover/drafts';
+import { cancelTakeoverDraft, syncTakeoverDraft, takeoverCandidates } from '@/domain/takeover/prepare';
+import { contractLockedReason, currentTakeover } from '@/domain/takeover/status';
+import { syncTakeovers } from '@/domain/takeover/link';
 import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Company, Connection, ContractKind, Contact, Invoice, InvoiceReading, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
 
@@ -120,7 +125,8 @@ function settleCommitments(s: AppState, at: Date): AppState {
 
 /** Auto-Zuordnung (`high`), Zusagen prüfen, Hinweise neu abgleichen. */
 export function refresh(s: AppState, at: Date, isDemo = true): AppState {
-  const st = settleCommitments(allocateBankReturns(autoAllocate(allocateBankReturns(allocateStripe(s, at, isDemo), at, isDemo), at, isDemo), at, isDemo), at);
+  const allocated = settleCommitments(allocateBankReturns(autoAllocate(allocateBankReturns(allocateStripe(s, at, isDemo), at, isDemo), at, isDemo), at, isDemo), at);
+  const st = ensureTakeoverDrafts(allocated, at, isDemo);
   const stale = areaStale(st.connections.map((c) => c.id), st.connections, at);
   return { ...st, insights: reconcileInsights(st.insights, [...runDetectors(st, at), ...runCoach(st, at)], at, stale, st.settings.suppressedCoachKeys) };
 }
@@ -246,7 +252,7 @@ function sendMessage(s: AppState, a: Action, ctx: EngineContext): Mutation {
 const EXTERNAL_SEND = new Set<Action['type']>(['send_whatsapp', 'send_email', 'send_reminder']);
 
 /** `simulated`: Der Ausführer hat nichts wirklich gesendet. Im Echtmodus entsteht dann keine ausgehende Nachricht. */
-function applyEffects(s: AppState, a: Action, ctx: EngineContext, simulated = false): Mutation {
+function applyEffects(s: AppState, a: Action, ctx: EngineContext, simulated = false, output?: ActionOutput): Mutation {
   if (simulated && !ctx.isDemo && EXTERNAL_SEND.has(a.type)) return { state: s, text: `Nicht gesendet (Demo-Ausführer): ${a.title}` };
   const p = a.payload as Record<string, string>;
   switch (a.type) {
@@ -260,9 +266,32 @@ function applyEffects(s: AppState, a: Action, ctx: EngineContext, simulated = fa
       return settleInvoice(s, p.invoiceId, p.paymentId);
     case 'confirm_payment_match':
       return confirmPaymentMatch(s, p.paymentId, { contractId: p.contractId }, ctx.at);
+    case 'stripe_takeover': {
+      // Läuft immer. Demo nur aus Kontext/Ausführer; im Echtbetrieb ohne Ergebnisdaten entsteht keine Umstellung.
+      const r = recordTakeover(s, a, output, ctx.at, ctx.newId, ctx.isDemo || simulated);
+      if (!r) return { state: s, text: `Ausgeführt: ${a.title}` };
+      if (r === 'no_output') return { state: s, text: `Umstellung ohne Ergebnisdaten – bitte prüfen: ${a.title}` };
+      const t = r.takeover;
+      const name = contactName(s, t.contactId);
+      return {
+        state: r.state,
+        text: t.status === 'set_up' ? setUpText(name, t.rates.length, t.scheduleId) : `Link erzeugt${t.isDemo ? ' (Demo)' : ''}: ${name}`,
+      };
+    }
     default:
       return { state: s, text: `Ausgeführt (Demo): ${a.title}` };
   }
+}
+
+const setUpText = (name: string, rates: number, scheduleId: string | null) => `Umstellung eingerichtet: ${name}, ${rates} Raten (Zeitplan ${scheduleId})`;
+
+/** Freigabe einer Aktion (einzeln oder Teil der Sammelfreigabe). */
+function approveOne(s: AppState, req: { id: string; version: number; via: 'app' | 'whatsapp'; buttonIssuedAt?: string }, at: Date): { state: AppState; action?: Action; text?: string } {
+  const a = s.actions.find((x) => x.id === req.id);
+  if (!a) return { state: s };
+  const r = approve(a, req, at);
+  if (!r.ok) return { state: s, action: a, text: `Abgelehnt: ${REJECT_REASON_DE[r.reason]}` };
+  return { state: replaceAction(s, r.action), action: r.action, text: `Freigegeben (${req.via === 'app' ? 'App' : 'WhatsApp'}): ${a.title}` };
 }
 
 /** Ein abgehakter Antwort-Hinweis gilt als manuell beantwortet: die Nachricht wartet dann nicht mehr. */
@@ -315,19 +344,87 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       return owner({ state: { ...s, jobs }, text: `Auftragsstatus geändert: ${contactName(s, job?.contactId)} · ${job?.service ?? e.jobId} → ${e.status}` });
     }
     case 'createAction':
-      if (s.actions.some((a) => a.id === e.action.id)) return { state: s };
+      // Umstellungen entstehen nur über prepareTakeover (Raten aus dem Stand), nie aus fremden Entwürfen.
+      if (e.action.type === 'stripe_takeover' || s.actions.some((a) => a.id === e.action.id)) return { state: s };
       return owner({ state: { ...s, actions: [...s.actions, e.action] }, text: `Entwurf angelegt: ${e.action.title}` }, e.action.id);
     case 'editAction': {
       const a = s.actions.find((x) => x.id === e.id);
-      if (!a || a.status !== 'draft') return { state: s };
+      if (!a || a.status !== 'draft' || a.type === 'stripe_takeover') return { state: s };
       return owner({ state: replaceAction(s, editDraft(a, e.payload)), text: `Entwurf geändert: ${a.title}` }, a.id);
     }
     case 'approveAction': {
-      const a = s.actions.find((x) => x.id === e.id);
-      if (!a) return { state: s };
-      const r = approve(a, { version: e.version, via: e.via, buttonIssuedAt: e.buttonIssuedAt }, at);
-      if (!r.ok) return owner({ state: s, text: `Abgelehnt: ${REJECT_REASON_DE[r.reason]}` }, a.id);
-      return owner({ state: replaceAction(s, r.action), text: `Freigegeben (${e.via === 'app' ? 'App' : 'WhatsApp'}): ${a.title}` }, a.id);
+      const r = approveOne(s, e, at);
+      return r.action && r.text ? owner({ state: r.state, text: r.text }, r.action.id) : { state: s };
+    }
+    case 'approveActions': {
+      let st = s;
+      let n = 0;
+      for (const item of e.items) {
+        const r = approveOne(st, { ...item, via: 'app' }, at);
+        if (r.state !== st) n += 1;
+        st = r.state;
+      }
+      return owner({ state: st, text: `Sammelfreigabe: ${n} Aktionen` });
+    }
+    case 'prepareTakeover': {
+      const r = syncTakeoverDraft(s, e.contractId, e.mode, at, ctx.isDemo);
+      if (r.outcome === 'blocked') return owner({ state: r.state, text: `Umstellung nicht vorbereitet: ${r.reason}` });
+      const name = contactName(s, s.contracts.find((c) => c.id === e.contractId)?.contactId);
+      if (r.outcome === 'running') return owner({ state: s, text: `Umstellung läuft bereits: ${name}` }, r.action.id);
+      if (r.outcome === 'unchanged') return { state: s };
+      const text = r.outcome === 'created' ? `Umstellung vorbereitet: ${name}` : `Entwurf geändert: ${r.action.title}`;
+      return owner({ state: r.state, text }, r.action.id);
+    }
+    case 'prepareAllTakeovers': {
+      let st = s;
+      let n = 0;
+      for (const c of takeoverCandidates(s, at)) {
+        const r = syncTakeoverDraft(st, c.id, c.catchUpMode, at, ctx.isDemo);
+        if (r.outcome === 'created') n += 1;
+        st = r.state;
+      }
+      return owner({ state: st, text: `${n} Umstellungen vorbereitet` });
+    }
+    case 'withdrawTakeover': {
+      const name = contactName(s, s.contracts.find((c) => c.id === e.contractId)?.contactId);
+      const draft = cancelTakeoverDraft(s, e.contractId);
+      if (draft) return owner({ state: draft.state, text: `Umstellung zurückgezogen (Entwurf): ${name}` }, draft.action.id);
+      const r = withdrawSentTakeover(s, e.contractId, at);
+      if (!r) return { state: s };
+      if ('blocked' in r) return owner({ state: s, text: 'Zurückziehen nicht möglich: Zeitplan besteht, bitte in Stripe kündigen' });
+      return owner({ state: r.state, text: `Umstellung zurückgezogen: ${name}` }, r.takeover.actionId);
+    }
+    case 'simulateTakeoverSetUp': {
+      const t = currentTakeover(s, e.contractId);
+      // Nur Demo-App und Demo-Umstellung: sonst würde ein echter Vertrag ohne Zeitplan auf Stripe gestellt.
+      if (!ctx.isDemo || (t && !t.isDemo)) return owner({ state: s, text: 'Demo-Einrichtung im Echtbetrieb abgelehnt' });
+      if (!t || t.status !== 'link_sent') return { state: s };
+      const r = setUpTakeover(s, t.id, { scheduleId: 'demo', paymentMethodId: 'demo' }, at);
+      if (!r) return { state: s };
+      return owner({ state: r.state, text: setUpText(contactName(s, t.contactId), t.rates.length, 'demo') }, t.actionId);
+    }
+    case 'takeoverSetUp': {
+      const r = setUpTakeover(s, e.takeoverId, e, at);
+      if (!r) return { state: s };
+      const t = r.takeover;
+      return { state: r.state, audit: { actor: 'system', text: setUpText(contactName(s, t.contactId), t.rates.length, t.scheduleId), actionId: t.actionId } };
+    }
+    case 'takeoverPlanChanged': {
+      const r = markTakeoverPlanChanged(s, e.takeoverId, e.paymentMethodId);
+      if (!r) return { state: s };
+      const t = r.takeover;
+      return { state: r.state, audit: { actor: 'system', text: `Umstellung ${contactName(s, t.contactId)}: Plan hat sich geändert, neu freigeben`, actionId: t.actionId } };
+    }
+    case 'takeoverScheduleCanceled': {
+      const t = s.takeovers.find((x) => x.id === e.takeoverId);
+      if (!t) return { state: s };
+      const why = t.status === 'withdrawn' ? 'Umstellung inzwischen zurückgezogen' : t.status === 'plan_changed' ? 'Plan hat sich geändert' : 'Umstellung nicht mehr offen';
+      return { state: s, audit: { actor: 'system', text: `Zeitplan storniert: ${why} (${contactName(s, t.contactId)}, Zeitplan ${e.scheduleId})`, actionId: t.actionId } };
+    }
+    case 'takeoverCustomerMismatch': {
+      const t = s.takeovers.find((x) => x.id === e.takeoverId);
+      if (!t) return { state: s };
+      return { state: s, audit: { actor: 'system', text: `Umstellung ${contactName(s, t.contactId)}: Checkout mit fremdem Stripe-Kunden (${e.customerId ?? 'keiner'}) ignoriert`, actionId: t.actionId } };
     }
     case 'actionStarted': {
       const a = s.actions.find((x) => x.id === e.id);
@@ -340,7 +437,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       if (!a || (a.status !== 'approved' && a.status !== 'executing')) return { state: s };
       const done = finishExecution(a.status === 'approved' ? startExecution(a) : a, e.result, at, e.error);
       const st = replaceAction(s, done);
-      if (e.result === 'ok') return owner(applyEffects(st, done, ctx, e.simulated), a.id);
+      if (e.result === 'ok') return owner(applyEffects(st, done, ctx, e.simulated, e.output), a.id);
       const text = e.result === 'error' ? `Fehlgeschlagen: ${a.title}${e.error ? ` (${e.error})` : ''}` : `Ausgang unklar: ${a.title}`;
       return owner({ state: st, text }, a.id);
     }
@@ -349,7 +446,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       if (!a || a.status !== 'uncertain') return { state: s };
       const done = reconcileUncertain(a, e.found, at);
       const st = replaceAction(s, done);
-      if (e.found) return owner(applyEffects(st, done, ctx, e.simulated), a.id);
+      if (e.found) return owner(applyEffects(st, done, ctx, e.simulated, e.output), a.id);
       return owner({ state: st, text: `Fehlgeschlagen: ${a.title} (beim Anbieter nicht gefunden)` }, a.id);
     }
     case 'retryAction': {
@@ -400,7 +497,12 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
         return next;
       });
       const { payments: p, invoices: i, subscriptions: a } = r.added;
-      const state = { ...r.state, connections };
+      const linked = syncTakeovers(r.state, todayBerlin(at), at);
+      const state = {
+        ...linked.state,
+        connections,
+        audit: [...linked.state.audit, ...linked.audit.map((text) => ({ at: at.toISOString(), actor: 'system' as const, text, isDemo: ctx.isDemo }))],
+      };
       return p + i + a > 0
         ? { state, audit: { actor: 'system', text: `Abgleich ${conn.label}: ${p} neue Zahlungen, ${i} Rechnungen, ${a} Abos` } }
         : { state };
@@ -509,11 +611,19 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       if (e.type === 'confirmReadContract') {
         return owner({ state: { ...s, contracts: s.contracts.map((x) => (x.id === c.id ? { ...x, readBy } : x)) }, text: `Ratenplan bestätigt: Rechnung ${c.readBy.invoiceNumber}` });
       }
+      const locked = contractLockedReason(s, c.id);
+      if (locked) return { state: s, audit: { actor: 'owner', text: locked } };
       if (e.type === 'correctContract') {
         const errors = validateContractDraft(e.draft);
         if (errors.length) return { state: s, audit: { actor: 'owner', text: `Vertrag nicht geändert: ${errors.join(' ')}` } };
         const { totalCents, installments, installmentCents, dueDay, startDate, catchUpMode } = e.draft;
-        const contracts = s.contracts.map((x) => (x.id === c.id ? { ...x, totalCents, installments, installmentCents, dueDay, startDate, catchUpMode, readBy } : x));
+        // Plan einer beendeten Umstellung passt nicht mehr zum neuen Gesamtbetrag: weg damit, der Vertrag gilt wieder ganz.
+        const contracts = s.contracts.map((x) => {
+          if (x.id !== c.id) return x;
+          const next: MemberContract = { ...x, totalCents, installments, installmentCents, dueDay, startDate, catchUpMode, readBy };
+          delete next.plan;
+          return next;
+        });
         return owner({ state: { ...s, contracts }, text: `Ratenplan korrigiert: Rechnung ${c.readBy.invoiceNumber}, ${installments} × ${formatEuro(installmentCents)}` });
       }
       const inv = s.invoices.find((x) => x.id === c.readBy!.invoiceId);
@@ -551,6 +661,7 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     case 'updateSettings': {
       const LABEL: Record<keyof Settings, string> = {
         replyThresholdHours: 'Antwortzeit-Schwelle', briefingsEnabled: 'Briefings', ownerPhone: 'Inhaber-Nummer', suppressedCoachKeys: 'Coach-Tipps',
+        takeoverReminderDays: 'Erinnerung vor Rate (Tage)', takeoverLinkNudgeDays: 'Link-Nachfrage (Tage)',
       };
       const patch = { ...e.patch };
       // Ohne gültige Inhaber-Nummer könnte ein leerer Absender als Inhaber gelten: alte Nummer behalten.

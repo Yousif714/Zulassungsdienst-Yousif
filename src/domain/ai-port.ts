@@ -38,7 +38,7 @@ export interface AIContext { now: Date; tools: AITools }
 export interface AIProvider {
   answer(q: string, ctx: AIContext): Promise<ChatAnswer>;
   draftReply(i: { thread: Message[]; contact: Contact | null }): Promise<string>;
-  draftReminder(i: { contact: Contact; status: MemberStatus; tone: 'freundlich' | 'bestimmt'; paymentLink: string }): Promise<string>;
+  draftReminder(i: { contact: Contact; status: MemberStatus; tone: 'freundlich' | 'bestimmt'; paymentLink: string | null }): Promise<string>;
   slidesFor(call: Call): Promise<Call['slides']>;
   detectCommitment(text: string, sentAt: string): Promise<{ kind: Commitment['kind']; dueAt: string } | null>;
 }

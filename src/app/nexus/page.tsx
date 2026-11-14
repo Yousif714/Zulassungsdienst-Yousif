@@ -8,7 +8,7 @@ import { MoneyCard } from '@/components/MoneyCard';
 import { PageHeader } from '@/components/PageHeader';
 import { Segmented } from '@/components/Segmented';
 import { TrafficDot } from '@/components/TrafficDot';
-import { memberRows, portalRows, nexusForecast, stripeLexCases, unallocatedBankPayments } from '@/data/selectors';
+import { memberRows, portalRows, switchableTakeovers, nexusForecast, stripeLexCases, unallocatedBankPayments } from '@/data/selectors';
 import { useAppStore } from '@/data/store';
 import { MONEY_SOURCES, buildBriefing } from '@/domain/briefing';
 import { formatBerlin, formatBerlinDe, now, todayBerlin } from '@/domain/clock';
@@ -32,6 +32,7 @@ export default function NexusPage() {
   const shown = filter === 'overdue' ? rows.filter((r) => r.traffic !== 'green' && !r.onHold) : rows;
   const receivables = nexusReceivables(state, today);
   const toMatch = unallocatedBankPayments(state).length + stripeLexCases(state).length;
+  const switchable = switchableTakeovers(state, at);
   const openProposals = deriveProposals(state).length;
   const portal = portalSummary(portalRows(state, today));
   const calls = [...state.calls].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
@@ -52,6 +53,8 @@ export default function NexusPage() {
         <ListRow key="open" href="/nexus/offen" title={`Offen (${formatEuro(receivables.totalCents)})`} testId="open-link" />
         <ListRow key="portal" href="/nexus/mitglieder" testId="portal-link" title={`Portal-Mitglieder (${portal.total})`}
           value={portal.total === 0 ? 'Liste einfügen' : `${portal.noInvoice} ohne Rechnung`} />
+        <ListRow key="takeover" href="/nexus/umstellung" testId="takeover-link" title="Umstellung auf Stripe"
+          value={switchable === 0 ? undefined : `${switchable} umstellbar`} />
       </ListGroup>
 
       {openProposals > 0 && (

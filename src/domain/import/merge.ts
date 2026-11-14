@@ -83,6 +83,7 @@ export function mergeBatch(s: AppState, b: ImportBatch, newId: () => string): { 
       confirmedPriceCents: old?.confirmedPriceCents ?? null,
       confirmedEndDate: old?.confirmedEndDate ?? null,
       disputes: old?.disputes ?? [],
+      metadataContractId: next.metadataContractId ?? null,
     }),
     newId,
   );

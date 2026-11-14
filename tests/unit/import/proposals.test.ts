@@ -226,3 +226,10 @@ test('Review 1: Mitgliedsrechnung, die schon im Textsuche-Vorschlag steht → nu
   const s = withLexContact(stateWith({ invoices: [m], invoiceReadings: [reading({ invoiceId: 'i-m1', outcome: 'proposal', result: okResult({ kind: 'membership' }) })] }));
   expect(deriveProposals(s).map((p) => p.sourceLabel)).toEqual(['Lexware']);
 });
+
+test('Abo mit metadata.contractId erzeugt keinen Vorschlag', () => {
+  const fromStripe = (s: AppState) => deriveProposals(s).filter((p) => p.sources.some((r) => r.connectionId === 'stripe_nexus'));
+  expect(fromStripe(stripeState).length).toBeGreaterThan(0);
+  const marked: AppState = { ...stripeState, subscriptions: stripeState.subscriptions.map((x) => ({ ...x, metadataContractId: 'c-unbekannt' })) };
+  expect(fromStripe(marked)).toEqual([]);
+});

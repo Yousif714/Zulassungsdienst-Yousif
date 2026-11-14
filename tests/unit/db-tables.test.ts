@@ -3,7 +3,7 @@ import { createDemoState } from '@/data/seed';
 import { applyEvent, refresh } from '@/data/engine';
 import { toRows, fromRows, diffState, TABLES } from '@/server/db/tables';
 import { createEmptyState } from '@/data/empty-state';
-import type { OrderConfirmation, PortalMember, Subscription } from '@/domain/types';
+import type { OrderConfirmation, PortalMember, StripeTakeover, Subscription } from '@/domain/types';
 
 import { NOW_0930 as NOW, stateWith } from './helpers';
 import { reading } from './import/reading-fixtures';
@@ -150,4 +150,11 @@ it('invoiceReadings: Tabelle invoice_readings, Rundreise, fehlt = []', () => {
   expect(rows.invoice_readings[0]).toMatchObject({ id: 'r1', ord: 0 });
   expect(fromRows(rows).invoiceReadings).toEqual([r]);
   expect(fromRows({}).invoiceReadings).toEqual([]);
+});
+
+it('takeovers laufen über stripe_takeovers hin und zurück', () => {
+  const t: StripeTakeover = { id: 'tk1', contractId: 'c1', contactId: 'm1', actionId: 'stripe-takeover-c1-1', actionVersion: 1, status: 'link_sent', token: 'a'.repeat(64), link: 'https://x.example.de/zahlung/' + 'a'.repeat(64), mode: 'first_rate', rates: [{ no: 1, dueDate: '2026-12-01', amountCents: 30000 }], openCents: 30000, stripeCustomerId: 'cus_test_1', paymentMethodId: null, scheduleId: null, subscriptionExternalId: null, isDemo: false, linkSentAt: '2026-11-13T10:00:00Z' };
+  const s = stateWith({ takeovers: [t] });
+  expect(toRows(s).stripe_takeovers).toEqual([{ id: 'tk1', ord: 0, data: t }]);
+  expect(fromRows(toRows(s)).takeovers).toEqual([t]);
 });
