@@ -12,11 +12,11 @@ test('ungültiger Link: neutrale Seite ohne App-Rahmen', async ({ page }) => {
   await page.goto('/zahlung/' + '0'.repeat(64));
   await expect(page.getByText('Link nicht mehr gültig, bitte melde dich bei NEXUS.')).toBeVisible();
   await expect(page.getByRole('navigation')).toHaveCount(0);
+  await expect(page).toHaveTitle('NEXUS – Ratenplan');
+  await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
 });
 
-test('Fixture-Stripe: Plan sehen, weiter zu Stripe, Webhook richtet ein', async ({ page, request }, info) => {
-  // Setzt den gemeinsamen Server-Stand: nur ein Projekt, sonst überschreiben sich iphone und desktop parallel.
-  test.skip(info.project.name !== 'desktop', 'zustandsbehaftet, läuft nur im Desktop-Projekt');
+test('Fixture-Stripe: Plan sehen, weiter zu Stripe, Webhook richtet ein', async ({ page, request }) => {
   await page.setExtraHTTPHeaders({ 'x-forwarded-for': randomIp() });
   const state = linkSentState();
   const token = state.takeovers[0].token;
@@ -29,6 +29,10 @@ test('Fixture-Stripe: Plan sehen, weiter zu Stripe, Webhook richtet ein', async 
   await expect(page.getByText('Letzte Abbuchung: 01.01.2027')).toBeVisible();
   await expect(page.getByText('Erika')).toHaveCount(0);
   await expect(page.getByRole('navigation')).toHaveCount(0);
+  await expect(page).toHaveTitle('NEXUS – Ratenplan');
+  await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
+  await expect(page.locator('meta[name="apple-mobile-web-app-capable"], meta[name="mobile-web-app-capable"], meta[name="application-name"], meta[name="description"], meta[name="format-detection"]')).toHaveCount(0);
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
 
   await page.getByRole('button', { name: 'Weiter zu Stripe' }).click();
   await expect(page).toHaveURL(/\/zahlung\/danke$/);

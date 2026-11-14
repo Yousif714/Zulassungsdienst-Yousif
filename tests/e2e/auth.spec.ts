@@ -7,7 +7,7 @@ test.describe.configure({ mode: 'serial' });
 let page: Page;
 
 test.beforeAll(async ({ browser, request }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop', 'Nur Desktop: virtueller Authenticator über CDP');
+  test.skip(testInfo.project.name !== 'stateful-auth', 'Nur Desktop: virtueller Authenticator über CDP');
   expect((await request.post('/api/test/reset')).ok()).toBe(true);
   page = await browser.newContext({ baseURL: testInfo.project.use.baseURL }).then((c) => c.newPage());
   const cdp = await page.context().newCDPSession(page);
