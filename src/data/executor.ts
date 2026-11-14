@@ -1,4 +1,4 @@
-import { EXECUTE_TIMEOUT_MS, STALE_EXECUTING_MS, idempotencyKey, type ActionOutput, type ActionProvider, type ExecuteOutcome } from '@/domain/actions/machine';
+import { EXECUTE_TIMEOUT_MS, STALE_EXECUTING_MS, idempotencyKey, isSimulated, type ActionOutput, type ActionProvider, type ExecuteOutcome } from '@/domain/actions/machine';
 import type { StoreEvent } from '@/domain/events';
 import type { AppState } from '@/domain/types';
 
@@ -43,7 +43,7 @@ export async function executeApproved(sink: EventSink, provider: ActionProvider,
     const a = sink.current().actions.find((x) => x.id === id);
     if (!a || a.status !== 'executing') continue;
     const { result, output, error } = await runWithTimeout(() => provider.execute(a, idempotencyKey(a)), timeoutMs);
-    await sink.apply({ type: 'actionExecuted', id, result, ...(error ? { error } : {}), ...(output ? { output } : {}), simulated: provider.simulated });
+    await sink.apply({ type: 'actionExecuted', id, result, ...(error ? { error } : {}), ...(output ? { output } : {}), simulated: isSimulated(provider, a) });
   }
 }
 
@@ -54,7 +54,7 @@ export async function checkAction(sink: EventSink, provider: ActionProvider, id:
   const looked = await provider.lookup(idempotencyKey(a), a);
   const found = typeof looked === 'boolean' ? looked : true;
   const output = typeof looked === 'object' ? looked.output : undefined;
-  await sink.apply({ type: 'actionReconciled', id, found, ...(output ? { output } : {}), simulated: provider.simulated });
+  await sink.apply({ type: 'actionReconciled', id, found, ...(output ? { output } : {}), simulated: isSimulated(provider, a) });
 }
 
 /** Eine Ausführung, die zu lange „executing“ ist (z. B. Seite geschlossen), wird zu „Ausgang unklar“. */

@@ -83,9 +83,14 @@ export function retry(a: Action): Action {
 export type ActionOutput = Record<string, string>;
 export type ExecuteOutcome = 'ok' | 'error' | 'timeout' | { result: 'ok'; output: ActionOutput };
 
+/** Ob der Ausführer diese Aktion nur simuliert. */
+export const isSimulated = (p: ActionProvider, a: Action): boolean => p.simulatedFor?.(a) ?? p.simulated;
+
 export interface ActionProvider {
   /** true: führt nichts wirklich aus (Demo-Ausführer). */
   readonly simulated: boolean;
+  /** Je Aktion abweichend von `simulated` (z. B. Server-Ausführer: Nachrichten Demo, Stripe-Umstellung echt). */
+  simulatedFor?(a: Action): boolean;
   execute(a: Action, key: string): Promise<ExecuteOutcome>;
   lookup(key: string, a?: Action): Promise<boolean | { output: ActionOutput }>;
 }

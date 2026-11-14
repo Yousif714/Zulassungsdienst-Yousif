@@ -12,7 +12,17 @@ const PRODUCT_IDEMPOTENCY_KEY = 'nexus-ratenplan-product-v1';
 
 export interface ScheduleInput { customerId: string; paymentMethodId: string; productId: string; phases: TakeoverPhase[]; contractId: string; takeoverId: string }
 
+/** Ein Zeitplan je Umstellung: Provider (Neu-Freigabe) und Webhook nutzen denselben Key, nie die Aktionsversion. */
+export const scheduleIdempotencyKey = (takeoverId: string): string => `takeover:${takeoverId}:schedule`;
+
+/** Basis-URL ohne abschließende Schrägstriche (nie `//zahlung`). */
+export const trimBase = (base: string): string => base.replace(/\/+$/, '');
+
 export interface StripeWriter {
+  /** Nur suchen, nie anlegen (Prüfen bei unklarem Ausgang). */
+  findCustomer(contractId: string): Promise<string | null>;
+  /** Zeitplan des Kunden mit `metadata.takeoverId`, sonst null. */
+  findSchedule(customerId: string, takeoverId: string): Promise<string | null>;
   findOrCreateCustomer(i: { contractId: string; name: string; email: string | null }, idemKey: string): Promise<string>;
   createSetupCheckout(i: { customerId: string; takeoverId: string; contractId: string; token: string; base: string }): Promise<{ id: string; url: string }>;
   setupIntentPaymentMethod(setupIntentId: string): Promise<string>;
@@ -62,17 +72,28 @@ export function createStripeWriter(o: { key: string; fetch: typeof fetch; sleep:
     return v;
   };
 
+  const findCustomer = async (contractId: string): Promise<string | null> => {
+    const found = await search('/v1/customers/search', `metadata['contractId']:'${contractId.replace(/['\\]/g, '')}'`);
+    return found ? need(found.id, 'Kunden-ID') : null;
+  };
+
   return {
+    findCustomer,
+    async findSchedule(customerId, takeoverId) {
+      const r = (await api.getJson(`/v1/subscription_schedules?${new URLSearchParams({ customer: customerId, limit: '100' }).toString()}`)) as { data?: Obj[] };
+      const hit = (r.data ?? []).find((x) => (x.metadata as Record<string, unknown> | undefined)?.takeoverId === takeoverId);
+      return hit ? need(hit.id, 'Zeitplan-ID') : null;
+    },
     async findOrCreateCustomer(i, idemKey) {
-      const found = await search('/v1/customers/search', `metadata['contractId']:'${i.contractId.replace(/['\\]/g, '')}'`);
-      if (found) return need(found.id, 'Kunden-ID');
+      const found = await findCustomer(i.contractId);
+      if (found) return found;
       const c = await post('/v1/customers', { name: i.name, email: i.email, metadata: { contractId: i.contractId } }, idemKey);
       return need(c.id, 'Kunden-ID');
     },
     async createSetupCheckout(i) {
       const s = await post('/v1/checkout/sessions', {
         mode: 'setup', customer: i.customerId, payment_method_types: ['card', 'sepa_debit'], locale: 'de',
-        success_url: `${i.base}/zahlung/danke`, cancel_url: `${i.base}/zahlung/abbruch?t=${i.token}`,
+        success_url: `${trimBase(i.base)}/zahlung/danke`, cancel_url: `${trimBase(i.base)}/zahlung/abbruch?t=${encodeURIComponent(i.token)}`,
         metadata: { takeoverId: i.takeoverId, contractId: i.contractId },
         setup_intent_data: { metadata: { takeoverId: i.takeoverId } },
       });

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import { berlinLocalToUtc } from '@/domain/clock';
 import { fixtureFetch, type FixtureRequest } from '@/server/connectors/fixture-fetch';
-import { createStripeWriter, PLAN_PRODUCT_NAME, scheduleParams } from '@/server/connectors/stripe-write';
+import { createStripeWriter, PLAN_PRODUCT_NAME, scheduleIdempotencyKey, scheduleParams } from '@/server/connectors/stripe-write';
 import { stripeWriteRoutes } from '../../fixtures/stripe-write';
 
 const unix = (iso: string, t = '07:00') => Math.floor(berlinLocalToUtc(iso, t).getTime() / 1000);
@@ -87,6 +87,34 @@ describe('createStripeWriter', () => {
     expect(id).toBe('sub_sched_test_1');
     expect(requests[2]).toMatchObject({ path: '/v1/subscription_schedules', idempotencyKey: 'takeover:tk1:schedule' });
     expect(decodeURIComponent(requests[2].body)).toContain('start_date=now&end_behavior=cancel');
+  });
+  test('Basis-URL mit Schrägstrich am Ende → nie //zahlung, Token in cancel_url kodiert', async () => {
+    const requests: FixtureRequest[] = [];
+    await writer(undefined, requests).createSetupCheckout({ customerId: 'cus_test_1', takeoverId: 'tk1', contractId: 'c1', token: 'a b&c=d', base: 'https://nexus.example//' });
+    const body = new URLSearchParams(requests[0].body);
+    expect(body.get('success_url')).toBe('https://nexus.example/zahlung/danke');
+    expect(body.get('cancel_url')).toBe('https://nexus.example/zahlung/abbruch?t=a%20b%26c%3Dd');
+  });
+  test('findCustomer sucht nur, legt nie an', async () => {
+    const none: FixtureRequest[] = [];
+    expect(await writer(undefined, none).findCustomer('c1')).toBeNull();
+    expect(none.map((r) => r.method)).toEqual(['GET']);
+    expect(await writer({ ...stripeWriteRoutes, 'GET /v1/customers/search': { data: [{ id: 'cus_test_9' }] } }).findCustomer('c1')).toBe('cus_test_9');
+  });
+  test('findSchedule: Zeitplan des Kunden mit passender takeoverId', async () => {
+    const requests: FixtureRequest[] = [];
+    const routes = { ...stripeWriteRoutes, 'GET /v1/subscription_schedules': { data: [
+      { id: 'sub_sched_other', metadata: { takeoverId: 'tk0' } },
+      { id: 'sub_sched_test_1', metadata: { takeoverId: 'tk1', contractId: 'c1' } },
+    ] } };
+    expect(await writer(routes, requests).findSchedule('cus_test_1', 'tk1')).toBe('sub_sched_test_1');
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ method: 'GET', path: '/v1/subscription_schedules?customer=cus_test_1&limit=100' });
+    expect(await writer(routes).findSchedule('cus_test_1', 'tk9')).toBeNull();
+    expect(await writer({ ...stripeWriteRoutes, 'GET /v1/subscription_schedules': { data: [] } }).findSchedule('cus_test_1', 'tk1')).toBeNull();
+  });
+  test('Idempotency-Key des Zeitplans hängt nur an der Umstellung', () => {
+    expect(scheduleIdempotencyKey('stripe-takeover-c1-1')).toBe('takeover:stripe-takeover-c1-1:schedule');
   });
   test('Fehlermeldung enthält den Schlüssel nie', async () => {
     const err = await writer(undefined, [], { 'POST /v1/customers': 401 }).findOrCreateCustomer({ contractId: 'c1', name: 'x', email: null }, 'k').catch((e: Error) => e) as Error;
