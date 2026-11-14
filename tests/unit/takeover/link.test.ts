@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { syncTakeovers } from '@/domain/takeover/link';
+import { syncTakeovers, takeoverSubscriptionFor } from '@/domain/takeover/link';
+import { detectTakeover } from '@/domain/detectors/takeover';
 import { phaseStartUnix, planEndDate, schedulePhases } from '@/domain/takeover/plan';
 import { mapStripe, type StripeRaw } from '@/domain/import/stripe';
 import { mergeBatch } from '@/domain/import/merge';
 import { detectSubscriptionChanges } from '@/domain/detectors/subscriptions';
 import type { AppState, Installment, StripeTakeover, Subscription } from '@/domain/types';
-import { base, stateWith } from '../helpers';
+import { base, stateWith, tx } from '../helpers';
 import { applyEvent } from '@/data/engine';
 import { emptyBatch } from '@/domain/import/batch';
 import { seq } from '../import/helpers';
@@ -73,6 +74,16 @@ describe('syncTakeovers', () => {
     expect(r.audit).toEqual(['Stripe-Abo vorzeitig beendet: Erika Muster, zurück auf Überweisung']);
   });
 
+  test('M10: Abo gekündigt ohne Enddatum, aber alles über Stripe bezahlt → reguläres Ende, kein Rückfall', () => {
+    const pay = tx({ id: 'p-stripe', source: 'stripe', connectionId: 'stripe_nexus', externalId: 'in_test_1', amountCents: 120000, bookedOn: '2026-11-12' });
+    const s0 = world({ status: 'active', subscriptionExternalId: 'sub_test_1' }, { status: 'canceled', contractId: 'c1', endDate: null, confirmedEndDate: planEnd },
+      { payments: [pay], allocations: [{ paymentId: pay.id, contractId: 'c1', amountCents: 120000, method: 'auto' }] });
+    const r = syncTakeovers(s0, TODAY, AT);
+    expect(r.state.takeovers[0].status).toBe('active');
+    expect(r.state.contracts[0].billing).toBe('stripe');
+    expect(r.audit).toEqual([]);
+  });
+
   test('reguläres Ende → bleibt aktiv, kein Rückfall', () => {
     const s0 = world({ status: 'active', subscriptionExternalId: 'sub_test_1' }, { status: 'canceled', contractId: 'c1', endDate: '2026-11-10', confirmedEndDate: '2026-11-10' });
     const r = syncTakeovers(s0, TODAY, AT);
@@ -123,4 +134,26 @@ test('importBatch verknüpft und schreibt das Audit (Akteur system)', () => {
   expect(r.subscriptions[0].contractId).toBe('c1');
   expect(r.audit.find((a) => a.text === 'Stripe-Abo verknüpft: Erika Muster')).toMatchObject({ actor: 'system' });
   expect(r.contracts.length).toBe(1);
+});
+
+describe('takeoverSubscriptionFor: ein Prädikat für Abgleich und Hinweis (M7)', () => {
+  const other = takeover({ id: 'stripe-takeover-c1-0', status: 'active', subscriptionExternalId: 'sub_test_1', linkSentAt: '2026-11-01T08:00:00Z' });
+  const cases: [string, AppState, boolean][] = [
+    ['passendes Abo', world({}, {}), true],
+    ['Demo-Umstellung', world({ isDemo: true }, {}), false],
+    ['fremder Kunde', world({}, { stripeCustomerId: 'cus_test_9' }), false],
+    ['gekündigtes Abo', world({}, { status: 'canceled' }), false],
+    ['Abo an anderem Vertrag', world({}, { contractId: 'c2' }), false],
+    ['Abo gehört anderer Umstellung', world({}, {}, { takeovers: [takeover(), other] }), false],
+  ];
+  test.each(cases)('%s', (_n, s, match) => {
+    const t = s.takeovers.find((x) => x.id === 'stripe-takeover-c1-1')!;
+    expect(takeoverSubscriptionFor(s, t)?.externalId === 'sub_test_1').toBe(match);
+    const linked = syncTakeovers(s, TODAY, AT).state.takeovers.find((x) => x.id === t.id)!.status === 'active';
+    expect(linked).toBe(match);
+    // Hinweis „Abo ohne Umstellung“ schweigt genau dann, wenn der Abgleich das Abo verknüpfen wird (oder es schon zugeordnet/gekündigt ist).
+    const orphan = detectTakeover(s, AT).some((i) => i.type === 'takeover_subscription_orphan');
+    const assigned = s.subscriptions[0].contractId !== null || s.subscriptions[0].status === 'canceled' || s.takeovers.some((o) => o.subscriptionExternalId === 'sub_test_1');
+    expect(orphan).toBe(!match && !assigned);
+  });
 });

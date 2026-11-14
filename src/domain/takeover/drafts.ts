@@ -11,6 +11,7 @@ import { linkNudgeText, upcomingReminderText } from './texts';
 export { linkNudgeAction, linkNudgeId, upcomingReminderAction, upcomingReminderId };
 
 const UPCOMING_PREFIX = 'upcoming-';
+const NUDGE_PREFIX = linkNudgeId('');
 
 /** Fälligkeitstag aus dem Schlüssel `upcoming:<contractId>:<dueDate>`. */
 const dueDateOf = (a: Action): IsoDate | null => {
@@ -23,7 +24,8 @@ const contractOfReminder = (a: Action): string | null => /^upcoming:(.+):\d{4}-\
  * Hält die Entwürfe rund um die Umstellung aktuell (idempotent, feste IDs):
  * offene `stripe_takeover`-Entwürfe folgen dem Stand (über `syncTakeoverDraft`/`cancelTakeoverDraft`),
  * Erinnerungen vor anstehenden Raten und Link-Nachfragen entstehen je Fall genau einmal,
- * überholte Erinnerungen (Fälligkeit vorbei oder Raten laufen über Stripe) werden abgebrochen.
+ * überholte Erinnerungen (Fälligkeit vorbei oder Raten laufen über Stripe) und Link-Nachfragen zu nicht mehr gültigen Links
+ * werden abgebrochen.
  */
 export function ensureTakeoverDrafts(s: AppState, at: Date, isDemo: boolean): AppState {
   const today = todayBerlin(at);
@@ -40,6 +42,11 @@ export function ensureTakeoverDrafts(s: AppState, at: Date, isDemo: boolean): Ap
   st = {
     ...st,
     actions: st.actions.map((a) => {
+      // Link-Nachfrage nur, solange der Link gilt: eingerichtet, zurückgezogen oder Plan geändert → toter Link.
+      if (a.id.startsWith(NUDGE_PREFIX) && a.status === 'draft') {
+        const t = st.takeovers.find((x) => linkNudgeId(x.id) === a.id);
+        return t && t.status !== 'link_sent' ? cancelDraft(a) : a;
+      }
       if (!a.id.startsWith(UPCOMING_PREFIX) || a.status !== 'draft') return a;
       const due = dueDateOf(a);
       const cid = contractOfReminder(a);

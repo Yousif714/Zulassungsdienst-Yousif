@@ -41,7 +41,7 @@ describe('Aktions-Fabrik', () => {
     expect(a.payload.contactId).toBeNull();
   });
   it('paymentLinkFor', () => {
-    expect(paymentLinkFor(stateWith(), 'mc-kaya')).toBe('https://buy.stripe.com/demo/mc-kaya');
+    expect(paymentLinkFor(stateWith(), 'mc-kaya', true)).toBe('https://buy.stripe.com/demo/mc-kaya');
   });
 
   describe('takeoverAction', () => {

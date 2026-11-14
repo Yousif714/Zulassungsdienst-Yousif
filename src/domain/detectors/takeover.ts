@@ -2,6 +2,7 @@ import { daysBetween, formatIsoDe, todayBerlin } from '../clock';
 import { contractSources } from '../connections';
 import { contractOnHold } from '../ledger/contracts';
 import { formatEuro } from '../money';
+import { takeoverSubscriptionFor } from '../takeover/link';
 import { currentTakeover, openTakeoverAction, runsViaStripe } from '../takeover/status';
 import type { AppState, Insight, IsoDate, StripeTakeover } from '../types';
 import { memberView } from './members';
@@ -122,9 +123,7 @@ export function detectTakeover(s: AppState, now: Date): Insight[] {
     if (!sub.metadataContractId || sub.contractId || sub.status === 'canceled') continue;
     if (s.takeovers.some((t) => t.subscriptionExternalId === sub.externalId)) continue;
     // Eigenes Abo einer eingerichteten Umstellung: der Abgleich nach dem Import verknüpft es (wie `syncTakeovers`).
-    const waiting = s.takeovers.some(
-      (t) => t.status === 'set_up' && !t.isDemo && t.contractId === sub.metadataContractId && t.stripeCustomerId === sub.stripeCustomerId,
-    );
+    const waiting = s.takeovers.some((t) => t.status === 'set_up' && takeoverSubscriptionFor(s, t)?.externalId === sub.externalId);
     if (waiting) continue;
     out.push({
       dedupeKey: `takeover-orphan:${sub.externalId}`,

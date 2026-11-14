@@ -64,11 +64,18 @@ describe('DemoAI', () => {
   it('Entwürfe', async () => {
     const kaya = s.contacts.find((c) => c.id === 'm-kaya')!;
     const mc = s.contracts.find((c) => c.contactId === kaya.id)!;
-    const link = paymentLinkFor(s, mc.id);
+    const link = paymentLinkFor(s, mc.id, true)!;
     const st = { traffic: 'red', arrearsCents: 15000 } as never;
     for (const tone of ['freundlich', 'bestimmt'] as const) {
       const t = await demoAI.draftReminder({ contact: kaya, status: st, tone, paymentLink: link });
       expect(t).toContain(link);
+      expect(t).toContain(formatEuro(15000));
+    }
+    // Echtbetrieb ohne Umstellungs-Link: kein Demo-Link, kein „null“ im Text (M9).
+    for (const tone of ['freundlich', 'bestimmt'] as const) {
+      const t = await demoAI.draftReminder({ contact: kaya, status: st, tone, paymentLink: paymentLinkFor(s, mc.id, false) });
+      expect(t).not.toContain('buy.stripe.com');
+      expect(t).not.toContain('null');
       expect(t).toContain(formatEuro(15000));
     }
     const thread = s.messages.filter((m) => m.threadId === 't-schmidt');

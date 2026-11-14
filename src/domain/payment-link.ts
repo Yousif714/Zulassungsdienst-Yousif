@@ -7,6 +7,6 @@ export function takeoverLinkFor(s: AppState, contractId: string): string | null 
   return t?.status === 'link_sent' ? t.link : null;
 }
 
-/** Link für Erinnerungen: echter Umstellungs-Link, ohne Umstellung der bisherige Demo-Link. */
-export const paymentLinkFor = (s: AppState, contractId: string): string =>
-  takeoverLinkFor(s, contractId) ?? `https://buy.stripe.com/demo/${contractId}`;
+/** Link für Erinnerungen: echter Umstellungs-Link; ohne Umstellung nur im Demo-Modus der Demo-Link, im Echtbetrieb null. */
+export const paymentLinkFor = (s: AppState, contractId: string, isDemo: boolean): string | null =>
+  takeoverLinkFor(s, contractId) ?? (isDemo ? `https://buy.stripe.com/demo/${contractId}` : null);

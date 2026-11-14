@@ -20,7 +20,7 @@ async function guard(...texts: unknown[]): Promise<void> {
 
 async function serverAI() {
   const at = realNow();
-  return stateAI(getAI(), await loadState(getRepos(), at), at);
+  return stateAI(getAI(), await loadState(getRepos(), at), at, false);
 }
 
 export async function askAI(question: string): Promise<ChatAnswer> {

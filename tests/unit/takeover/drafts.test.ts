@@ -41,15 +41,17 @@ describe('Erinnerung vor der Rate', () => {
   test('Plan geändert: kein toter Link und kein Demo-Link in der Erinnerung', () => {
     const s = world({ takeovers: [takeover({ status: 'plan_changed' })] });
     expect(takeoverLinkFor(s, 'c1')).toBeNull();
-    expect(paymentLinkFor(s, 'c1')).toBe('https://buy.stripe.com/demo/c1');
+    expect(paymentLinkFor(s, 'c1', true)).toBe('https://buy.stripe.com/demo/c1');
+    expect(paymentLinkFor(s, 'c1', false)).toBeNull();
     const a = ensureTakeoverDrafts(s, T1, false).actions.find((x) => x.id === 'upcoming-c1-2026-12-01')!;
     expect(a.payload.text).toBe('Hallo Lena, kurze Erinnerung: Am 01.12.2026 ist deine NEXUS-Rate über 300,00 € fällig.');
   });
-  test('ohne Umstellung kein Demo-Link in der Erinnerung, paymentLinkFor behält den Demo-Fallback', () => {
+  test('ohne Umstellung kein Demo-Link in der Erinnerung, paymentLinkFor: Demo-Fallback nur im Demo-Modus (M9)', () => {
     const s = world();
     expect(takeoverLinkFor(s, 'c1')).toBeNull();
-    expect(paymentLinkFor(s, 'c1')).toBe('https://buy.stripe.com/demo/c1');
-    expect(paymentLinkFor(world({ takeovers: [takeover()] }), 'c1')).toBe('https://app.example.de/zahlung/tok');
+    expect(paymentLinkFor(s, 'c1', true)).toBe('https://buy.stripe.com/demo/c1');
+    expect(paymentLinkFor(s, 'c1', false)).toBeNull();
+    expect(paymentLinkFor(world({ takeovers: [takeover()] }), 'c1', false)).toBe('https://app.example.de/zahlung/tok');
   });
   test('ab eingerichtet: offener Erinnerungsentwurf wird abgebrochen, kein neuer', () => {
     const open = ensureTakeoverDrafts(world(), T1, false);
@@ -115,6 +117,14 @@ describe('Link-Erinnerung', () => {
     expect(a).toHaveLength(1);
     expect(a[0]).toMatchObject({ type: 'send_reminder', status: 'draft', insightKey: 'takeover-link:stripe-takeover-c1-1', title: 'Link-Erinnerung an Lena Kaya' });
     expect(a[0].payload.text).toBe('Hallo Lena, hast du meinen Link schon gesehen? Dort kannst du deine NEXUS-Raten automatisch abbuchen lassen: https://app.example.de/zahlung/tok');
+  });
+  test.each(['set_up', 'withdrawn', 'plan_changed'] as const)('Umstellung danach %s → offener Link-Entwurf abgebrochen (kein toter Link)', (status) => {
+    const s = world({ takeovers: [takeover({ linkSentAt: '2026-11-20T08:00:00Z' })] });
+    const first = ensureTakeoverDrafts(s, new Date('2026-11-27T10:00:00Z'), false);
+    expect(first.actions.find((x) => x.id === 'link-nudge-stripe-takeover-c1-1')?.status).toBe('draft');
+    const moved = { ...first, takeovers: first.takeovers.map((x) => ({ ...x, status })) };
+    const st = ensureTakeoverDrafts(moved, new Date('2026-11-27T11:00:00Z'), false);
+    expect(st.actions.find((x) => x.id === 'link-nudge-stripe-takeover-c1-1')?.status).toBe('cancelled');
   });
   test('nach 6 Tagen noch kein Entwurf', () => {
     const s = world({ takeovers: [takeover({ linkSentAt: '2026-11-21T08:00:00Z' })] });

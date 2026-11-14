@@ -33,7 +33,7 @@ const rateList = (rates: Installment[]) => rates.map((r) => formatEuro(r.amountC
 
 /** Umstellung eines Vertrags auf Stripe: Status, Plan, Freigabe, Link zum Teilen, Zurückziehen. */
 export function TakeoverCard({ contractId, name, mode, blockReason }: { contractId: string; name: string; mode: MemberContract['catchUpMode']; blockReason: string | null }) {
-  const { state, dispatch } = useAppStore();
+  const { state, dispatch, mode: appMode } = useAppStore();
   const origin = useOrigin();
   const [copied, setCopied] = useState(false);
 
@@ -104,7 +104,7 @@ export function TakeoverCard({ contractId, name, mode, blockReason }: { contract
                 <div className="member-actions">
                   <button type="button" className="btn btn-primary" onClick={copy}>Kopieren</button>
                   <button type="button" className="btn btn-plain destructive" onClick={withdraw}>Zurückziehen</button>
-                  {t.isDemo && <button type="button" className="btn btn-secondary" onClick={() => dispatch({ type: 'simulateTakeoverSetUp', contractId })}>Zahlungsmittel hinterlegt (Demo)</button>}
+                  {t.isDemo && appMode === 'demo' && <button type="button" className="btn btn-secondary" onClick={() => dispatch({ type: 'simulateTakeoverSetUp', contractId })}>Zahlungsmittel hinterlegt (Demo)</button>}
                 </div>
                 <div role="status" className="confirm-line">{copied ? 'Kopiert' : ''}</div>
             </div>
