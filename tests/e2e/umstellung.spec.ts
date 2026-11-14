@@ -77,7 +77,7 @@ test('Umstellung im Demo-Modus: vorbereiten, freigeben, Link kopieren, einrichte
   await expect(page.getByText('Raten laufen über Stripe')).toBeVisible();
   await page.goto(`/nexus/mitglieder/${KAYA}`);
   await expect(page.getByText('läuft über Stripe')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Umstellung: eingerichtet/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Umstellung.*eingerichtet/ })).toBeVisible();
 });
 
 test('Alle umstellen und Sammelfreigabe', async ({ page }) => {

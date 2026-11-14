@@ -19,13 +19,22 @@ export function absoluteLink(link: string, origin: string): string {
   return link.startsWith('/') ? `${origin}${link}` : link;
 }
 
+/** Relative Demo-Links (`/zahlung/demo-…`) in einem Text werden für die Anzeige absolut. */
+export function absolutizeDemoLinks(text: string, origin: string): string {
+  return text.replace(/(^|\s)(\/zahlung\/demo-\S+)/g, (_m, pre: string, link: string) => `${pre}${origin}${link}`);
+}
+
+/** Server und erster Client-Render: leer (kein Hydration-Fehler), danach die Adresse der App. */
+export function useOrigin(): string {
+  return useSyncExternalStore(() => () => {}, () => window.location.origin, () => '');
+}
+
 const rateList = (rates: Installment[]) => rates.map((r) => formatEuro(r.amountCents)).join(' · ');
 
 /** Umstellung eines Vertrags auf Stripe: Status, Plan, Freigabe, Link zum Teilen, Zurückziehen. */
 export function TakeoverCard({ contractId, name, mode, blockReason }: { contractId: string; name: string; mode: MemberContract['catchUpMode']; blockReason: string | null }) {
   const { state, dispatch } = useAppStore();
-  // Server und erster Client-Render: leer (kein Hydration-Fehler), danach die Adresse der App.
-  const origin = useSyncExternalStore(() => () => {}, () => window.location.origin, () => '');
+  const origin = useOrigin();
   const [copied, setCopied] = useState(false);
 
   const status = takeoverStatus(state, contractId);
@@ -68,15 +77,19 @@ export function TakeoverCard({ contractId, name, mode, blockReason }: { contract
           )}
 
           {open?.status === 'draft' && (
-            <ListRow key="draft-actions" title="Vorbereitet" subtitle="Nichts ist verschickt, bis du freigibst."
-              accessory={<span className="takeover-buttons">
-                <button type="button" className="btn btn-primary btn-small" onClick={() => dispatch({ type: 'approveAction', id: open.id, version: open.version, via: 'app' })}>Freigeben</button>
-                <button type="button" className="btn btn-plain btn-small" onClick={withdraw}>Zurückziehen</button>
-              </span>} />
+            <ListRow key="draft-actions" title="Vorbereitet" subtitle="Nichts ist verschickt, bis du freigibst." />
           )}
-          {running && <ListRow key="running" title="Wird eingerichtet …" />}
+          {open?.status === 'draft' && (
+            <div key="draft-buttons" className="takeover-share">
+              <div className="member-actions">
+                <button type="button" className="btn btn-primary" onClick={() => dispatch({ type: 'approveAction', id: open.id, version: open.version, via: 'app' })}>Freigeben</button>
+                <button type="button" className="btn btn-plain destructive" onClick={withdraw}>Zurückziehen</button>
+              </div>
+            </div>
+          )}
+          {running && <ListRow key="running" role="status" title="Link wird erstellt …" />}
           {failed && (
-            <ListRow key="failed" leading={<IconWarning />} title={open.status === 'failed' ? `Fehlgeschlagen${open.error ? `: ${open.error}` : ''}` : 'Ausgang unklar'}
+            <ListRow key="failed" role="status" leading={<IconWarning />} title={open.status === 'failed' ? `Fehlgeschlagen${open.error ? `: ${open.error}` : ''}` : 'Ausgang unklar'}
               accessory={open.status === 'failed'
                 ? <button type="button" className="btn btn-secondary btn-small" onClick={() => dispatch({ type: 'retryAction', id: open.id })}>Erneut versuchen</button>
                 : <button type="button" className="btn btn-secondary btn-small" onClick={() => dispatch({ type: 'checkAction', id: open.id })}>Prüfen</button>} />
@@ -90,7 +103,7 @@ export function TakeoverCard({ contractId, name, mode, blockReason }: { contract
                 <textarea className="action-sheet-editor" readOnly rows={7} aria-label="Nachricht an das Mitglied" value={shareText({ name, link, rates: t.rates })} />
                 <div className="member-actions">
                   <button type="button" className="btn btn-primary" onClick={copy}>Kopieren</button>
-                  <button type="button" className="btn btn-plain" onClick={withdraw}>Zurückziehen</button>
+                  <button type="button" className="btn btn-plain destructive" onClick={withdraw}>Zurückziehen</button>
                   {t.isDemo && <button type="button" className="btn btn-secondary" onClick={() => dispatch({ type: 'simulateTakeoverSetUp', contractId })}>Zahlungsmittel hinterlegt (Demo)</button>}
                 </div>
                 <div role="status" className="confirm-line">{copied ? 'Kopiert' : ''}</div>

@@ -31,7 +31,8 @@ export default function TakeoverPage() {
   const at = now();
   const today = todayBerlin(at);
   const contract = state.contracts.find((c) => c.id === id);
-  const [mode, setMode] = useState<Mode>(contract?.catchUpMode ?? 'first_rate');
+  const openDraft = openTakeoverAction(state, id);
+  const [mode, setMode] = useState<Mode>((openDraft?.payload.mode as Mode | undefined) ?? contract?.catchUpMode ?? 'first_rate');
   const back = <BackLink href={`/nexus/mitglieder/${id}`} label="Mitglied" />;
 
   if (!contract) {

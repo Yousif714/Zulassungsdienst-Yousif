@@ -181,3 +181,5 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 - Reguläres Abo-Ende ohne `schedule`/`cancel_at` ergibt `endDate = null` und damit einen Fehlalarm. Im Stripe-Testmodus prüfen, ggf. `ended_at` nutzen.
 - Tag-31-Läufe erzeugen zusätzliche Lücken-Phasen (Beträge stimmen). Stripes Phasen-Obergrenze beachten.
 - Zurückziehen geht nur, bis der Zeitplan angelegt ist. Ein vor dem Start in Stripe gekündigter Zeitplan fällt der App nicht auf.
+
+- Umstellung (Task 13, M10): „Später“ bei Erinnerungen in `/nexus/umstellung` blendet nur lokal aus; nach dem Senden verschwindet das Sheet ohne sichtbare Bestätigung.

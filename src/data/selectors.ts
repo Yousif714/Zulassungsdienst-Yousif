@@ -13,6 +13,7 @@ import { monthForecast } from '@/domain/ledger/forecast';
 import type { Action, AppState, Company, Invoice, IsoDate, MemberContract, Payment, StoredInsight, TakeoverStatus } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
 import { contractKindLabel, contractOnHold, isMembershipContract } from '@/domain/ledger/contracts';
+import { takeoverCandidates } from '@/domain/takeover/prepare';
 import { currentTakeover, openTakeoverAction, takeoverBlockReason, takeoverStatus } from '@/domain/takeover/status';
 
 export const openInsights = (s: AppState): StoredInsight[] => s.insights.filter((i) => i.status === 'open');
@@ -196,6 +197,9 @@ export function takeoverRows(s: AppState, today: IsoDate): TakeoverRow[] {
     }))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 }
+
+/** Anzahl der Verträge, die „Alle umstellen“ erfasst (gleiche Auswahl wie der Reducer). */
+export const switchableTakeovers = (s: AppState, at: Date): number => takeoverCandidates(s, at).length;
 
 /** Umstellungen, die noch auf die Freigabe warten. */
 export const openTakeoverDrafts = (s: AppState): Action[] => s.actions.filter((a) => a.type === 'stripe_takeover' && a.status === 'draft');

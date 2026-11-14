@@ -165,7 +165,7 @@ export default function MemberPage() {
       {(tStatus || contract.billing === 'legacy') && (
         <ListGroup title="Umstellung auf Stripe" testId="takeover-link">
           <ListRow key="takeover" href={`/nexus/mitglieder/${id}/uebernahme`} testId="takeover-row"
-            title={`Umstellung: ${tStatus ? TAKEOVER_STATUS_LABEL[tStatus] : 'nicht gestartet'}`}
+            title="Umstellung" subtitle={tStatus ? TAKEOVER_STATUS_LABEL[tStatus] : 'nicht gestartet'}
             value={viaStripe ? <span className="chip">läuft über Stripe</span> : undefined} />
         </ListGroup>
       )}

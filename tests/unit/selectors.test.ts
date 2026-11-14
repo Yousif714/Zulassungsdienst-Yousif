@@ -187,6 +187,18 @@ describe('Umstellungs-Selektoren', () => {
     expect(takeoverRows(noBank, T)[0].blockReason).toMatch(/^Bank nicht verbunden: /);
   });
 
+  test('switchableTakeovers: wie „Alle umstellen“, auch nach Zurückziehen', async () => {
+    const { paidState, applyAt } = await import('../fixtures/takeover-state');
+    const { switchableTakeovers } = await import('@/data/selectors');
+    const at = new Date('2026-11-13T10:00:00+01:00');
+    const fresh = paidState();
+    expect(switchableTakeovers(fresh, at)).toBe(1);
+    const prepared = applyAt(fresh, [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }]);
+    expect(switchableTakeovers(prepared, at)).toBe(0);
+    const withdrawn = applyAt(prepared, [{ type: 'withdrawTakeover', contractId: 'c1' }]);
+    expect(switchableTakeovers(withdrawn, at)).toBe(1);
+  });
+
   test('openTakeoverDrafts und openUpcomingReminders', async () => {
     const { paidState, applyAt } = await import('../fixtures/takeover-state');
     const { openTakeoverDrafts, openUpcomingReminders } = await import('@/data/selectors');
