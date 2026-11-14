@@ -50,6 +50,19 @@ describe('Doppelzahlung', () => {
     const s = world({ takeovers: [takeover()], payments: [bank()], allocations: [{ paymentId: 'p-lena', contractId: 'c1', amountCents: 30000, method: 'auto' }] });
     expect(detectTakeover(s, at('2026-12-02T10:00:00Z')).filter((x) => x.type === 'double_payment')).toEqual([]);
   });
+  test('Rückbuchung nach eingerichtet ist keine Doppelzahlung, die Überweisung bleibt genau ein Hinweis', () => {
+    const s = paid('2026-12-02');
+    const ret = bank({ id: 'p-ret', externalId: 'qonto-ret', amountCents: -30000, bookedOn: '2026-12-05' });
+    const withReturn = { ...s, payments: [...s.payments, ret], allocations: [...s.allocations, { paymentId: 'p-ret', contractId: 'c1', amountCents: -30000, method: 'auto' as const }] };
+    const hints = detectTakeover(withReturn, at('2026-12-06T10:00:00Z')).filter((x) => x.type === 'double_payment');
+    expect(hints.map((i) => i.dedupeKey)).toEqual(['double-pay:p-lena']);
+    expect(hints[0].title).toBe('Doppelzahlung: Lena Kaya hat 300,00 € überwiesen');
+  });
+  test('Erstattung (refundOf) ist keine Doppelzahlung', () => {
+    const s = paid('2026-12-02');
+    const refund = { ...s, payments: [bank({ refundOf: 'qonto-0' })] };
+    expect(detectTakeover(refund, at('2026-12-06T10:00:00Z')).filter((x) => x.type === 'double_payment')).toEqual([]);
+  });
   test('Stripe-Zahlung ist keine Doppelzahlung', () => {
     const s = { ...paid('2026-12-02'), payments: [bank({ source: 'stripe', connectionId: 'stripe_nexus' })] };
     expect(detectTakeover(s, at('2026-12-02T10:00:00Z')).filter((x) => x.type === 'double_payment')).toEqual([]);

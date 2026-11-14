@@ -47,7 +47,8 @@ export function detectTakeover(s: AppState, now: Date): Insight[] {
     if (!a.contractId || seen.has(a.paymentId) || !runsViaStripe(s, a.contractId)) continue;
     const p = s.payments.find((x) => x.id === a.paymentId);
     const t = currentTakeover(s, a.contractId);
-    if (!p || !t?.setUpAt || p.source !== 'bank' || p.kind !== 'incoming') continue;
+    // Rückbuchungen (negativer Betrag) und Erstattungen sind keine Überweisung des Mitglieds.
+    if (!p || !t?.setUpAt || p.source !== 'bank' || p.kind !== 'incoming' || p.amountCents <= 0 || p.refundOf) continue;
     const since = berlinDay(t.setUpAt);
     if (p.bookedOn < since) continue;
     seen.add(p.id);
