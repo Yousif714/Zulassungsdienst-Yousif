@@ -29,6 +29,10 @@ test('Rechnung ohne Abo-Bezug wird nicht importiert', () => {
   const raw = { ...stripeRaw, invoices: [...stripeRaw.invoices, { id: 'in_X', status: 'paid', amount_paid: 100, created: 1, lines: { data: [] } }] };
   expect(mapStripe(raw).payments.some((p) => p.externalId === 'in_X')).toBe(false);
 });
+test('0-€-Rechnung (Lücken-Phase) wird nicht importiert', () => {
+  const free = { ...(stripeRaw.invoices[0] as object), id: 'in_FREE', amount_paid: 0 };
+  expect(mapStripe({ ...stripeRaw, invoices: [...stripeRaw.invoices, free] }).payments.some((p) => p.externalId === 'in_FREE')).toBe(false);
+});
 test('keine Rechnungen und Kontakte aus Stripe', () => { expect(b.invoices).toEqual([]); expect(b.contacts).toEqual([]); });
 
 const withRaw = (extra: Partial<typeof stripeRaw>) => mapStripe({ ...stripeRaw, ...extra });

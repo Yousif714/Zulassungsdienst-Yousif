@@ -183,6 +183,8 @@ Stand nach der Gesamtprüfung von Phase 1 (Vorschau mit Demo-Daten). Die Vorscha
 
 ## Offen aus 2b-3 (Gesamtreview)
 Erledigt im Final-Fix (14.11.): I1–I3, M1–M10 (Erinnerung trotz Stripe, Neu-Freigabe mit altem Plan, Vertrag mit Plan änderbar, Webhook-Ränder, Storno-Key cachte 500, `checkAction`, Lookup ohne Zeitplan, tote Link-Nachfragen, doppeltes Abo-Prädikat, Demo-Knopf/-Link im Echtbetrieb, Ende ohne Stripe-Enddatum).
+- Nach regulärem Planende (Zeitplan completed, Abo gekündigt) bleibt die Umstellung „aktiv“; ggf. Status „abgeschlossen“.
+- Webhook-Zustellung im Testlauf nur für checkout.session.completed belegt; Erstattung/Streitfall gegen echtes Stripe nicht geprüft.
 - Settings-Literal in `seed.ts` doppelt zu `DEFAULT_SETTINGS`; Migrationstest prüft nicht, dass vorhandene Einstellungswerte erhalten bleiben; Einstellungsformular lässt 0/Dezimal für die Erinnerungstage zu (Server lehnt ab).
 - `takeoverAction` bekommt `mode` getrennt, obwohl `plan.mode` ihn schon trägt.
 - Plural in Audit-Texten: „1 Umstellungen vorbereitet“, „Sammelfreigabe: 1 Aktionen“.

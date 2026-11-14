@@ -7,7 +7,7 @@ import { formatEuro } from '../money';
 import type { AppState, ConnectionId, Contact, Insight, InstallmentState, Installment, IsoDate, MemberContract } from '../types';
 import { memberRef } from './refs';
 import { contractOnHold } from '../ledger/contracts';
-import { reminderBlockedReason } from '../takeover/status';
+import { reminderBlockedReason, runsViaStripe } from '../takeover/status';
 
 export function memberView(
   s: AppState,
@@ -47,7 +47,8 @@ export function detectMemberOverdue(s: AppState, now: Date): Insight[] {
     if (!v.contact || v.status.traffic === 'green') continue;
     const name = v.contact.name;
     const arrears = v.status.arrearsCents;
-    if (!notConnected(contractSources(c), s.connections)) {
+    // Raten über Stripe: kein Teil des Sammelhinweises „Erinnerungen vorbereiten“
+    if (!notConnected(contractSources(c), s.connections) && !runsViaStripe(s, c.id)) {
       sum += arrears;
       overdueContacts.add(c.contactId);
       contractSources(c).forEach((x) => sources.add(x));

@@ -50,8 +50,8 @@ export function mapStripe(raw: StripeRaw): ImportBatch {
   const productNames = new Map<string, string>();
   for (const p of raw.products as Obj[]) productNames.set(p.id, p.name);
 
-  // F9: nur bezahlte Rechnungen mit Abo-Bezug; nur EUR (Cent-Beträge ohne Umrechnung)
-  const invoices = (raw.invoices as Obj[]).filter((i) => i.status === 'paid' && i.currency === 'eur' && subscriptionOfInvoice(i));
+  // F9: nur tatsächlich bezahlte Rechnungen (0 € = Lücken-/Trial-Phase) mit Abo-Bezug; nur EUR (Cent-Beträge ohne Umrechnung)
+  const invoices = (raw.invoices as Obj[]).filter((i) => i.status === 'paid' && i.amount_paid > 0 && i.currency === 'eur' && subscriptionOfInvoice(i));
 
   const payments: ImportedPayment[] = invoices.map((inv) => ({
     company: 'nexus',

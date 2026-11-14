@@ -196,6 +196,19 @@ describe('Rückstand bei laufender Stripe-Abbuchung (I1)', () => {
     const i = detectMemberOverdue(world(), at('2026-11-12T10:00:00Z')).find((x) => x.dedupeKey === 'overdue:c1')!;
     expect(i.nextStep).toBe('Erinnerung vorbereiten');
   });
+  test('Sammelhinweis nimmt Stripe-Verträge aus (N1)', () => {
+    const other = (n: string) => ({ ...lena, id: `m-${n}`, name: n, emails: [`${n}@example.de`] });
+    const s = world({
+      contacts: [lena, other('a'), other('b')],
+      contracts: [viaStripe, { ...legacy, id: 'c2', contactId: 'm-a' }, { ...legacy, id: 'c3', contactId: 'm-b' }],
+      takeovers: [setUp],
+    });
+    const all = detectMemberOverdue(s, at('2027-01-05T10:00:00Z')).find((x) => x.dedupeKey.startsWith('overdue:all'))!;
+    expect(all.title).toMatch(/^2 Mitglieder/);
+    expect(all.refs?.map((r) => r.label)).not.toContain('Lena Kaya');
+    const only = world({ contacts: [lena, other('a')], contracts: [viaStripe, { ...legacy, id: 'c2', contactId: 'm-a' }], takeovers: [setUp] });
+    expect(detectMemberOverdue(only, at('2027-01-05T10:00:00Z')).some((x) => x.dedupeKey.startsWith('overdue:all'))).toBe(false);
+  });
   test('reminderBlockedReason nur bei set_up/active', () => {
     expect(reminderBlockedReason(world({ takeovers: [setUp] }), 'c1')).toBe('Raten laufen über Stripe – keine Erinnerung nötig.');
     expect(reminderBlockedReason(world({ takeovers: [takeover({ status: 'active' })] }), 'c1')).not.toBeNull();
