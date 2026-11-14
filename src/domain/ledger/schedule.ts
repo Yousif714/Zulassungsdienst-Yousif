@@ -44,5 +44,18 @@ export function buildSchedule(c: MemberContract, ex: ContractException[]): Insta
       i === c.installments - 1 ? c.totalCents - c.installmentCents * (c.installments - 1) : c.installmentCents;
     out.push({ no: i + 1, dueDate: date, amountCents });
   }
-  return out;
+  return c.plan ? withPlan(out, c.plan) : out;
+}
+
+/** Nach der Umstellung: Raten des Grundplans bis zum bereits bezahlten Teil (gekappt), danach die Plan-Raten; neu nummeriert. */
+function withPlan(base: Installment[], plan: NonNullable<MemberContract['plan']>): Installment[] {
+  const head: Omit<Installment, 'no'>[] = [];
+  let left = plan.paidCents;
+  for (const r of base) {
+    if (left <= 0) break;
+    const amountCents = Math.min(r.amountCents, left);
+    left -= amountCents;
+    if (amountCents > 0) head.push({ dueDate: r.dueDate, amountCents });
+  }
+  return [...head, ...plan.rates].map((r, i) => ({ no: i + 1, dueDate: r.dueDate, amountCents: r.amountCents }));
 }
