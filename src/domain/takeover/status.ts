@@ -1,5 +1,6 @@
 import { contractSources, notConnected } from '../connections';
 import { memberView } from '../detectors/members';
+import { contractOnHold, isMembershipContract } from '../ledger/contracts';
 import type { Action, ActionStatus, AppState, IsoDate, StripeTakeover, TakeoverStatus } from '../types';
 
 export const TAKEOVER_STATUS_LABEL: Record<TakeoverStatus, string> = {
@@ -65,9 +66,26 @@ export function reminderBlockedReason(s: AppState, contractId: string): string |
 export function takeoverBlockReason(s: AppState, contractId: string, today: IsoDate): string | null {
   const v = memberView(s, contractId, today);
   if (v.contract.billing === 'stripe') return 'Zahlt bereits über Stripe.';
+  if (!isMembershipContract(v.contract)) return 'Nur Mitgliedschaften.';
+  if (contractOnHold(s, v.contract)) return 'Quellrechnung storniert.';
+  if (v.contract.readBy && !v.contract.readBy.confirmed) return 'Ratenplan erst bestätigen.';
   if (notConnected(contractSources(v.contract), s.connections)) return 'Bank nicht verbunden: Der Restbetrag wird erst nach der Bankanbindung berechnet.';
   if (v.status.openCents <= 0) return 'Nichts mehr offen.';
   const st = currentTakeover(s, contractId)?.status;
   if (st === 'link_sent' || st === 'set_up' || st === 'active') return 'Umstellung läuft bereits.';
+  return null;
+}
+
+/** Aktionsstatus, in denen eine Umstellung schon an Stripe unterwegs sein kann (Entwurf und Fehler zählen nicht). */
+const IN_FLIGHT: ActionStatus[] = ['approved', 'executing', 'uncertain'];
+
+/**
+ * Grund, warum der Vertrag gerade nicht korrigiert oder gelöscht werden darf; null = erlaubt.
+ * Läuft ein Zeitplan, würden Ledger und Stripe sonst auseinanderlaufen (Rest verloren, Zahlungen ohne Vertrag).
+ */
+export function contractLockedReason(s: AppState, contractId: string): string | null {
+  if (runsViaStripe(s, contractId)) return 'Vertrag läuft über Stripe – erst Zeitplan in Stripe beenden.';
+  const open = openTakeoverAction(s, contractId);
+  if (currentTakeover(s, contractId)?.status === 'link_sent' || (open && IN_FLIGHT.includes(open.status))) return 'Umstellung auf Stripe läuft – erst zurückziehen.';
   return null;
 }

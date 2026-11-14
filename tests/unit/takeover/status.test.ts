@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
-  TAKEOVER_STATUS_LABEL, currentTakeover, nextTakeoverAttempt, openTakeoverAction, runsViaStripe, takeoverActionId, takeoverBlockReason, takeoverStatus,
+  TAKEOVER_STATUS_LABEL, contractLockedReason, currentTakeover, nextTakeoverAttempt, openTakeoverAction, runsViaStripe, takeoverActionId, takeoverBlockReason, takeoverStatus,
 } from '@/domain/takeover/status';
-import type { Action, ActionStatus, Payment, StripeTakeover } from '@/domain/types';
-import { base, conn, stateWith, tx } from '../helpers';
+import { takeoverCandidates } from '@/domain/takeover/prepare';
+import type { Action, ActionStatus, MemberContract, Payment, StripeTakeover } from '@/domain/types';
+import { base, conn, inv, stateWith, tx } from '../helpers';
 
 const TODAY = '2026-11-13';
 const pay = (id: string, bookedOn: string, amountCents: number): Payment => tx({ id, externalId: `x-${id}`, bookedOn, amountCents });
@@ -97,5 +98,36 @@ describe('takeoverBlockReason', () => {
     for (const status of ['plan_changed', 'withdrawn', 'aborted'] as const) {
       expect(takeoverBlockReason(stateWith({ contracts, takeovers: [tk({ status })] }), 'c1', TODAY)).toBeNull();
     }
+  });
+});
+
+describe('Sperrgründe aus dem Vertrag (I3)', () => {
+  const voided = inv('i-void', 120000, { company: 'nexus', connectionId: 'lexware_nexus', externalId: 'lex-void', contactId: 'm1', status: 'void' });
+  const onHold: MemberContract = { ...base, origin: [{ connectionId: 'lexware_nexus', externalId: 'invoice:lex-void' }] };
+  const unconfirmed: MemberContract = { ...base, readBy: { invoiceId: 'i-r', invoiceNumber: 'RE-1', quote: 'x', confirmed: false } };
+  test('nur Mitgliedschaften, Quellrechnung storniert, unbestätigte Lesung', () => {
+    expect(takeoverBlockReason(stateWith({ contracts: [{ ...base, kind: 'ticket' }] }), 'c1', TODAY)).toBe('Nur Mitgliedschaften.');
+    expect(takeoverBlockReason(stateWith({ contracts: [onHold], invoices: [voided] }), 'c1', TODAY)).toBe('Quellrechnung storniert.');
+    expect(takeoverBlockReason(stateWith({ contracts: [unconfirmed] }), 'c1', TODAY)).toBe('Ratenplan erst bestätigen.');
+    expect(takeoverBlockReason(stateWith({ contracts: [{ ...unconfirmed, readBy: { ...unconfirmed.readBy!, confirmed: true } }] }), 'c1', TODAY)).toBeNull();
+  });
+  test('takeoverCandidates schließt ruhende und unbestätigte Verträge aus', () => {
+    const s = stateWith({ contracts: [onHold, { ...unconfirmed, id: 'c2' }, { ...base, id: 'c3' }], invoices: [voided] });
+    expect(takeoverCandidates(s, new Date('2026-11-13T09:00:00Z')).map((c) => c.id)).toEqual(['c3']);
+  });
+  test('contractLockedReason: eingerichtet/aktiv/Link verschickt/laufende Aktion sperren Änderung', () => {
+    const contracts = [base];
+    expect(contractLockedReason(stateWith({ contracts }), 'c1')).toBeNull();
+    for (const status of ['set_up', 'active'] as const) {
+      expect(contractLockedReason(stateWith({ contracts, takeovers: [tk({ status })] }), 'c1')).toBe('Vertrag läuft über Stripe – erst Zeitplan in Stripe beenden.');
+    }
+    expect(contractLockedReason(stateWith({ contracts, takeovers: [tk({ status: 'link_sent' })] }), 'c1')).toBe('Umstellung auf Stripe läuft – erst zurückziehen.');
+    for (const st of ['approved', 'executing', 'uncertain'] as const) {
+      expect(contractLockedReason(stateWith({ contracts, actions: [act('stripe-takeover-c1-1', st)] }), 'c1')).toBe('Umstellung auf Stripe läuft – erst zurückziehen.');
+    }
+    for (const status of ['plan_changed', 'withdrawn', 'aborted'] as const) {
+      expect(contractLockedReason(stateWith({ contracts, takeovers: [tk({ status })] }), 'c1')).toBeNull();
+    }
+    expect(contractLockedReason(stateWith({ contracts, actions: [act('stripe-takeover-c1-1', 'draft')] }), 'c1')).toBeNull();
   });
 });

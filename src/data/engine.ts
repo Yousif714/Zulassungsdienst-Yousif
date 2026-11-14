@@ -25,7 +25,7 @@ import { formatEuro } from '@/domain/money';
 import { markTakeoverPlanChanged, recordTakeover, setUpTakeover, withdrawSentTakeover } from '@/domain/takeover/lifecycle';
 import { ensureTakeoverDrafts } from '@/domain/takeover/drafts';
 import { cancelTakeoverDraft, syncTakeoverDraft, takeoverCandidates } from '@/domain/takeover/prepare';
-import { currentTakeover } from '@/domain/takeover/status';
+import { contractLockedReason, currentTakeover } from '@/domain/takeover/status';
 import { syncTakeovers } from '@/domain/takeover/link';
 import type { Action, Allocation, AppState, AssistantMessage, AuditEntry, Company, Connection, ContractKind, Contact, Invoice, InvoiceReading, MemberContract, Message, Settings } from '@/domain/types';
 import { OWNER_EMAIL, OWNER_WHATSAPP, createDemoState } from './seed';
@@ -611,11 +611,18 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       if (e.type === 'confirmReadContract') {
         return owner({ state: { ...s, contracts: s.contracts.map((x) => (x.id === c.id ? { ...x, readBy } : x)) }, text: `Ratenplan bestätigt: Rechnung ${c.readBy.invoiceNumber}` });
       }
+      const locked = contractLockedReason(s, c.id);
+      if (locked) return { state: s, audit: { actor: 'owner', text: locked } };
       if (e.type === 'correctContract') {
         const errors = validateContractDraft(e.draft);
         if (errors.length) return { state: s, audit: { actor: 'owner', text: `Vertrag nicht geändert: ${errors.join(' ')}` } };
         const { totalCents, installments, installmentCents, dueDay, startDate, catchUpMode } = e.draft;
-        const contracts = s.contracts.map((x) => (x.id === c.id ? { ...x, totalCents, installments, installmentCents, dueDay, startDate, catchUpMode, readBy } : x));
+        // Plan einer beendeten Umstellung passt nicht mehr zum neuen Gesamtbetrag: weg damit, der Vertrag gilt wieder ganz.
+        const contracts = s.contracts.map((x) => {
+          if (x.id !== c.id) return x;
+          const { plan: _plan, ...rest } = x;
+          return { ...rest, totalCents, installments, installmentCents, dueDay, startDate, catchUpMode, readBy };
+        });
         return owner({ state: { ...s, contracts }, text: `Ratenplan korrigiert: Rechnung ${c.readBy.invoiceNumber}, ${installments} × ${formatEuro(installmentCents)}` });
       }
       const inv = s.invoices.find((x) => x.id === c.readBy!.invoiceId);
