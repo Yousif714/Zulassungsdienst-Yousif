@@ -11,6 +11,10 @@ export interface ServerEnv {
   /** Optionale Integrationsschlüssel; fehlen sie, bleibt die Verbindung `missing`. */
   stripeRestrictedKey?: string;
   stripeWebhookSecret?: string;
+  /** Schreibschlüssel für die Stripe-Umstellung; fehlt er, läuft sie als Demo. */
+  stripeWriteKey?: string;
+  /** Basis-URL der Zahlungslinks (`PAYMENT_LINK_BASE_URL`, sonst `APP_ORIGIN`). */
+  paymentLinkBaseUrl: string;
   lexwareNexusApiKey?: string;
   lexwareZulassungApiKey?: string;
   qontoLogin?: string;
@@ -41,6 +45,8 @@ export function readEnv(e: Record<string, string | undefined> = process.env): Se
     testMemoryDb,
     stripeRestrictedKey: val('STRIPE_RESTRICTED_KEY'),
     stripeWebhookSecret: val('STRIPE_WEBHOOK_SECRET'),
+    stripeWriteKey: val('STRIPE_WRITE_KEY'),
+    paymentLinkBaseUrl: val('PAYMENT_LINK_BASE_URL') ?? val('APP_ORIGIN')!,
     lexwareNexusApiKey: val('LEXWARE_NEXUS_API_KEY'),
     lexwareZulassungApiKey: val('LEXWARE_ZULASSUNG_API_KEY'),
     qontoLogin: val('QONTO_LOGIN'),
