@@ -111,6 +111,8 @@ Final review: dispatched (opus, 168534e..412952b, inkl. aller deferred Minors)
 Final review: Needs fixes (0 C, 3 I, 10 M jetzt; 23 Backlog). I1 Rückstands-Erinnerungen nach Einrichtung; I2 Neu-Freigabe/Retry ohne Abgleich → Doppelabbuchung; I3 Vertrag mit Plan korrigier-/löschbar + fehlende Sperrgründe.
 Final fix: dispatched (opus, alle 13 + Backlog-Einträge)
 Final fix: DONE 412952b..1b53318 (13 Punkte, 1398 Tests, E2E 118). Abweichungen: I3 sperrt ab link_sent; Knopf „Neu vorbereiten“; Storno ohne Idempotency-Key. Re-review dispatched (opus). Task 14 Docs dispatched (sonnet) parallel.
+Final re-review: Needs fixes → Final-Fix 2 81039de (reminder-Entwürfe bei Stripe abbrechen; stale failed auch im Sperrfall aufgeben; m2/m3 Backlog). Controller-Check Diff ok. 1402 Unit, E2E 118 grün.
+NÄCHSTER SCHRITT: Task 14 Testlauf (braucht Inhaber-Freigaben: Supabase-Projekt-Bestätigung, sk_test-Credential), danach PR nur mit Freigabe.
 
 ---
 

@@ -65,7 +65,7 @@ Kernziele:
 
 ## Stand & nächste Schritte
 - **Live** (`https://nexus-iota-gold-96.vercel.app`, Vercel Team `nexus-0349`, Projekt `nexus` `prj_IiBA31MUemrhPL1GupA2H2NbZkE5`, Supabase `nexus-assistent` ID `bqnbboopqeilxflnqgiu`). PRs #3–#15 gemergt. Migrationen bis `20261118000000_stripe_umstellung.sql` live eingespielt. Das Preview-Projekt braucht alle Migrationen.
-- **In Arbeit: 2b-3 Umstellung auf Stripe** (Branch `claude/cool-hopper-hcnb9d`, kein PR). Tasks 1–13 fertig und reviewt, Gesamtreview + Final-Fix erledigt (HEAD `1b53318`), Re-Review läuft. Details: Ledger `plans/2026-11-13-phase2b3-ledger.md`.
+- **In Arbeit: 2b-3 Umstellung auf Stripe** (Branch `claude/cool-hopper-hcnb9d`, kein PR). Tasks 1–13 fertig und reviewt, Gesamtreview, Final-Fix und Re-Review erledigt (HEAD `81039de`, 1402 Unit + 118 E2E grün). Nur noch Task 14: Testlauf gegen Stripe-Testmodus auf der Preview, dann PR mit Freigabe. Details: Ledger `plans/2026-11-13-phase2b3-ledger.md`.
 - **Offen:** Task 14 Testlauf gegen Stripe-Testmodus auf der Preview nach `docs/setup-phase2b3.md` (2 Freigaben des Inhabers: Supabase-Projekt `nexus-assistent-preview`, Stripe-Testschlüssel `sk_test_…`), danach PR nur mit Freigabe. Preview: `https://nexus-git-claude-cool-hopper-hcnb9d-nexus-0349.vercel.app`, Deployment Protection (`all_except_custom_domains`) dafür per API lockern und danach zurückdrehen.
 - **Regel (Vorfall 14.11.):** Ein Live-Stripe-Schlüssel war versehentlich Session-Credential (nur Leseabfragen, vom Inhaber gelöscht). Stripe-Schreibaktionen aus der Session nur nach `livemode:false`-Prüfung.
 - **Vercel-Connector** ist richtig verbunden (frühere Notiz „falsches Konto“ war ein Irrtum: `list_projects` des MCP lieferte leer, die API zeigt das Projekt `nexus`).
