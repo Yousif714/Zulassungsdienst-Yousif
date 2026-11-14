@@ -21,13 +21,15 @@ function setUp(s: AppState, t: StripeTakeover, at: Date): Changed {
 
 /**
  * Ergebnis der ausgeführten Aktion `stripe_takeover`: Umstellung mit eigenem Link anlegen (`id` = Aktions-ID).
- * Ohne Stripe-Kunde im `output` ist es eine Demo-Umstellung. Mit `scheduleId` (Neu-Freigabe mit hinterlegtem Zahlungsmittel) direkt eingerichtet.
+ * `isDemo` kommt aus dem Kontext (Demo-App oder Demo-Ausführer), nie aus `output`.
+ * Echtbetrieb ohne Stripe-Kunde im `output` → `'no_output'`: keine Umstellung, der Vertrag bleibt legacy.
+ * Mit `scheduleId` (Neu-Freigabe mit hinterlegtem Zahlungsmittel) direkt eingerichtet.
  * Schon vorhanden → undefined (eine Aktion ergibt höchstens eine Umstellung).
  */
-export function recordTakeover(s: AppState, a: Action, output: ActionOutput | undefined, at: Date, newId: () => string): Changed | undefined {
+export function recordTakeover(s: AppState, a: Action, output: ActionOutput | undefined, at: Date, newId: () => string, isDemo: boolean): Changed | 'no_output' | undefined {
   if (s.takeovers.some((t) => t.id === a.id)) return undefined;
+  if (!isDemo && !output?.stripeCustomerId) return 'no_output';
   const p = a.payload as { contractId: string; contactId: string; mode: MemberContract['catchUpMode']; rates: Installment[]; openCents: number; paymentMethodId?: string };
-  const isDemo = !output?.stripeCustomerId;
   const token = (isDemo ? 'demo-' : '') + takeoverToken(newId);
   const t: StripeTakeover = {
     id: a.id, contractId: p.contractId, contactId: p.contactId, actionId: a.id, actionVersion: a.version, status: 'link_sent',

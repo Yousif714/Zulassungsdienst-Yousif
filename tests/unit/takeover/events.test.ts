@@ -8,7 +8,7 @@ function uuidIds(): () => string {
   let n = 0;
   return () => { n += 1; return `6f1c2b3a-0000-4000-8000-${n.toString(16).padStart(12, '0')}`; };
 }
-const mkCtx = (): EngineContext => ({ at: new Date('2026-11-13T09:00:00Z'), isDemo: false, newId: uuidIds() });
+const mkCtx = (isDemo = false): EngineContext => ({ at: new Date('2026-11-13T09:00:00Z'), isDemo, newId: uuidIds() });
 
 const people: Contact[] = [
   { id: 'm1', company: 'nexus', kind: 'member', name: 'Erika Muster', phones: [], emails: ['erika@example.de'] },
@@ -37,10 +37,10 @@ const lastAudit = (s: AppState) => s.audit[s.audit.length - 1];
 function run(s: AppState, es: StoreEvent[], ctx = mkCtx()): AppState {
   return applyEvents(s, es, ctx).state;
 }
-const execute = (id: string, version: number, output?: Record<string, string>): StoreEvent[] => [
+const execute = (id: string, version: number, output?: Record<string, string>, simulated?: boolean): StoreEvent[] => [
   { type: 'approveAction', id, version, via: 'app' },
   { type: 'actionStarted', id },
-  { type: 'actionExecuted', id, result: 'ok', ...(output ? { output } : {}) },
+  { type: 'actionExecuted', id, result: 'ok', ...(output ? { output } : {}), ...(simulated ? { simulated } : {}) },
 ];
 const OUT = { stripeCustomerId: 'cus_test_1', linkBase: 'https://nexus.example.de' };
 
@@ -139,13 +139,42 @@ describe('Umstellung ausführen', () => {
     expect(s.contracts[0].billing).toBe('legacy');
   });
 
-  test('Ausführung ohne output (Demo) → Token demo-…, isDemo', () => {
-    const s = run(initial(), [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }, ...execute('stripe-takeover-c1-1', 1)]);
+  test.each([
+    ['Demo-Kontext', true, undefined],
+    ['Echtbetrieb mit Demo-Ausführer (simulated)', false, true],
+  ] as const)('Ausführung ohne output, %s → Token demo-…, isDemo', (_name, demoCtx, simulated) => {
+    const s = run(initial(), [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }, ...execute('stripe-takeover-c1-1', 1, undefined, simulated)], mkCtx(demoCtx));
     const t = s.takeovers[0];
     expect(t).toMatchObject({ status: 'link_sent', isDemo: true, stripeCustomerId: null, scheduleId: null });
     expect(t.token).toMatch(/^demo-[0-9a-f]{64}$/);
     expect(t.link).toBe(`/zahlung/${t.token}`);
     expect(s.contracts[0].billing).toBe('legacy');
+  });
+
+  test('simulated mit Stripe-Kunde im output bleibt Demo (isDemo nie aus output)', () => {
+    const s = run(initial(), [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }, ...execute('stripe-takeover-c1-1', 1, OUT, true)]);
+    expect(s.takeovers[0]).toMatchObject({ isDemo: true, stripeCustomerId: 'cus_test_1' });
+    expect(s.takeovers[0].token).toMatch(/^demo-[0-9a-f]{64}$/);
+  });
+
+  test('Echtbetrieb ohne Ergebnisdaten → keine Umstellung, Audit, Vertrag bleibt legacy', () => {
+    const s = run(initial(), [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }, ...execute('stripe-takeover-c1-1', 1)]);
+    expect(s.takeovers).toHaveLength(0);
+    expect(s.contracts[0].billing).toBe('legacy');
+    expect(lastAudit(s)).toMatchObject({ text: 'Umstellung ohne Ergebnisdaten – bitte prüfen: Umstellung auf Stripe: Erika Muster', actionId: 'stripe-takeover-c1-1' });
+  });
+
+  test('Echtbetrieb: Abgleich found ohne output → keine Umstellung, Audit', () => {
+    const s = run(initial(), [
+      { type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' },
+      { type: 'approveAction', id: 'stripe-takeover-c1-1', version: 1, via: 'app' },
+      { type: 'actionStarted', id: 'stripe-takeover-c1-1' },
+      { type: 'actionExecuted', id: 'stripe-takeover-c1-1', result: 'timeout' },
+      { type: 'actionReconciled', id: 'stripe-takeover-c1-1', found: true },
+    ]);
+    expect(s.takeovers).toHaveLength(0);
+    expect(s.contracts[0].billing).toBe('legacy');
+    expect(lastAudit(s).text).toBe('Umstellung ohne Ergebnisdaten – bitte prüfen: Umstellung auf Stripe: Erika Muster');
   });
 
   test('takeoverSetUp → eingerichtet, billing stripe, plan mit paidCents', () => {
@@ -275,15 +304,30 @@ describe('Zurückziehen und Demo-Einrichtung', () => {
     expect(s.takeovers[0]).toMatchObject({ status: 'withdrawn', endedAt: '2026-11-13T09:00:00.000Z' });
   });
 
-  test('simulateTakeoverSetUp nur für Demo-Umstellungen', () => {
-    const real = run(linkSent(), [{ type: 'simulateTakeoverSetUp', contractId: 'c1' }]);
-    expect(real.takeovers[0]).toMatchObject({ status: 'link_sent', scheduleId: null });
-    expect(real.contracts[0].billing).toBe('legacy');
+  const demoTakeover = (demoCtx: boolean, simulated?: boolean) =>
+    run(initial(), [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }, ...execute('stripe-takeover-c1-1', 1, undefined, simulated)], mkCtx(demoCtx));
 
-    const demo0 = run(initial(), [{ type: 'prepareTakeover', contractId: 'c1', mode: 'first_rate' }, ...execute('stripe-takeover-c1-1', 1)]);
-    const demo = run(demo0, [{ type: 'simulateTakeoverSetUp', contractId: 'c1' }]);
+  test('simulateTakeoverSetUp im Demo-Kontext richtet Demo-Umstellung ein', () => {
+    const demo = run(demoTakeover(true), [{ type: 'simulateTakeoverSetUp', contractId: 'c1' }], mkCtx(true));
     const t: StripeTakeover = demo.takeovers[0];
     expect(t).toMatchObject({ status: 'set_up', scheduleId: 'demo', paymentMethodId: 'demo', isDemo: true });
     expect(demo.contracts[0]).toMatchObject({ billing: 'stripe', plan: { takeoverId: 'stripe-takeover-c1-1', paidCents: 45000, rates: t.rates } });
+  });
+
+  test('simulateTakeoverSetUp im Echtbetrieb mit Demo-Umstellung: Vertrag bleibt legacy, Audit', () => {
+    const s0 = demoTakeover(false, true);
+    expect(s0.takeovers[0].isDemo).toBe(true);
+    const s1 = run(s0, [{ type: 'simulateTakeoverSetUp', contractId: 'c1' }]);
+    expect(s1.takeovers[0]).toMatchObject({ status: 'link_sent', scheduleId: null });
+    expect(s1.contracts[0].billing).toBe('legacy');
+    expect(s1.contracts[0].plan).toBeUndefined();
+    expect(lastAudit(s1)).toMatchObject({ actor: 'owner', text: 'Demo-Einrichtung im Echtbetrieb abgelehnt' });
+  });
+
+  test('simulateTakeoverSetUp mit echter Umstellung: nichts geändert, Audit', () => {
+    const s1 = run(linkSent(), [{ type: 'simulateTakeoverSetUp', contractId: 'c1' }], mkCtx(true));
+    expect(s1.takeovers[0]).toMatchObject({ status: 'link_sent', scheduleId: null, isDemo: false });
+    expect(s1.contracts[0].billing).toBe('legacy');
+    expect(lastAudit(s1).text).toBe('Demo-Einrichtung im Echtbetrieb abgelehnt');
   });
 });

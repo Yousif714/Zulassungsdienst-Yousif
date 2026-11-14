@@ -264,9 +264,10 @@ function applyEffects(s: AppState, a: Action, ctx: EngineContext, simulated = fa
     case 'confirm_payment_match':
       return confirmPaymentMatch(s, p.paymentId, { contractId: p.contractId }, ctx.at);
     case 'stripe_takeover': {
-      // Läuft immer; fehlt `output` (Demo-Ausführer), entsteht eine Demo-Umstellung.
-      const r = recordTakeover(s, a, output, ctx.at, ctx.newId);
+      // Läuft immer. Demo nur aus Kontext/Ausführer; im Echtbetrieb ohne Ergebnisdaten entsteht keine Umstellung.
+      const r = recordTakeover(s, a, output, ctx.at, ctx.newId, ctx.isDemo || simulated);
       if (!r) return { state: s, text: `Ausgeführt: ${a.title}` };
+      if (r === 'no_output') return { state: s, text: `Umstellung ohne Ergebnisdaten – bitte prüfen: ${a.title}` };
       const t = r.takeover;
       const name = contactName(s, t.contactId);
       return {
@@ -392,7 +393,9 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
     }
     case 'simulateTakeoverSetUp': {
       const t = currentTakeover(s, e.contractId);
-      if (!t || !t.isDemo || t.status !== 'link_sent') return { state: s };
+      // Nur Demo-App und Demo-Umstellung: sonst würde ein echter Vertrag ohne Zeitplan auf Stripe gestellt.
+      if (!ctx.isDemo || (t && !t.isDemo)) return owner({ state: s, text: 'Demo-Einrichtung im Echtbetrieb abgelehnt' });
+      if (!t || t.status !== 'link_sent') return { state: s };
       const r = setUpTakeover(s, t.id, { scheduleId: 'demo', paymentMethodId: 'demo' }, at);
       if (!r) return { state: s };
       return owner({ state: r.state, text: setUpText(contactName(s, t.contactId), t.rates.length, 'demo') }, t.actionId);
