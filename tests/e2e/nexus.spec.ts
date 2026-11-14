@@ -145,7 +145,7 @@ test('Erinnerung: eigene Aktion je Rückstandsstand', async ({ page }) => {
   await page.getByRole('button', { name: 'Erinnerung vorbereiten' }).click();
   await page.getByRole('button', { name: 'Senden' }).click();
   await expect(page.getByTestId('action-status')).toContainText('Gesendet (Demo)');
-  const ids = (await storedActions(page)).filter((a) => a.type === 'send_reminder').map((a) => a.id);
+  const ids = (await storedActions(page)).filter((a) => a.type === 'send_reminder' && a.id.startsWith('reminder-')).map((a) => a.id);
   expect(ids).toEqual([`reminder-${KAYA}-2026-11-01`]);
 });
 

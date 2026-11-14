@@ -73,6 +73,40 @@ describe('Erinnerung vor der Rate', () => {
   });
 });
 
+describe('Erinnerungstext nachziehen', () => {
+  test('Link erst nach dem Entwurf verschickt: offener Entwurf bekommt den Link, neue Version', () => {
+    const first = ensureTakeoverDrafts(world(), T1, false);
+    expect(first.actions[0].payload.text).not.toContain('https://');
+    const st = ensureTakeoverDrafts({ ...first, takeovers: [takeover()] }, new Date('2026-11-28T09:00:00Z'), false);
+    expect(st.actions).toHaveLength(1);
+    expect(st.actions[0]).toMatchObject({ status: 'draft', version: 2 });
+    expect(st.actions[0].payload.text).toContain('https://app.example.de/zahlung/tok');
+    expect(st.actions[0].payload).toMatchObject({ threadId: 't-m-lena', contactId: 'm-lena' });
+  });
+  test('idempotent: gleicher Text erzeugt keine neue Version', () => {
+    const a = ensureTakeoverDrafts(world({ takeovers: [takeover()] }), T1, false);
+    const b = ensureTakeoverDrafts(a, new Date('2026-11-28T09:00:00Z'), false);
+    expect(b.actions[0].version).toBe(1);
+  });
+  test('freigegebener Entwurf wird nicht umgeschrieben', () => {
+    const first = ensureTakeoverDrafts(world(), T1, false);
+    const sent = { ...first, actions: first.actions.map((a) => ({ ...a, status: 'executed' as const })), takeovers: [takeover()] };
+    const st = ensureTakeoverDrafts(sent, new Date('2026-11-28T09:00:00Z'), false);
+    expect(st.actions[0]).toMatchObject({ status: 'executed', version: 1 });
+    expect(st.actions[0].payload.text).not.toContain('https://');
+  });
+  test('Link-Erinnerung: abweichender Text im offenen Entwurf wird nachgezogen', () => {
+    const s = world({ takeovers: [takeover({ linkSentAt: '2026-11-20T08:00:00Z' })] });
+    const first = ensureTakeoverDrafts(s, new Date('2026-11-27T10:00:00Z'), false);
+    const nudge = first.actions.find((x) => x.id.startsWith('link-nudge-'))!;
+    const stale = { ...first, actions: first.actions.map((a) => (a.id === nudge.id ? { ...a, payload: { ...a.payload, text: 'alt' } } : a)) };
+    const st = ensureTakeoverDrafts(stale, new Date('2026-11-27T11:00:00Z'), false);
+    const n = st.actions.find((x) => x.id === nudge.id)!;
+    expect(n.version).toBe(2);
+    expect(n.payload.text).toBe(nudge.payload.text);
+  });
+});
+
 describe('Link-Erinnerung', () => {
   test('Link seit 7 Tagen ungenutzt → genau ein Entwurf mit Link', () => {
     const s = world({ takeovers: [takeover({ linkSentAt: '2026-11-20T08:00:00Z' })] });
