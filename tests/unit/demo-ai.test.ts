@@ -64,7 +64,7 @@ describe('DemoAI', () => {
   it('Entwürfe', async () => {
     const kaya = s.contacts.find((c) => c.id === 'm-kaya')!;
     const mc = s.contracts.find((c) => c.contactId === kaya.id)!;
-    const link = paymentLinkFor(mc.id);
+    const link = paymentLinkFor(s, mc.id);
     const st = { traffic: 'red', arrearsCents: 15000 } as never;
     for (const tone of ['freundlich', 'bestimmt'] as const) {
       const t = await demoAI.draftReminder({ contact: kaya, status: st, tone, paymentLink: link });

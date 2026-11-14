@@ -23,6 +23,7 @@ import { portalProposal, portalViews } from '@/domain/portal';
 import { coveringContract, invoiceAllocatableCents, splitPaymentOverInvoices } from '@/domain/ledger/receivables';
 import { formatEuro } from '@/domain/money';
 import { markTakeoverPlanChanged, recordTakeover, setUpTakeover, withdrawSentTakeover } from '@/domain/takeover/lifecycle';
+import { ensureTakeoverDrafts } from '@/domain/takeover/drafts';
 import { cancelTakeoverDraft, syncTakeoverDraft, takeoverCandidates } from '@/domain/takeover/prepare';
 import { currentTakeover } from '@/domain/takeover/status';
 import { syncTakeovers } from '@/domain/takeover/link';
@@ -124,7 +125,8 @@ function settleCommitments(s: AppState, at: Date): AppState {
 
 /** Auto-Zuordnung (`high`), Zusagen prüfen, Hinweise neu abgleichen. */
 export function refresh(s: AppState, at: Date, isDemo = true): AppState {
-  const st = settleCommitments(allocateBankReturns(autoAllocate(allocateBankReturns(allocateStripe(s, at, isDemo), at, isDemo), at, isDemo), at, isDemo), at);
+  const allocated = settleCommitments(allocateBankReturns(autoAllocate(allocateBankReturns(allocateStripe(s, at, isDemo), at, isDemo), at, isDemo), at, isDemo), at);
+  const st = ensureTakeoverDrafts(allocated, at, isDemo);
   const stale = areaStale(st.connections.map((c) => c.id), st.connections, at);
   return { ...st, insights: reconcileInsights(st.insights, [...runDetectors(st, at), ...runCoach(st, at)], at, stale, st.settings.suppressedCoachKeys) };
 }

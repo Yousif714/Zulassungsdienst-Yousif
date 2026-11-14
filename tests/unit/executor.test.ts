@@ -8,7 +8,8 @@ import type { StoreEvent } from '@/domain/events';
 import type { Action } from '@/domain/types';
 import { NOW_0930 as NOW } from './helpers';
 
-const base = refresh(createDemoState(), NOW);
+// Ohne automatisch angelegte Erinnerungsentwürfe: die Tests prüfen nur ihre eigenen Aktionen.
+const base = { ...refresh(createDemoState(), NOW), actions: [] as Action[] };
 const action = (p: Partial<Action> = {}): Action => ({
   id: 'a-1', type: 'send_whatsapp', company: 'zulassung', title: 'Antwort an Autohaus Schmidt',
   payload: { contactId: 'd-schmidt', threadId: 't-schmidt', channel: 'whatsapp', text: 'Ja, der Golf ist ab 14 Uhr fertig.' },

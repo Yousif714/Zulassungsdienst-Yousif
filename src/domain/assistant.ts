@@ -78,7 +78,7 @@ export async function handleInbound(
     }
     const action: Action = stored ?? reminderAction({
       contract, contact, status, at: now, isDemo: opts.isDemo,
-      text: await ai.draftReminder({ contact, status, tone: 'freundlich', paymentLink: paymentLinkFor(contract.id) }),
+      text: await ai.draftReminder({ contact, status, tone: 'freundlich', paymentLink: paymentLinkFor(s, contract.id) }),
     });
     const buttons: Button[] = (['Senden', 'Ändern', 'Später'] as const).map((label) => ({ label, actionId: id, version: action.version, issuedAt: now.toISOString() }));
     const events: StoreEvent[] = stored ? [inbound] : [inbound, { type: 'createAction', action }];

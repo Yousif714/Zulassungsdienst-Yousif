@@ -24,7 +24,7 @@ export function stateAI(ai: AIProvider, s: AppState, at: Date) {
       if (!s.contracts.some((c) => c.id === contractId)) throw new Error('Mitglied nicht gefunden');
       const { contact, status } = memberView(s, contractId, todayBerlin(at));
       if (!contact) throw new Error('Mitglied ohne Kontakt');
-      return ai.draftReminder({ contact, status, tone, paymentLink: paymentLinkFor(contractId) });
+      return ai.draftReminder({ contact, status, tone, paymentLink: paymentLinkFor(s, contractId) });
     },
     slidesFor(callId: string): Promise<Call['slides']> {
       const call = s.calls.find((c) => c.id === callId);

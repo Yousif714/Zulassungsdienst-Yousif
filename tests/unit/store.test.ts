@@ -7,7 +7,8 @@ import type { Action } from '@/domain/types';
 import { openReplies } from '@/domain/matching/messages';
 import { NOW_0930 as NOW, contractOf, isOpen } from './helpers';
 
-const s = refresh(createDemoState(), NOW);
+// Ohne automatisch angelegte Erinnerungsentwürfe: die Tests prüfen nur ihre eigenen Aktionen.
+const s: AppState = { ...refresh(createDemoState(), NOW), actions: [] };
 
 const draft = (p: Partial<Action> = {}): Action => ({
   id: 'a-1', type: 'send_whatsapp', company: 'zulassung', title: 'Antwort an Autohaus Schmidt',

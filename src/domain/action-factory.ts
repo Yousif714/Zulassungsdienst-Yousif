@@ -26,6 +26,44 @@ export function reminderAction(i: {
   };
 }
 
+export const upcomingReminderId = (contractId: string, dueDate: IsoDate): string => `upcoming-${contractId}-${dueDate}`;
+
+/** Erinnerung vor einer anstehenden Rate (Überweisungs-Vertrag). */
+export function upcomingReminderAction(i: {
+  contract: MemberContract; contact: Contact; dueDate: IsoDate; text: string; at: Date; isDemo: boolean;
+}): Action {
+  return {
+    id: upcomingReminderId(i.contract.id, i.dueDate),
+    type: 'send_reminder',
+    company: 'nexus',
+    title: `Erinnerung an ${i.contact.name}`,
+    payload: { threadId: `t-${i.contact.id}`, channel: 'whatsapp', contactId: i.contact.id, text: i.text },
+    version: 1,
+    status: 'draft',
+    createdAt: i.at.toISOString(),
+    isDemo: i.isDemo,
+    insightKey: `upcoming:${i.contract.id}:${i.dueDate}`,
+  };
+}
+
+export const linkNudgeId = (takeoverId: string): string => `link-nudge-${takeoverId}`;
+
+/** Nachfrage zu einem verschickten, noch nicht genutzten Zahlungslink. */
+export function linkNudgeAction(i: { takeover: StripeTakeover; contact: Contact; text: string; at: Date; isDemo: boolean }): Action {
+  return {
+    id: linkNudgeId(i.takeover.id),
+    type: 'send_reminder',
+    company: 'nexus',
+    title: `Link-Erinnerung an ${i.contact.name}`,
+    payload: { threadId: `t-${i.contact.id}`, channel: 'whatsapp', contactId: i.contact.id, text: i.text },
+    version: 1,
+    status: 'draft',
+    createdAt: i.at.toISOString(),
+    isDemo: i.isDemo,
+    insightKey: `takeover-link:${i.takeover.id}`,
+  };
+}
+
 export function replyAction(i: {
   lastIn: Message; contact: Contact | null; threadId: string; text: string; at: Date; isDemo: boolean;
 }): Action {

@@ -111,7 +111,7 @@ describe('KI-Server-Actions', () => {
     const overdue = s.contracts.find((c) => memberView(s, c.id, todayBerlin(realNow())).status.arrearsCents > 0)!;
     const name = s.contacts.find((c) => c.id === overdue.contactId)!.name.split(' ')[0];
     const { state } = await sendToAssistant(`Schick ${name} eine Erinnerung`);
-    const created = state.actions.filter((a) => a.type === 'send_reminder');
+    const created = state.actions.filter((a) => a.type === 'send_reminder' && a.id.startsWith('reminder-'));
     expect(created).toHaveLength(1);
     expect(created[0].isDemo).toBe(false);
   });

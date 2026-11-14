@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { reminderAction, reminderActionId, replyAction, replyActionId, takeoverAction } from '@/domain/action-factory';
 import type { TakeoverPlan } from '@/domain/ledger/takeover';
 import { paymentLinkFor } from '@/domain/payment-link';
+import { stateWith } from './helpers';
 import type { Contact, MemberContract, Message, StripeTakeover } from '@/domain/types';
 import type { MemberStatus } from '@/domain/ledger/status';
 
@@ -40,7 +41,7 @@ describe('Aktions-Fabrik', () => {
     expect(a.payload.contactId).toBeNull();
   });
   it('paymentLinkFor', () => {
-    expect(paymentLinkFor('mc-kaya')).toBe('https://buy.stripe.com/demo/mc-kaya');
+    expect(paymentLinkFor(stateWith(), 'mc-kaya')).toBe('https://buy.stripe.com/demo/mc-kaya');
   });
 
   describe('takeoverAction', () => {
