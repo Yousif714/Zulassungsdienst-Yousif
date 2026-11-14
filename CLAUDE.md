@@ -26,6 +26,17 @@
   - `sonnet` für normale Implementierung und Task-Reviews
   - `opus` für Architektur, UI-Design-Entscheidungen und das abschließende Gesamtreview
 
+## Agenten-Team (immer nutzen)
+Rollen liegen in `.claude/agents/`. Die Hauptsession ist der Lead: Sie plant, verteilt, prüft Berichte gegen echte Tool-Ausgaben und baut nicht selbst mit, sobald eine Aufgabe mehr als eine Kleinigkeit ist.
+- `architekt` (opus, liest nur): ein Plan, Modulgrenzen, Datei-Zuständigkeiten, Aufgaben mit Abhängigkeiten
+- `domain-builder` (sonnet): `src/domain`, `src/data`, `src/server`, `src/ai`, `supabase/migrations`
+- `ui-builder` (sonnet): `src/app`, `src/components`
+- `test-engineer` (sonnet): nur `tests/`, schwächt nie einen Test ab
+- `reviewer` (opus, liest nur, frischer Kontext): jede fertige Aufgabe gegen Spec und Diff, dazu das Gesamtreview
+
+Ablauf: architekt → Builder und test-engineer parallel, jeder in seinen eigenen Dateien → reviewer → Lead führt zusammen, lässt `npm test` und `npx tsc --noEmit` laufen, committet. Kleinigkeiten (ein Tippfehler, eine Zeile, eine Frage) macht der Lead direkt.
+Freigabe des Inhabers vor: Veröffentlichen, Senden, Löschen, Geld ausgeben, unumkehrbaren Änderungen. Keine Passwörter oder Secrets im Chat erfragen.
+
 ## Workflow
 - Neue Features: Brainstorming → Spec → Plan → Umsetzung mit Subagents → Review.
 - Branch: `claude/cool-hopper-hcnb9d`. Nach jedem Commit pushen.
