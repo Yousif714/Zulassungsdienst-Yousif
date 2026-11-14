@@ -70,4 +70,8 @@ export type StoreEvent =
   | { type: 'takeoverSetUp'; takeoverId: string; scheduleId: string; paymentMethodId: string }
   /** Nur Server (Webhook): Plan weicht ab, kein Zeitplan. */
   | { type: 'takeoverPlanChanged'; takeoverId: string; paymentMethodId: string }
+  /** Nur Server (Webhook): eigener Zeitplan wieder storniert, weil die Umstellung nicht mehr offen war (nur Audit). */
+  | { type: 'takeoverScheduleCanceled'; takeoverId: string; scheduleId: string }
+  /** Nur Server (Webhook): Checkout-Sitzung mit anderem Stripe-Kunden als die Umstellung, ignoriert (nur Audit). */
+  | { type: 'takeoverCustomerMismatch'; takeoverId: string; customerId: string | null }
   | { type: 'resetDemo' };

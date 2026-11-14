@@ -15,14 +15,22 @@ export interface ScheduleInput { customerId: string; paymentMethodId: string; pr
 /** Ein Zeitplan je Umstellung: Provider (Neu-Freigabe) und Webhook nutzen denselben Key, nie die Aktionsversion. */
 export const scheduleIdempotencyKey = (takeoverId: string): string => `takeover:${takeoverId}:schedule`;
 
+/** Storno eines eigenen Zeitplans (Umstellung inzwischen nicht mehr offen). */
+export const scheduleCancelIdempotencyKey = (takeoverId: string): string => `takeover:${takeoverId}:schedule-cancel`;
+
+/** Zeitpläne in diesem Status werden übernommen; canceled/released/completed nie. */
+const OPEN_SCHEDULE = new Set(['not_started', 'active']);
+
 /** Basis-URL ohne abschließende Schrägstriche (nie `//zahlung`). */
 export const trimBase = (base: string): string => base.replace(/\/+$/, '');
 
 export interface StripeWriter {
   /** Nur suchen, nie anlegen (Prüfen bei unklarem Ausgang). */
   findCustomer(contractId: string): Promise<string | null>;
-  /** Zeitplan des Kunden mit `metadata.takeoverId`, sonst null. */
+  /** Offener Zeitplan (not_started/active) des Kunden mit `metadata.takeoverId`, sonst null. Blättert über alle Seiten. */
   findSchedule(customerId: string, takeoverId: string): Promise<string | null>;
+  /** Zeitplan stornieren, ohne Schlussrechnung und ohne Anteilsberechnung. */
+  cancelSchedule(scheduleId: string, idemKey: string): Promise<void>;
   findOrCreateCustomer(i: { contractId: string; name: string; email: string | null }, idemKey: string): Promise<string>;
   createSetupCheckout(i: { customerId: string; takeoverId: string; contractId: string; token: string; base: string }): Promise<{ id: string; url: string }>;
   setupIntentPaymentMethod(setupIntentId: string): Promise<string>;
@@ -80,9 +88,19 @@ export function createStripeWriter(o: { key: string; fetch: typeof fetch; sleep:
   return {
     findCustomer,
     async findSchedule(customerId, takeoverId) {
-      const r = (await api.getJson(`/v1/subscription_schedules?${new URLSearchParams({ customer: customerId, limit: '100' }).toString()}`)) as { data?: Obj[] };
-      const hit = (r.data ?? []).find((x) => (x.metadata as Record<string, unknown> | undefined)?.takeoverId === takeoverId);
-      return hit ? need(hit.id, 'Zeitplan-ID') : null;
+      let after: string | null = null;
+      for (;;) {
+        const q = new URLSearchParams({ customer: customerId, limit: '100', ...(after ? { starting_after: after } : {}) });
+        const r = (await api.getJson(`/v1/subscription_schedules?${q.toString()}`)) as { data?: Obj[]; has_more?: boolean };
+        const data = r.data ?? [];
+        const hit = data.find((x) => OPEN_SCHEDULE.has(x.status as string) && (x.metadata as Record<string, unknown> | undefined)?.takeoverId === takeoverId);
+        if (hit) return need(hit.id, 'Zeitplan-ID');
+        if (!r.has_more || !data.length) return null;
+        after = need(data[data.length - 1].id, 'Zeitplan-ID');
+      }
+    },
+    async cancelSchedule(scheduleId, idemKey) {
+      await post(`/v1/subscription_schedules/${encodeURIComponent(scheduleId)}/cancel`, { invoice_now: false, prorate: false }, idemKey);
     },
     async findOrCreateCustomer(i, idemKey) {
       const found = await findCustomer(i.contractId);

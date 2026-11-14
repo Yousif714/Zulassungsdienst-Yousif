@@ -415,6 +415,17 @@ function mutate(s: AppState, e: StoreEvent, ctx: EngineContext): { state: AppSta
       const t = r.takeover;
       return { state: r.state, audit: { actor: 'system', text: `Umstellung ${contactName(s, t.contactId)}: Plan hat sich geändert, neu freigeben`, actionId: t.actionId } };
     }
+    case 'takeoverScheduleCanceled': {
+      const t = s.takeovers.find((x) => x.id === e.takeoverId);
+      if (!t) return { state: s };
+      const why = t.status === 'withdrawn' ? 'Umstellung inzwischen zurückgezogen' : 'Umstellung nicht mehr offen';
+      return { state: s, audit: { actor: 'system', text: `Zeitplan storniert: ${why} (${contactName(s, t.contactId)}, Zeitplan ${e.scheduleId})`, actionId: t.actionId } };
+    }
+    case 'takeoverCustomerMismatch': {
+      const t = s.takeovers.find((x) => x.id === e.takeoverId);
+      if (!t) return { state: s };
+      return { state: s, audit: { actor: 'system', text: `Umstellung ${contactName(s, t.contactId)}: Checkout mit fremdem Stripe-Kunden (${e.customerId ?? 'keiner'}) ignoriert`, actionId: t.actionId } };
+    }
     case 'actionStarted': {
       const a = s.actions.find((x) => x.id === e.id);
       if (!a || a.status !== 'approved') return { state: s };

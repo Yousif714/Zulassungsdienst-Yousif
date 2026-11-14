@@ -36,10 +36,11 @@ export function createActionProvider(o: { writer: StripeWriter | null; linkBase:
       // Neu-Freigabe mit hinterlegtem Zahlungsmittel: Zeitplan sofort, ohne neuen Link.
       await w.setDefaultPaymentMethod(stripeCustomerId, p.paymentMethodId);
       const productId = await w.ensurePlanProduct();
-      const scheduleId = await w.createSchedule({
+      // Schon angelegt (z. B. Antwort verloren, „Erneut versuchen“ am Folgetag mit anderen Phasen) → übernehmen.
+      const scheduleId = (await w.findSchedule(stripeCustomerId, a.id)) ?? (await w.createSchedule({
         customerId: stripeCustomerId, paymentMethodId: p.paymentMethodId, productId,
         phases: schedulePhases(p.rates, todayBerlin(o.now())), contractId: p.contractId, takeoverId: a.id,
-      }, scheduleIdempotencyKey(a.id));
+      }, scheduleIdempotencyKey(a.id)));
       return { result: 'ok', output: { ...output, scheduleId, paymentMethodId: p.paymentMethodId } };
     },
 

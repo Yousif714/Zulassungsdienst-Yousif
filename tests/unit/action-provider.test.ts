@@ -72,6 +72,20 @@ describe('createActionProvider: Ausführung', () => {
     expect(b.get('phases[2][items][0][price_data][unit_amount]')).toBeNull();
   });
 
+  test('Erneut versuchen nach „Fehlgeschlagen“ am Folgetag: vorhandener Zeitplan wird übernommen, kein zweiter angelegt', async () => {
+    // Erster Versuch: Zeitplan bei Stripe angelegt, Antwort verloren → Fehler.
+    const routes: Record<string, unknown> = { ...stripeWriteRoutes };
+    const first = setup({ routes, status: { 'POST /v1/subscription_schedules': 500 } });
+    const a = takeover({ stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1' });
+    await expect(first.provider.execute(a, `${TAKEOVER_ID}:1`)).rejects.toThrow('Stripe: HTTP 500 bei /v1/subscription_schedules');
+    // Am Folgetag (andere Phasen, Key verfallen) findet die Suche den Zeitplan.
+    routes['GET /v1/subscription_schedules'] = { data: [{ id: 'sub_sched_test_7', status: 'not_started', metadata: { takeoverId: TAKEOVER_ID } }] };
+    const { provider, requests } = setup({ routes, now: new Date('2026-11-14T09:00:00Z') });
+    expect(await provider.execute(a, `${TAKEOVER_ID}:1`)).toEqual({ result: 'ok', output: { stripeCustomerId: 'cus_test_1', linkBase: LINK, scheduleId: 'sub_sched_test_7', paymentMethodId: 'pm_test_1' } });
+    expect(posts(requests, '/v1/subscription_schedules')).toHaveLength(0);
+    expect(requests.some((r) => r.method === 'GET' && r.path.startsWith('/v1/subscription_schedules?customer=cus_test_1'))).toBe(true);
+  });
+
   test('echte schedulePhases-Ausgabe mit überfälliger Rate und Lücken-Phase im POST-Body', async () => {
     // 05.12.: Rate 01.12. überfällig → sofort bis 19.12. (14 Tage), Lücke bis 01.02., dann eine Monatsphase.
     const { provider, requests } = setup({ now: new Date('2026-12-05T09:00:00Z') });
@@ -126,8 +140,8 @@ describe('createActionProvider: lookup (Prüfen bei unklarem Ausgang)', () => {
 
   test('Neu-Freigabe: Zeitplan existiert schon → scheduleId im output', async () => {
     const routes = { ...stripeWriteRoutes, 'GET /v1/subscription_schedules': { data: [
-      { id: 'sub_sched_other', metadata: { takeoverId: 'stripe-takeover-c1-0' } },
-      { id: 'sub_sched_test_1', metadata: { takeoverId: TAKEOVER_ID } },
+      { id: 'sub_sched_other', status: 'active', metadata: { takeoverId: 'stripe-takeover-c1-0' } },
+      { id: 'sub_sched_test_1', status: 'active', metadata: { takeoverId: TAKEOVER_ID } },
     ] } };
     const { provider, requests } = setup({ routes });
     expect(await provider.lookup(`${TAKEOVER_ID}:1`, takeover({ stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1' })))

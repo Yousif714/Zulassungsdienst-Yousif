@@ -4,8 +4,9 @@ import { berlinLocalToUtc } from '@/domain/clock';
 import type { AppState } from '@/domain/types';
 import { createActionProvider } from '@/server/action-provider';
 import { fixtureFetch, type FixtureRequest } from '@/server/connectors/fixture-fetch';
-import { createStripeWriter } from '@/server/connectors/stripe-write';
+import { createStripeWriter, type StripeWriter } from '@/server/connectors/stripe-write';
 import { createMemoryRepos } from '@/server/db/memory';
+import type { Repos } from '@/server/db/repository';
 import { dispatchEvents, loadState } from '@/server/state-service';
 import { completeTakeoverCheckout, createCheckoutForToken } from '@/server/takeover';
 import { stripeWriteRoutes } from '../../fixtures/stripe-write';
@@ -14,8 +15,8 @@ import { applyAt, executeEvents, linkSentState, seed, T0, TAKEOVER_ID } from './
 
 const unix = (iso: string) => Math.floor(berlinLocalToUtc(iso, '07:00').getTime() / 1000);
 const KEY = `takeover:${TAKEOVER_ID}:schedule`;
-const session = (p: Partial<{ mode: string; setup_intent: string | null; metadata: Record<string, string> }> = {}) =>
-  ({ id: 'cs_test_1', mode: 'setup', setup_intent: 'seti_test_1', metadata: { takeoverId: TAKEOVER_ID, contractId: 'c1' }, ...p });
+const session = (p: Partial<{ mode: string; setup_intent: string | null; customer: string | null; metadata: Record<string, string> }> = {}) =>
+  ({ id: 'cs_test_1', mode: 'setup', setup_intent: 'seti_test_1', customer: 'cus_test_1', metadata: { takeoverId: TAKEOVER_ID, contractId: 'c1' }, ...p });
 
 async function setup(state: AppState = linkSentState(), o: { routes?: Record<string, unknown>; status?: Record<string, number> } = {}) {
   const repos = createMemoryRepos();
@@ -44,7 +45,7 @@ describe('completeTakeoverCheckout', () => {
     expect(s.contracts[0].billing).toBe('stripe');
     expect(s.audit[s.audit.length - 1]).toMatchObject({ actor: 'system', text: 'Umstellung eingerichtet: Erika Muster, 2 Raten (Zeitplan sub_sched_test_1)' });
     expect(requests.map((r) => `${r.method} ${r.path.split('?')[0]}`)).toEqual([
-      'GET /v1/setup_intents/seti_test_1', 'POST /v1/customers/cus_test_1', 'GET /v1/products/search', 'POST /v1/products', 'POST /v1/subscription_schedules',
+      'GET /v1/setup_intents/seti_test_1', 'POST /v1/customers/cus_test_1', 'GET /v1/products/search', 'POST /v1/products', 'GET /v1/subscription_schedules', 'POST /v1/subscription_schedules',
     ]);
     const sched = schedules(requests);
     expect(sched[0].idempotencyKey).toBe(KEY);
@@ -130,7 +131,7 @@ describe('completeTakeoverCheckout', () => {
     expect(s0.actions.find((a) => a.id === second)?.payload).toMatchObject({ stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1' });
     const uncertain = applyAt(s0, [...executeEvents(second, 1).slice(0, 2), { type: 'actionExecuted', id: second, result: 'timeout' }]);
     expect(uncertain.actions.find((a) => a.id === second)?.status).toBe('uncertain');
-    const routes = { ...stripeWriteRoutes, 'GET /v1/subscription_schedules': { data: [{ id: 'sub_sched_test_1', metadata: { takeoverId: second } }] } };
+    const routes = { ...stripeWriteRoutes, 'GET /v1/subscription_schedules': { data: [{ id: 'sub_sched_test_1', status: 'active', metadata: { takeoverId: second } }] } };
     const { repos, writer, requests } = await setup(uncertain, { routes });
     const provider = createActionProvider({ writer, linkBase: 'https://nexus.example.de', now: () => T0 });
     await dispatchEvents(repos, [{ type: 'checkAction', id: second }], { at: () => T0, provider });
@@ -138,6 +139,89 @@ describe('completeTakeoverCheckout', () => {
     expect(s1.takeovers.find((t) => t.id === second)).toMatchObject({ status: 'set_up', scheduleId: 'sub_sched_test_1', paymentMethodId: 'pm_test_1' });
     expect(await completeTakeoverCheckout(repos, writer, session({ metadata: { takeoverId: second } }), { at: T0, provider })).toBe('ignored');
     expect(schedules(requests)).toHaveLength(0);
+  });
+});
+
+describe('completeTakeoverCheckout: Schutz vor doppeltem oder verwaistem Zeitplan', () => {
+  const withdraw = (repos: Repos) => dispatchEvents(repos, [{ type: 'withdrawTakeover', contractId: 'c1' }], { at: () => T0, provider: new DemoProvider() });
+  const cancels = (r: FixtureRequest[]) => r.filter((x) => x.method === 'POST' && x.path.endsWith('/cancel'));
+
+  test('Tageswechsel: Wiederholung am Folgetag übernimmt den schon angelegten Zeitplan, kein zweiter', async () => {
+    const routes: Record<string, unknown> = { ...stripeWriteRoutes };
+    const { repos, writer, requests, status } = await setup(undefined, { routes, status: { 'POST /v1/subscription_schedules': 500 } });
+    // Zeitplan bei Stripe angelegt, Antwort verloren → 500, Stripe wiederholt am nächsten Tag.
+    await expect(completeTakeoverCheckout(repos, writer, session(), deps())).rejects.toThrow('Stripe: HTTP 500');
+    delete status['POST /v1/subscription_schedules'];
+    routes['GET /v1/subscription_schedules'] = { data: [{ id: 'sub_sched_test_7', status: 'active', metadata: { takeoverId: TAKEOVER_ID } }] };
+    const nextDay = new Date('2026-11-14T09:00:00Z');
+    expect(await completeTakeoverCheckout(repos, writer, session(), deps(nextDay))).toBe('set_up');
+    expect(schedules(requests)).toHaveLength(1); // nur der erste (verlorene) Versuch
+    expect((await loadState(repos, nextDay)).takeovers[0]).toMatchObject({ status: 'set_up', scheduleId: 'sub_sched_test_7' });
+  });
+
+  test('Zurückziehen zwischen Laden und Anlegen → kein Zeitplan, ignoriert', async () => {
+    const { repos, writer, requests } = await setup();
+    const racing: StripeWriter = { ...writer, findSchedule: async (c, t) => { await withdraw(repos); return writer.findSchedule(c, t); } };
+    expect(await completeTakeoverCheckout(repos, racing, session(), deps())).toBe('ignored');
+    expect(schedules(requests)).toHaveLength(0);
+    expect((await loadState(repos, T0)).takeovers[0].status).toBe('withdrawn');
+  });
+
+  test('Zurückziehen während der Zeitplan angelegt wird → Zeitplan storniert, Audit, ignoriert', async () => {
+    const { repos, writer, requests } = await setup();
+    const racing: StripeWriter = { ...writer, createSchedule: async (i, k) => { const id = await writer.createSchedule(i, k); await withdraw(repos); return id; } };
+    expect(await completeTakeoverCheckout(repos, racing, session(), deps())).toBe('ignored');
+    expect(schedules(requests)).toHaveLength(1);
+    const c = cancels(requests);
+    expect(c).toHaveLength(1);
+    expect(c[0]).toMatchObject({ path: '/v1/subscription_schedules/sub_sched_test_1/cancel', idempotencyKey: `takeover:${TAKEOVER_ID}:schedule-cancel` });
+    expect(Object.fromEntries(new URLSearchParams(c[0].body))).toEqual({ invoice_now: 'false', prorate: 'false' });
+    const s = await loadState(repos, T0);
+    expect(s.takeovers[0]).toMatchObject({ status: 'withdrawn', scheduleId: null });
+    expect(s.audit[s.audit.length - 1]).toMatchObject({ actor: 'system', text: 'Zeitplan storniert: Umstellung inzwischen zurückgezogen (Erika Muster, Zeitplan sub_sched_test_1)' });
+  });
+
+  test('gleichzeitiger zweiter Lauf mit demselben Zeitplan → set_up, nichts storniert', async () => {
+    const { repos, writer, requests } = await setup();
+    const racing: StripeWriter = {
+      ...writer,
+      createSchedule: async (i, k) => {
+        const id = await writer.createSchedule(i, k);
+        await dispatchEvents(repos, [{ type: 'takeoverSetUp', takeoverId: TAKEOVER_ID, scheduleId: id, paymentMethodId: 'pm_test_1' }], { at: () => T0, provider: new DemoProvider() });
+        return id;
+      },
+    };
+    expect(await completeTakeoverCheckout(repos, racing, session(), deps())).toBe('set_up');
+    expect(cancels(requests)).toHaveLength(0);
+  });
+
+  test('Umstellung hat schon einen anderen Zeitplan → eigener wird storniert, nicht set_up', async () => {
+    const { repos, writer, requests } = await setup();
+    const racing: StripeWriter = {
+      ...writer,
+      createSchedule: async (i, k) => {
+        const id = await writer.createSchedule(i, k);
+        await dispatchEvents(repos, [{ type: 'takeoverSetUp', takeoverId: TAKEOVER_ID, scheduleId: 'sub_sched_test_9', paymentMethodId: 'pm_test_1' }], { at: () => T0, provider: new DemoProvider() });
+        return id;
+      },
+    };
+    expect(await completeTakeoverCheckout(repos, racing, session(), deps())).toBe('ignored');
+    expect(cancels(requests).map((r) => r.path)).toEqual(['/v1/subscription_schedules/sub_sched_test_1/cancel']);
+    const s = await loadState(repos, T0);
+    expect(s.takeovers[0]).toMatchObject({ status: 'set_up', scheduleId: 'sub_sched_test_9' });
+    expect(s.audit[s.audit.length - 1].text).toBe('Zeitplan storniert: Umstellung nicht mehr offen (Erika Muster, Zeitplan sub_sched_test_1)');
+  });
+
+  test.each([
+    ['fremder Kunde', 'cus_test_9'],
+    ['ohne Kunde', null],
+  ])('%s in der Checkout-Sitzung → ignoriert, kein Stripe-Aufruf, Audit', async (_n, customer) => {
+    const { repos, writer, requests } = await setup();
+    expect(await completeTakeoverCheckout(repos, writer, session({ customer }), deps())).toBe('ignored');
+    expect(requests).toEqual([]);
+    const s = await loadState(repos, T0);
+    expect(s.takeovers[0].status).toBe('link_sent');
+    expect(s.audit[s.audit.length - 1]).toMatchObject({ actor: 'system', text: `Umstellung Erika Muster: Checkout mit fremdem Stripe-Kunden (${customer ?? 'keiner'}) ignoriert` });
   });
 });
 

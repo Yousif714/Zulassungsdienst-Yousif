@@ -213,6 +213,26 @@ describe('Umstellung ausführen', () => {
     expect(action(s3, 'stripe-takeover-c1-2')).toMatchObject({ status: 'draft', payload: expect.objectContaining({ stripeCustomerId: 'cus_test_1', paymentMethodId: 'pm_test_1' }) });
   });
 
+  test('takeoverScheduleCanceled: nur Audit, Status unverändert; Text je nach Stand', () => {
+    const w = run(linkSent(), [{ type: 'withdrawTakeover', contractId: 'c1' }]);
+    const s1 = run(w, [{ type: 'takeoverScheduleCanceled', takeoverId: 'stripe-takeover-c1-1', scheduleId: 'sub_sched_test_1' }]);
+    expect(s1.takeovers).toEqual(w.takeovers);
+    expect(lastAudit(s1)).toMatchObject({ actor: 'system', text: 'Zeitplan storniert: Umstellung inzwischen zurückgezogen (Erika Muster, Zeitplan sub_sched_test_1)', actionId: 'stripe-takeover-c1-1' });
+    const s2 = run(linkSent(), [{ type: 'takeoverScheduleCanceled', takeoverId: 'stripe-takeover-c1-1', scheduleId: 'sub_sched_test_2' }]);
+    expect(lastAudit(s2).text).toBe('Zeitplan storniert: Umstellung nicht mehr offen (Erika Muster, Zeitplan sub_sched_test_2)');
+    const s3 = run(linkSent(), [{ type: 'takeoverScheduleCanceled', takeoverId: 'stripe-takeover-c9-1', scheduleId: 'x' }]);
+    expect(s3.audit).toHaveLength(linkSent().audit.length);
+  });
+
+  test('takeoverCustomerMismatch: nur Audit, Status unverändert', () => {
+    const s0 = linkSent();
+    const s1 = run(s0, [{ type: 'takeoverCustomerMismatch', takeoverId: 'stripe-takeover-c1-1', customerId: 'cus_test_9' }]);
+    expect(s1.takeovers).toEqual(s0.takeovers);
+    expect(lastAudit(s1)).toMatchObject({ actor: 'system', text: 'Umstellung Erika Muster: Checkout mit fremdem Stripe-Kunden (cus_test_9) ignoriert' });
+    expect(lastAudit(run(s0, [{ type: 'takeoverCustomerMismatch', takeoverId: 'stripe-takeover-c1-1', customerId: null }])).text)
+      .toBe('Umstellung Erika Muster: Checkout mit fremdem Stripe-Kunden (keiner) ignoriert');
+  });
+
   test('output mit scheduleId (Neu-Freigabe mit hinterlegtem Zahlungsmittel) → direkt eingerichtet', () => {
     const s = linkSent({ ...OUT, scheduleId: 'sub_sched_test_9', paymentMethodId: 'pm_test_9' });
     expect(s.takeovers[0]).toMatchObject({ status: 'set_up', isDemo: false, scheduleId: 'sub_sched_test_9', paymentMethodId: 'pm_test_9', setUpAt: '2026-11-13T09:00:00.000Z' });

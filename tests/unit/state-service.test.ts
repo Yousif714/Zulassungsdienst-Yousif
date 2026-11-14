@@ -191,7 +191,7 @@ describe('Zustands-Dienst', () => {
     expect(CLIENT_EVENTS.size).toBe(30);
     expect(isClientEvent({ type: 'approveAction', id: 'a-1', version: 1, via: 'app' })).toBe(true);
     expect(isClientEvent({ type: 'dismissInsight', key: 'reply:m-1' })).toBe(true);
-    for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'unbekannt']) {
+    for (const type of ['actionExecuted', 'actionStarted', 'actionReconciled', 'resetDemo', 'simulateTransfer', 'importBatch', 'syncFailed', 'setConnectionStatus', 'assistantInbound', 'assistantOutbound', 'assistantButton', 'takeoverSetUp', 'takeoverPlanChanged', 'takeoverScheduleCanceled', 'takeoverCustomerMismatch', 'unbekannt']) {
       expect(isClientEvent({ type, id: 'a-1', result: 'ok', found: true }), type).toBe(false);
     }
     for (const v of [null, undefined, 'approveAction', 42, [], [{ type: 'approveAction' }]]) expect(isClientEvent(v)).toBe(false);

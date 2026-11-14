@@ -9,4 +9,5 @@ export const stripeWriteRoutes: Record<string, unknown> = {
   'POST /v1/customers/cus_test_1': { id: 'cus_test_1' },
   'GET /v1/subscription_schedules': { data: [] },
   'POST /v1/subscription_schedules': { id: 'sub_sched_test_1' },
+  'POST /v1/subscription_schedules/sub_sched_test_1/cancel': { id: 'sub_sched_test_1', status: 'canceled' },
 };
