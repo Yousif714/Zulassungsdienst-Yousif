@@ -29,6 +29,9 @@ Kernziele:
 | `docs/superpowers/plans/2026-11-12-phase2b1-vertraege.md` | Bauplan Paket 2b-1 (Verträge aus Stripe und Lexware) |
 | `docs/setup-phase2b2.md` | **Inhaber-Checkliste** Paket 2b-2: Migration, Qonto-Schlüssel, Vercel-Variablen |
 | `docs/superpowers/plans/2026-11-13-phase2b2-qonto.md` | Bauplan Paket 2b-2 (Qonto, Forderungen, Zuordnungs-Härtung) |
+| `docs/setup-phase2b3.md` | **Inhaber-Anleitung** Paket 2b-3: Preview-Testlauf Stripe-Umstellung (Claude führt aus, 2 Freigaben) |
+| `docs/superpowers/specs/2026-11-13-phase2b3-stripe-umstellung-design.md` | Spec 2b-3 (Abschnitt 12 = Entscheidungen) |
+| `docs/superpowers/plans/2026-11-13-phase2b3-stripe-umstellung.md` | Bauplan 2b-3 (Ledger: `plans/2026-11-13-phase2b3-ledger.md`) |
 | `docs/setup-ab.md` | **Inhaber-Checkliste** Auftragsbestätigungen und Import ab 01.06. |
 | `docs/superpowers/specs/2026-11-13-sparkasse-upload-design.md` | Spec Sparkasse-Upload (Zulassung: Kontoauszug → Zahlungen → Rechnungen) |
 | `docs/superpowers/plans/2026-11-13-sparkasse-upload.md` | Bauplan Sparkasse-Upload |
@@ -61,12 +64,11 @@ Kernziele:
 `npm test` (Vitest, ~406) · `npm run test:integration` (Supabase-Testprojekt) · `npx tsc --noEmit` · `npm run lint` · `npm run contrast` · `npm run e2e` (Playwright, vorher `fuser -k 3100/tcp`) · Screenshots: `SCREENSHOTS=1 npm run e2e -- tests/e2e/screenshots.spec.ts`
 
 ## Stand & nächste Schritte
-- **Live** (`https://nexus-iota-gold-96.vercel.app`, Vercel `nexus`, Supabase `nexus-assistent` ID `bqnbboopqeilxflnqgiu`). PRs #3–#15 gemergt. Migrationen bis `20261118000000_stripe_umstellung.sql` live eingespielt und geprüft (Supabase-MCP „immer erlauben“).
-- **PR #15 (13.11.):** Stripe-Fehler vor 2b-3 behoben (späte Zahlung alter Rechnungen, Streitfall ohne Zahlung, reguläres Abo-Ende).
-- **In Arbeit: 2b-3 Umstellung auf Stripe** (Branch `claude/cool-hopper-hcnb9d`, noch kein PR). Spec `specs/2026-11-13-phase2b3-stripe-umstellung-design.md` (Abschnitt 12 = Entscheidungen), Plan `plans/2026-11-13-phase2b3-stripe-umstellung.md`, **Ledger `plans/2026-11-13-phase2b3-ledger.md`** (Stand, Rulings, Befunde).
-- **Fortschritt:** Tasks 1–8 fertig und reviewt (Stand `07a3d15`). Weiter: Tasks 9–14 → Gesamtreview → PR. Ausführung per `superpowers:subagent-driven-development`, Ledger zuerst lesen und in `.superpowers/sdd/…/progress.md` zurückkopieren.
-- **Inhaber erledigt:** Stripe-Test-Schreibschlüssel + Testschlüssel in Vercel nur für Preview. Antworten: Preview bekommt eigenes Supabase-Projekt, Testmitglied mit Bank erlaubt.
-- **Inhaber offen (Task 14):** neues Supabase-Projekt für Preview, Test-Webhook in Stripe (braucht Preview-URL), Deployment Protection kurz lockern.
-- **Vercel-MCP** hängt noch am falschen Konto (Gmail `yousifsakmany-2498`). Inhaber verbindet neu über claude.ai/customize/connectors mit „Continue with GitHub“. Neue Session zuerst `get_auth_user`/`list_projects` → muss `nexus` zeigen.
-- **Offen:** Backlog „Offen aus 2b-3“, „Sparkasse-Upload“, „Rechnungen lesen“; Feldnamen mit echten Daten; Supabase Pro; Gmail-Vercel-Konto löschen; zweite WhatsApp-Nummer (2e).
+- **Live** (`https://nexus-iota-gold-96.vercel.app`, Vercel Team `nexus-0349`, Projekt `nexus` `prj_IiBA31MUemrhPL1GupA2H2NbZkE5`, Supabase `nexus-assistent` ID `bqnbboopqeilxflnqgiu`). PRs #3–#15 gemergt. Migrationen bis `20261118000000_stripe_umstellung.sql` live eingespielt. Das Preview-Projekt braucht alle Migrationen.
+- **In Arbeit: 2b-3 Umstellung auf Stripe** (Branch `claude/cool-hopper-hcnb9d`, kein PR). Tasks 1–13 fertig und reviewt, Gesamtreview + Final-Fix erledigt (HEAD `1b53318`), Re-Review läuft. Details: Ledger `plans/2026-11-13-phase2b3-ledger.md`.
+- **Offen:** Task 14 Testlauf gegen Stripe-Testmodus auf der Preview nach `docs/setup-phase2b3.md` (2 Freigaben des Inhabers: Supabase-Projekt `nexus-assistent-preview`, Stripe-Testschlüssel `sk_test_…`), danach PR nur mit Freigabe. Preview: `https://nexus-git-claude-cool-hopper-hcnb9d-nexus-0349.vercel.app`, Deployment Protection (`all_except_custom_domains`) dafür per API lockern und danach zurückdrehen.
+- **Regel (Vorfall 14.11.):** Ein Live-Stripe-Schlüssel war versehentlich Session-Credential (nur Leseabfragen, vom Inhaber gelöscht). Stripe-Schreibaktionen aus der Session nur nach `livemode:false`-Prüfung.
+- **Vercel-Connector** ist richtig verbunden (frühere Notiz „falsches Konto“ war ein Irrtum: `list_projects` des MCP lieferte leer, die API zeigt das Projekt `nexus`).
+- **Repo** wurde auf GitHub nach `Yousif714/NEXUS-ASSISTENT` umbenannt (Push läuft über die Weiterleitung).
+- **Offen sonst:** Backlog „Offen aus 2b-3“, „Sparkasse-Upload“, „Rechnungen lesen“; Feldnamen mit echten Daten; Supabase Pro; zweite WhatsApp-Nummer (2e).
 - Daten: Echte Mitgliederliste nie ins Repo (öffentlich). Banken: Qonto (NEXUS), Sparkasse Essen (Zulassung, Upload).

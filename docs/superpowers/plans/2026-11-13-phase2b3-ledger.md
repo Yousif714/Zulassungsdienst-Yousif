@@ -69,6 +69,49 @@ Task 8: fix round 1/5 (1 addressed, 0 open; commits 6f44ecc..07a3d15)
 Task 8: complete (commits 5169104..07a3d15, review clean after fix)
 NÄCHSTER SCHRITT: Task 9 (Brief per task-brief-Skript aus dem Plan erzeugen; Carry: Demo-Briefing-Bündelung der rate_upcoming-Hinweise entscheiden; B3 paymentLinkFor nur bei link_sent; B7 syncTakeoverDraft aus Task 6 wiederverwenden).
 
+Task 9: dispatched (BASE 07a3d15, sonnet; B3,B7,B11; Bündelung → Backlog) [Session 3, 14.11.]
+Task 9: implementer DONE_WITH_CONCERNS 517384b (refresh legt im Demo Erinnerungsentwürfe an → Testbasen executor/store/assistant/api-events angepasst; E2E nicht gelaufen). Hinweis: tsc-Fehler LayoutProps = fehlende .next/types im frischen Container → `npx next typegen` vorher. Review dispatched (sonnet).
+Task 9: review → Needs fixes (Important: E2E nexus.spec.ts:143 erwartet nur reminder-…, jetzt +6 upcoming-Demo-Entwürfe).
+Task 9: Ruling: Demo-refresh legt Erinnerungsentwürfe bewusst an (Funktion im Demo sichtbar) → E2E-Filter auf `reminder-`; zusätzlich Minor fixen: offener upcoming-Entwurf bekommt neuen Text (editDraft), wenn sich Link/Text ändert; Cast `as never` + Re-Export entfernen — falls falsch: Demo zeigt 6 Entwürfe mehr, Bündelung Backlog.
+Task 9: fix round 1/5 (3 addressed, 0 open; commits 517384b..a33722f; Re-Review durch Controller: Diff klein, ok; E2E nexus+heute+assistant grün)
+Task 9: complete (commits 07a3d15..a33722f)
+Task 9: minor (deferred): kein Test mehr für Executor/Reducer mit vorhandenen Auto-Entwürfen; Demo-Briefing +6 Entwürfe (Bündelung Backlog).
+Task 10: dispatched (BASE a33722f, sonnet; Carry Phasen-Felder, B11)
+Task 10: implementer DONE 7424ba9 (TDD-Reihenfolge verletzt: Rotlauf nachträglich per stash belegt; Concern Phasen-Felder erst Task 14). Review dispatched (opus, Zeitplan-Felder).
+Task 10: complete (commits a33722f..7424ba9, review clean, opus; Feldnamen gegen stripe@19.3.0 Clover-Typen geprüft)
+Task 10: minor (deferred → Final-Review): leere Phasen TypeError; encodeForm leere Arrays/NaN; Kundensuche strippt Quotes; 401-Test schwach.
+Carry → Task 11: (a) 409 idempotency_key_in_use bei gleichzeitigem Webhook → als wiederholbar behandeln (Webhook 500, Stripe wiederholt), Test; (b) Basis-URL ohne abschließenden Schrägstrich normalisieren + Token encodeURIComponent; (c) Integrationstest echte schedulePhases-Ausgabe (inkl. Lücken-Phase) durch scheduleParams.
+Task 11: dispatched (BASE 7424ba9, opus; B1,B2,B9,B11,B12 + Carry)
+Task 11: implementer DONE_WITH_CONCERNS c350af6 (Abweichung: simulatedFor(a) in machine.ts/executor.ts, damit echte stripe_takeover nicht als Demo gilt; findSchedule nur erste 100). Review dispatched (opus).
+Task 11: review → Needs fixes (Important #1 Doppel-Zeitplan nach Ablauf Idempotency-Key/Tageswechsel (Parameter ändern sich) → Doppelabbuchung; Important #2 Zurückziehen während Webhook → echter Zeitplan ohne Umstellung).
+Task 11: Ruling #1: vor createSchedule in BEIDEN Pfaden findSchedule (Kunde + metadata.takeoverId, Status not_started/active, paginiert) → vorhandenen übernehmen — Spec-Anti-Ziel Doppelabbuchung — falls falsch: ein GET mehr.
+Task 11: Ruling #2: unmittelbar vor createSchedule Status frisch laden (≠ link_sent → abbrechen ohne Zeitplan); nach dispatchEvents prüfen: Umstellung nicht set_up mit dieser scheduleId → Zeitplan in Stripe stornieren (POST /v1/subscription_schedules/<id>/cancel, invoice_now=false, prorate=false) + Audit „Zeitplan storniert: Umstellung inzwischen zurückgezogen“, Rückgabe 'ignored' — Spec 'nichts abbuchen ohne gültige Umstellung' — falls falsch: Inhaber legt neu an.
+Task 11: Minor mitfixen: Rückgabe 'set_up' nur wenn wirklich set_up (#1); session.customer gegen stripeCustomerId prüfen (#2); findSchedule paginiert + Statusfilter (#3).
+Task 11: fix round 1/5 done 15b4cf1 (neue Server-Ereignisse takeoverScheduleCanceled/takeoverCustomerMismatch; Concerns: verwaister Zeitplan bei withdrawn wird bei Wiederholung nicht storniert).
+Task 11: Ruling fix round 2: Webhook für Umstellung withdrawn/aborted → findSchedule; offener Zeitplan mit dieser takeoverId → stornieren + Audit (idempotent, Fehler → 500, Stripe wiederholt) — deckt beide Concerns — falls falsch: ein GET mehr je Webhook auf erledigte Umstellung.
+Task 11: fix round 2/5 done 7f74762 (withdrawn/aborted → offenen Zeitplan stornieren). Concern → Final-Review: Cancel-Idempotency-Key cached 500 bis 24h (evtl. Key weglassen, Storno ist über findSchedule-Filter natürlich idempotent). Re-review dispatched (opus).
+Task 11: re-review Approved (opus).
+Task 11: complete (commits 7424ba9..7f74762)
+Task 11: minor (deferred → Final-Fix, Geldbezug): (1) !check.ok-Zweig: offene Zeitpläne suchen+stornieren; (2) takeover.ts:72 auch active mit gleicher scheduleId akzeptieren; (3) Storno-Key mit scheduleId bzw. ohne Key (cached 500); (4) Provider-Pfad ohne Race-Prüfung Zurückziehen; alte Minor 4–7 aus task-11-review.md.
+Task 12: dispatched (BASE 7f74762, sonnet; B10,B11)
+Task 12: implementer DONE_WITH_CONCERNS ca22581 (ungültige Seite 200 statt 404 wegen Suspense-Root/Cache Components; registry.ts Repos+Test-Schreiber auf globalThis; E2E stateful nur Desktop; auth-routes-Test einmal flaky). Remote meldet Umzug nach Yousif714/NEXUS-ASSISTENT.
+Task 12: Ruling 404: 200 + identischer neutraler Inhalt + noindex akzeptiert (Spec-Kern „verrät nichts“ erfüllt; echter 404 bräuchte Route-Gruppen-Umbau aller Seiten) — falls falsch: Bots sehen 200, kein Datenleck. Backlog-Eintrag.
+Task 12: Review dispatched (opus, Sicherheit).
+Task 12: review → Needs fixes (Important #1 /api/test/takeover resetTestRepos zerstört parallele auth.spec → npm run e2e rot; #2 Testlücke Seite: 429, neutral bei erledigt/zurückgezogen, GET ohne Sitzung). Minor mitfixen: Service Worker nicht auf /zahlung; eigene neutrale Metadaten für /zahlung. Rest (job_runs-Last, x-forwarded-for, ganzer Stand je Aufruf) → Backlog.
+Task 12: fix round 1/5 done 34ca8e8 (Playwright stateful-Projekte seriell; Seitentests; SW nicht auf /zahlung; neutrale Metadaten). npm run e2e 114 passed/0 failed. Re-Review durch Controller (Bericht + Diffstat) ok.
+Task 12: complete (commits 7f74762..34ca8e8)
+Task 12: backlog: 200 statt 404; job_runs rl:-Aufräumen + Last bei Flut; x-forwarded-for nur Vercel; ganzer Stand je Seitenaufruf.
+Task 13: dispatched (BASE 34ca8e8, sonnet; B4,B8,B11 + Carry Demo-Link absolut, /nexus/umstellung#erinnerungen)
+Task 13: implementer DONE_WITH_CONCERNS 8de2b2e (Moduswechsel schreibt Entwurf fort; keine TakeoverCard bei Bank nicht verbunden; neue Zeile NEXUS-Seite; Fehlgeschlagen/Unklar eigene Knöpfe statt ActionSheet). Review dispatched (opus, UI).
+Task 13: review → Needs fixes (I1 Namen abgeschnitten /nexus/umstellung; I2 Zählung umstellbar Startseite vs. Umstellungsseite + Prädikat dupliziert → takeoverCandidates). Ruling: alle 11 Minor mitfixen (UI-Politur).
+Supabase create_project: 2. Versuch Timeout (Rückfrage an Inhaber unbeantwortet).
+Task 13: fix round 1/5 done 412952b (I1,I2 + Minor; E2E 118 grün; Screenshots vom Controller gesichtet ok).
+Task 13: complete (commits 34ca8e8..412952b)
+Final review: dispatched (opus, 168534e..412952b, inkl. aller deferred Minors)
+Final review: Needs fixes (0 C, 3 I, 10 M jetzt; 23 Backlog). I1 Rückstands-Erinnerungen nach Einrichtung; I2 Neu-Freigabe/Retry ohne Abgleich → Doppelabbuchung; I3 Vertrag mit Plan korrigier-/löschbar + fehlende Sperrgründe.
+Final fix: dispatched (opus, alle 13 + Backlog-Einträge)
+Final fix: DONE 412952b..1b53318 (13 Punkte, 1398 Tests, E2E 118). Abweichungen: I3 sperrt ab link_sent; Knopf „Neu vorbereiten“; Storno ohne Idempotency-Key. Re-review dispatched (opus). Task 14 Docs dispatched (sonnet) parallel.
+
 ---
 
 # Pre-flight-Konfliktscan 2b-3 (Plan 2026-11-13, 14 Tasks)
