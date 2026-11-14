@@ -113,6 +113,9 @@ Final fix: dispatched (opus, alle 13 + Backlog-Einträge)
 Final fix: DONE 412952b..1b53318 (13 Punkte, 1398 Tests, E2E 118). Abweichungen: I3 sperrt ab link_sent; Knopf „Neu vorbereiten“; Storno ohne Idempotency-Key. Re-review dispatched (opus). Task 14 Docs dispatched (sonnet) parallel.
 Final re-review: Needs fixes → Final-Fix 2 81039de (reminder-Entwürfe bei Stripe abbrechen; stale failed auch im Sperrfall aufgeben; m2/m3 Backlog). Controller-Check Diff ok. 1402 Unit, E2E 118 grün.
 NÄCHSTER SCHRITT: Task 14 Testlauf (braucht Inhaber-Freigaben: Supabase-Projekt-Bestätigung, sk_test-Credential), danach PR nur mit Freigabe.
+Task 14 (14.11. nachm.): Preview-Supabase `nexus-assistent-preview` (cvijnwlzmaoovwjvzvcw) vom Inhaber angelegt; alle Migrationen eingespielt (Teil 1 per MCP, Rest per Management-API mit projektbeschränktem Token, da MCP-Bestätigung für REVOKE/DELETE beim Inhaber nicht ankommt). Geprüft: 31 Tabellen = Live, RLS überall, anon/authenticated ohne Rechte und ohne execute.
+Vercel Preview (gitBranch claude/cool-hopper-hcnb9d) gesetzt: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, APP_ORIGIN, PAYMENT_LINK_BASE_URL, SESSION_SECRET, CRON_SECRET, OWNER_SETUP_TOKEN (Wert im Session-Scratchpad). STRIPE_WRITE_KEY von production+preview auf nur preview korrigiert. Preview neu gebaut (READY).
+OFFEN Task 14: Stripe-Testzugriff (sk_test als Credential; erster Versuch war die Key-ID mk_…), dann Test-Webhook + STRIPE_WEBHOOK_SECRET (Preview), STRIPE_RESTRICTED_KEY (Test-Lese-Schlüssel, Preview) fehlt noch, Deployment Protection für Test lockern + zurück, Preview-Host in Session-Netz freigeben, Testlauf.
 
 ---
 
