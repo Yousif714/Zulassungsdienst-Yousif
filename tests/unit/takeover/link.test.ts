@@ -81,6 +81,33 @@ describe('syncTakeovers', () => {
     expect(r.audit).toEqual([]);
   });
 
+  test('Abbruch → neue Umstellung → verknüpft mit neuem Abo, bleibt aktiv; altes Abo bleibt unverändert', () => {
+    const old = takeover({ id: 'stripe-takeover-c1-1', status: 'aborted', subscriptionExternalId: 'sub_old', endedAt: '2026-11-01T00:00:00Z' });
+    const neu = takeover({ id: 'stripe-takeover-c1-2', linkSentAt: '2026-11-11T08:00:00Z' });
+    const oldSub = sub({ id: 's0', externalId: 'sub_old', status: 'canceled', contractId: 'c1', endDate: '2026-12-01', confirmedEndDate: '2027-02-28' });
+    const s0 = world({}, {}, { takeovers: [old, neu], subscriptions: [oldSub, sub({ id: 's1', externalId: 'sub_new' })] });
+    const r1 = syncTakeovers(s0, TODAY, AT);
+    expect(r1.state.subscriptions.find((x) => x.externalId === 'sub_new')).toMatchObject({ contractId: 'c1', confirmedEndDate: planEnd });
+    expect(r1.state.subscriptions.find((x) => x.externalId === 'sub_old')).toEqual(oldSub);
+    expect(r1.state.takeovers.find((x) => x.id === 'stripe-takeover-c1-2')).toMatchObject({ status: 'active', subscriptionExternalId: 'sub_new' });
+    const r2 = syncTakeovers(r1.state, TODAY, AT);
+    expect(r2.state.takeovers.find((x) => x.id === 'stripe-takeover-c1-2')!.status).toBe('active');
+    expect(r2.state.contracts[0].billing).toBe('stripe');
+    expect(r2.audit).toEqual([]);
+  });
+
+  test('Abo eines fremden Kunden verknüpft nicht', () => {
+    const r = syncTakeovers(world({}, { stripeCustomerId: 'cus_test_fremd' }), TODAY, AT);
+    expect(r.state.takeovers[0].status).toBe('set_up');
+    expect(r.state.subscriptions[0].contractId).toBeNull();
+  });
+
+  test('Demo-Umstellung verknüpft kein echtes Abo', () => {
+    const r = syncTakeovers(world({ isDemo: true }, {}), TODAY, AT);
+    expect(r.state.takeovers[0].status).toBe('set_up');
+    expect(r.state.subscriptions[0].contractId).toBeNull();
+  });
+
   test('Abo mit fremder Vertrags-ID verknüpft nicht', () => {
     const r = syncTakeovers(world({}, { metadataContractId: 'c-anders' }), TODAY, AT);
     expect(r.state.takeovers[0].status).toBe('set_up');

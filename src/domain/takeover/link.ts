@@ -18,7 +18,16 @@ export function syncTakeovers(s: AppState, today: IsoDate, at: Date): { state: A
     const t = state.takeovers.find((x) => x.id === t0.id)!;
 
     if (t.status === 'set_up') {
-      const sub = state.subscriptions.find((x) => x.metadataContractId === t.contractId && (x.contractId === null || x.contractId === t.contractId));
+      // Nur das Abo dieses Kunden, das noch läuft und zu keiner anderen Umstellung gehört (altes, abgebrochenes Abo bleibt unberührt).
+      if (t.isDemo || !t.stripeCustomerId) continue;
+      const sub = state.subscriptions.find(
+        (x) =>
+          x.metadataContractId === t.contractId &&
+          x.stripeCustomerId === t.stripeCustomerId &&
+          x.status !== 'canceled' &&
+          (x.contractId === null || x.contractId === t.contractId) &&
+          !state.takeovers.some((o) => o.id !== t.id && o.subscriptionExternalId === x.externalId),
+      );
       if (!sub) continue;
       const setUpDay = todayBerlin(new Date(t.setUpAt ?? at.toISOString()));
       const endDate = planEndDate(schedulePhases(t.rates, setUpDay), setUpDay);
